@@ -1,0 +1,12 @@
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'https://total-prod-frontend.vercel.app'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+module.exports = corsOptions;
