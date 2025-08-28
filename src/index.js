@@ -27,10 +27,10 @@ app.get('/health', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor Summa Backend ejecutándose en puerto ${PORT}`);
-  console.log(`📱 API disponible en: http://localhost:${PORT}`);
-  console.log(`🔗 Endpoints de usuarios: http://localhost:${PORT}/api/users`);
-});
+if (process.env.NODE_ENV !== "production") {
+  app.listen(5000, () => {
+    console.log("Servidor local en http://localhost:5000");
+  });
+}
 
 module.exports = app;
