@@ -1,5 +1,5 @@
 {
-  "name": "summa-backend",
+  "name": "totalprod-backend",
   "version": "1.0.0",
   "main": "src/index.js",
   "scripts": {
@@ -8,13 +8,13 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
-    "summa",
+    "TotalProd",
     "backend",
     "api"
   ],
   "author": "",
   "license": "ISC",
-  "description": "Backend para la aplicación Summa",
+  "description": "Backend para la aplicación totalprod",
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
