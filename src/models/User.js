@@ -12,6 +12,8 @@ class User {
     this.estado = data.estado;
     this.fechaCreacion = data.fechaCreacion;
     this.rol = data.rol
+    this.permisos = data.permisos;
+    this.plugins = data.plugins;
   }
 
   // Método estático para obtener todos los usuarios
@@ -19,7 +21,7 @@ class User {
     try {
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS_CONFIG.USERS}!A:I`, // Ajusta según tus columnas
+        range: `${SHEETS_CONFIG.USERS}!A:K`, // Ajusta según tus columnas
       });
 
       const rows = response.data.values;
