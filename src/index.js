@@ -1,12 +1,13 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Importar configuración de CORS
+// Importar configuración de CORS y Supabase
 const corsOptions = require('./config/cors');
+const { testConnection } = require('./config/supabase');
 
 // Middleware
 app.use(cors(corsOptions));
@@ -31,8 +32,10 @@ app.get('/health', (req, res) => {
 
 // Start server
 if (process.env.NODE_ENV !== "production") {
-  app.listen(5000, () => {
+  app.listen(5000, async () => {
     console.log("Servidor local en http://localhost:5000");
+    // Probar conexión a Supabase
+    await testConnection();
   });
 }
 

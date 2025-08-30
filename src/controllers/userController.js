@@ -3,136 +3,6 @@ const bcrypt = require('bcryptjs');
 const { generateToken } = require('../config/jwt');
 
 class UserController {
-  // GET /api/users - Obtener todos los usuarios
-  static async getAllUsers(req, res) {
-    try {
-      const users = await User.getAll();
-      res.status(200).json({
-        success: true,
-        message: 'Usuarios obtenidos exitosamente',
-        data: users,
-        count: users.length
-      });
-    } catch (error) {
-      console.error('Error en getAllUsers:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
-  }
-
-  // GET /api/users/:id - Obtener usuario por ID
-  static async getUserById(req, res) {
-    try {
-      const { id } = req.params;
-      const user = await User.getById(id);
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuario no encontrado'
-        });
-      }
-
-      res.status(200).json({
-        success: true,
-        message: 'Usuario obtenido exitosamente',
-        data: user
-      });
-    } catch (error) {
-      console.error('Error en getUserById:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
-  }
-
-  // POST /api/users/login - Validar credenciales de login
-  static async login(req, res) {
-    try {
-      const { email, password } = req.body;
-
-      // Validar que se proporcionen email y password
-      if (!email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Correo electrónico y contraseña son requeridos'
-        });
-      }
-
-      const user = await User.validateCredentials(email, password);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Correo electrónico o contraseña incorrecto'
-        });
-      }
-
-      // Generar token JWT para el login
-      const tokenPayload = {
-        id: user.id,
-        email: user.email,
-        nombre: user.nombre,
-        telefono: user.telefono,
-        estado: user.estado
-      };
-
-      const token = generateToken(tokenPayload);
-
-      res.status(200).json({
-        success: true,
-        message: 'Login exitoso',
-        data: {
-          user: {
-            id: user.id,
-            nombre: user.nombre,
-            telefono: user.telefono,
-            email: user.email,
-            estado: user.estado
-          },
-          token: token
-        }
-      });
-    } catch (error) {
-      console.error('❌ Error en login:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
-  }
-
-  // GET /api/users/profile/:email - Obtener perfil de usuario por email
-  static async getUserProfile(req, res) {
-    try {
-      const { email } = req.params;
-      const user = await User.getByEmail(email);
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuario no encontrado'
-        });
-      }
-
-      res.status(200).json({
-        success: true,
-        message: 'Perfil obtenido exitosamente',
-        data: user
-      });
-    } catch (error) {
-      console.error('Error en getUserProfile:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
-  }
-
-  // POST /api/users/create - Crear nuevo usuario
   static async createUser(req, res) {
     try {
       const { name, telefono, emailRegister, passwordRegister } = req.body;
@@ -186,6 +56,98 @@ class UserController {
       });
     } catch (error) {
       console.error('Error en createUser:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Método para verificar si un celular ya existe
+  static async getUserByPhone(req, res) {
+    try {
+      const { phone } = req.body;
+
+      if (!phone) {
+        return res.status(400).json({
+          success: false,
+            message: 'Celular es requerido'
+        });
+      }
+
+      const user = await User.getByPhone(phone);
+
+      if (user) {
+        return res.status(200).json({
+          success: true,
+          message: 'Celular ya existe',
+          data: { exists: true }
+        });
+      } else {
+        return res.status(200).json({
+          success: true,
+          message: 'Celular disponible',
+          data: { exists: false }
+        });
+      }
+    } catch (error) {
+      console.error('Error en getUserByPhone:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Método para login de usuario
+  static async login(req, res) {
+    try {
+      
+      const { phone, password } = req.body;
+
+      // Validar campos requeridos
+      if (!phone || !password) {
+        return res.status(400).json({
+          success: false,
+          message: 'Celular y contraseña son requeridos'
+        });
+      }
+
+      // Validar credenciales usando el modelo
+      const user = await User.login(phone, password);
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Credenciales inválidas'
+        });
+      }
+
+      // Generar token JWT
+      const tokenPayload = {
+        id: user.id,
+        phone: user.phone,
+        nombre: user.nombre,
+        estado: user.estado
+      };
+
+      const token = generateToken(tokenPayload);
+
+      res.status(200).json({
+        success: true,
+        message: 'Login exitoso',
+        data: {
+          user: {
+            id: user.id,
+            nombre: user.nombre,
+            phone: user.phone,
+            estado: user.estado
+          },
+          token: token
+        }
+      });
+    } catch (error) {
+      console.error('Error en loginUser:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'

@@ -16,6 +16,7 @@
   "license": "ISC",
   "description": "Backend para la aplicación totalprod",
   "dependencies": {
+    "@supabase/supabase-js": "^2.56.1",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

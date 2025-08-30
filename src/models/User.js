@@ -1,254 +1,118 @@
-const { sheets, SPREADSHEET_ID, SHEETS_CONFIG } = require('../config/googleSheets');
+const { supabase } = require('../config/supabase');
 const bcrypt = require('bcryptjs');
 
 class User {
   constructor(data) {
     this.id = data.id;
-    this.nombre = data.nombre;
-    this.email = data.email;
-    this.contrasena = data.contrasena;
-    this.celular = data.celular;
-    this.foto = data.foto;
-    this.estado = data.estado;
-    this.fechaCreacion = data.fechaCreacion;
-    this.rol = data.rol
-    this.permisos = data.permisos;
-    this.plugins = data.plugins;
+    this.nombre = data.name
+    this.phone = data.phone;
+    this.password = data.password
+    this.is_active = data.is_active;
+    this.role = data.role_id
+    this.company_type_id = data.company_type_id
   }
 
-  // Método estático para obtener todos los usuarios
-  static async getAll() {
+  // Método estático para crear un usuario
+  static async create(userData) {
     try {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS_CONFIG.USERS}!A:K`, // Ajusta según tus columnas
-      });
+      // Preparar datos para Supabase (mapear a la estructura de la tabla)
+      const newUser = {
+        name: userData.nombre,                    // nombre → name
+        phone: userData.phone,      // celular
+        password: userData.password,            // contrasena → password
+        is_active: true, // estado → is_active (boolean)
+        role_id: '00000000-0000-0000-0000-000000000001',                             // rol por defecto
+        company_type_id: userData.compañia,
+        created_at: new Date().toISOString()
+      };
 
-      const rows = response.data.values;
-      if (!rows || rows.length === 0) {
-        return [];
+      // Insertar en Supabase
+      const { data: insertedUser, error } = await supabase
+        .from('users')
+        .insert([newUser])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error al insertar usuario:', error);
+        throw new Error(`Error al crear usuario: ${error.message}`);
       }
 
-      // Asumiendo que la primera fila contiene los headers
-      const headers = rows[0];
-      
-      const users = rows.slice(1).map((row, index) => {
-        const userData = {};
-        headers.forEach((header, i) => {
-          // Normalizar headers para que coincidan con el modelo
-          let normalizedHeader = header.toLowerCase();
-          
-          // Mapear headers específicos
-          if (normalizedHeader === 'contraseña') {
-            normalizedHeader = 'contrasena';
-          } else if (normalizedHeader === 'creado') {
-            normalizedHeader = 'fechacreacion';
-          }
-          
-          userData[normalizedHeader] = row[i] || '';
-        });
-        
-        return new User(userData);
-      });
+      // Retornar instancia del modelo User
+      return new User(insertedUser);
 
-      return users;
     } catch (error) {
-      console.error('Error al obtener usuarios:', error);
-      throw new Error('No se pudieron obtener los usuarios');
+      console.error('💥 Error en create:', error);
+      throw new Error(`Error al crear usuario: ${error.message}`);
     }
   }
 
-  // Método estático para obtener un usuario por ID
-  static async getById(id) {
+  // Método estático para validar credenciales de login
+  static async login(phone, password) {
     try {
-      const users = await this.getAll();
-      const user = users.find(user => user.id == id);
-      return user;
-    } catch (error) {
-      console.error('Error al obtener usuario por ID:', error);
-      throw new Error('No se pudo obtener el usuario');
-    }
-  }
+      // Buscar usuario por email
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone', phone)
+        .single();
 
-  // Método estático para obtener un usuario por email
-  static async getByEmail(email) {
-    try {
-      const users = await this.getAll();
-      return users.find(user => user.email.toLowerCase() === email.toLowerCase());
-    } catch (error) {
-      console.error('Error al obtener usuario por email:', error);
-      throw new Error('No se pudo obtener el usuario');
-    }
-  }
+      if (error) {
+        if (error.code === 'PGRST116') {
+          console.log('❌ Usuario no encontrado');
+          return null;
+        }
+        console.error('❌ Error de Supabase:', error);
+        throw new Error('Error al buscar usuario');
+      }
 
-  // Método para validar credenciales de login
-  static async validateCredentials(email, password) {
-    try {
-      const user = await this.getByEmail(email);
       if (!user) {
+        console.log('❌ Usuario no encontrado');
         return null;
       }
-      
-      if (!user.contrasena) {
+
+      // Verificar contraseña
+      if (!user.password) {
+        console.log('❌ Usuario sin contraseña');
         return null;
       }
-      
-      // Comparar la contraseña ingresada con la contraseña encriptada
-      const isPasswordValid = await bcrypt.compare(password, user.contrasena);
-      
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+
       if (!isPasswordValid) {
+        console.log('❌ Contraseña incorrecta');
         return null;
       }
-      
-      return user;
+
+      return new User(user);
+
     } catch (error) {
-      console.error('Error al validar credenciales:', error);
+      console.error('💥 Error en validateCredentials:', error);
       throw new Error('Error en la validación de credenciales');
     }
   }
 
-  // Método para crear un usuario
-  static async create(userData) {
+  // Método estático para obtener usuario por celular
+  static async getByPhone(phone) {
     try {
-      // Generar ID único basándose en el ID más alto existente
-      const users = await this.getAll();
-      let nextIdNumber = 1;
-      
-      if (users.length > 0) {
-        // Extraer el número del ID más alto existente
-        const existingIds = users.map(user => {
-          const match = user.id.match(/USERSUM-(\d+)/);
-          return match ? parseInt(match[1]) : 0;
-        });
-        
-        const maxIdNumber = Math.max(...existingIds);
-        nextIdNumber = maxIdNumber + 1;
-      }
-      
-      const nextId = `USERSUM-${String(nextIdNumber).padStart(4, '0')}`;
-      
-      // Preparar datos del usuario
-      const newUser = {
-        id: nextId,
-        nombre: userData.nombre,
-        email: userData.email,
-        contrasena: userData.contrasena,
-        celular: userData.telefono || '',
-        foto: userData.foto || '',
-        estado: userData.estado || 'Activo',
-        fechaCreacion: userData.fechaCreacion || new Date().toISOString(),
-        rol: userData.rol || 'Sin rol'
-      };
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone', phone)
+        .single();
 
-      // Insertar en Google Sheets (usando los headers exactos del spreadsheet)
-      const values = [
-        [
-          newUser.id,
-          newUser.nombre,
-          newUser.email,
-          newUser.contrasena,
-          newUser.celular,
-          newUser.foto,
-          newUser.estado,
-          newUser.fechaCreacion,
-          newUser.rol
-        ]
-      ];
-
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS_CONFIG.USERS}!A:I`,
-        valueInputOption: 'RAW',
-        insertDataOption: 'INSERT_ROWS',
-        resource: {
-          values: values
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Usuario no encontrado
         }
-      });
+        console.error('Error al obtener usuario por celular:', error);
+        throw new Error('No se pudo obtener el usuario');
+      }
 
-      return new User(newUser);
+      return new User(user);
     } catch (error) {
-      console.error('Error al crear usuario:', error);
-      throw new Error('Error al crear usuario en Google Sheets');
-    }
-  }
-
-  // Método para actualizar un usuario
-  static async update(id, updateData) {
-    try {
-      console.log('Actualizando usuario con ID:', id);
-      console.log('Datos a actualizar:', updateData);
-      
-      // Obtener todos los usuarios para encontrar la fila correcta
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS_CONFIG.USERS}!A:H`,
-      });
-
-      const rows = response.data.values;
-      if (!rows || rows.length === 0) {
-        throw new Error('No se encontraron usuarios en el spreadsheet');
-      }
-
-      // Encontrar la fila del usuario a actualizar
-      const userRowIndex = rows.findIndex(row => row[0] === id);
-      if (userRowIndex === -1) {
-        throw new Error('Usuario no encontrado para actualizar');
-      }
-
-      // Obtener la fila actual del usuario
-      const currentRow = rows[userRowIndex];
-      const headers = rows[0];
-      
-      // Crear la nueva fila con los datos actualizados
-      const updatedRow = headers.map((header, index) => {
-        const normalizedHeader = header.toLowerCase();
-        
-        // Mapear headers específicos
-        let mappedHeader = normalizedHeader;
-        if (normalizedHeader === 'contraseña') {
-          mappedHeader = 'contrasena';
-        } else if (normalizedHeader === 'creado') {
-          mappedHeader = 'fechacreacion';
-        }
-        
-        // Si el campo se va a actualizar, usar el nuevo valor
-        if (updateData[mappedHeader] !== undefined) {
-          return updateData[mappedHeader];
-        }
-        
-        // Si no, mantener el valor actual
-        return currentRow[index] || '';
-      });
-
-      // Actualizar la fila en Google Sheets
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS_CONFIG.USERS}!A${userRowIndex + 1}:H${userRowIndex + 1}`,
-        valueInputOption: 'RAW',
-        resource: {
-          values: [updatedRow]
-        }
-      });
-
-      console.log('Usuario actualizado exitosamente en Google Sheets');
-      
-      // Retornar el usuario actualizado
-      const updatedUserData = {};
-      headers.forEach((header, i) => {
-        const normalizedHeader = header.toLowerCase();
-        let mappedHeader = normalizedHeader;
-        if (normalizedHeader === 'contraseña') {
-          mappedHeader = 'contrasena';
-        } else if (normalizedHeader === 'creado') {
-          mappedHeader = 'fechacreacion';
-        }
-        updatedUserData[mappedHeader] = updatedRow[i] || '';
-      });
-
-      return new User(updatedUserData);
-    } catch (error) {
-      console.error('Error al actualizar usuario:', error);
-      throw new Error('Error al actualizar usuario en Google Sheets');
+      console.error('Error al obtener usuario por celular:', error);
+      throw new Error('No se pudo obtener el usuario');
     }
   }
 }
