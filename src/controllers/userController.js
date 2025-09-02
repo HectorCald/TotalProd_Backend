@@ -5,10 +5,10 @@ const { generateToken } = require('../config/jwt');
 class UserController {
   static async createUser(req, res) {
     try {
-      const { name, telefono, emailRegister, passwordRegister } = req.body;
+      const { firstName, lastName, phone, email, password } = req.body;
 
       // Validar campos requeridos
-      if (!name || !telefono || !emailRegister || !passwordRegister) {
+      if (!firstName || !lastName || !email || !password) {
         return res.status(400).json({
           success: false,
           message: 'Nombre, email y contraseña son requeridos'
@@ -17,25 +17,26 @@ class UserController {
 
       // Encriptar la contraseña
       const saltRounds = 10;
-      const hashedPassword = await bcrypt.hash(passwordRegister, saltRounds);
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
 
       // Crear el usuario
       const newUser = await User.create({
-        nombre: name,
-        telefono: telefono,
-        email: emailRegister,
-        contrasena: hashedPassword,
-        estado: 'Activo',
-        fechaCreacion: new Date().toISOString()
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+        email: email,
+        password: hashedPassword,
+        is_active: true,
       });
 
       // Generar token JWT
       const tokenPayload = {
         id: newUser.id,
-        telefono: newUser.telefono,
+        phone: newUser.phone,
         email: newUser.email,
-        nombre: newUser.nombre,
-        estado: newUser.estado
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        is_active: newUser.is_active
       };
 
       const token = generateToken(tokenPayload);
@@ -46,10 +47,11 @@ class UserController {
         data: {
           user: {
             id: newUser.id,
-            nombre: newUser.nombre,
-            telefono: newUser.telefono,
+            firstName: newUser.firstName,
+            lastName: newUser.lastName,
+            phone: newUser.phone,
             email: newUser.email,
-            estado: newUser.estado
+            is_active: newUser.is_active
           },
           token: token
         }
@@ -64,34 +66,34 @@ class UserController {
   }
 
   // Método para verificar si un celular ya existe
-  static async getUserByPhone(req, res) {
+  static async getUserByEmail(req, res) {
     try {
-      const { phone } = req.body;
+      const { email } = req.body;
 
-      if (!phone) {
+      if (!email) {
         return res.status(400).json({
           success: false,
-            message: 'Celular es requerido'
+            message: 'Email es requerido'
         });
       }
 
-      const user = await User.getByPhone(phone);
+      const user = await User.getByEmail(email);
 
       if (user) {
         return res.status(200).json({
           success: true,
-          message: 'Celular ya existe',
+          message: 'Email ya existe',
           data: { exists: true }
         });
       } else {
         return res.status(200).json({
           success: true,
-          message: 'Celular disponible',
+          message: 'Email disponible',
           data: { exists: false }
         });
       }
     } catch (error) {
-      console.error('Error en getUserByPhone:', error);
+      console.error('Error en getUserByEmail:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'
@@ -103,18 +105,18 @@ class UserController {
   static async login(req, res) {
     try {
       
-      const { phone, password } = req.body;
+      const { email, password } = req.body;
 
       // Validar campos requeridos
-      if (!phone || !password) {
+      if (!email || !password) {
         return res.status(400).json({
           success: false,
-          message: 'Celular y contraseña son requeridos'
+          message: 'Email y contraseña son requeridos'
         });
       }
 
       // Validar credenciales usando el modelo
-      const user = await User.login(phone, password);
+      const user = await User.login(email, password);
 
       if (!user) {
         return res.status(401).json({
@@ -126,9 +128,10 @@ class UserController {
       // Generar token JWT
       const tokenPayload = {
         id: user.id,
-        phone: user.phone,
-        nombre: user.nombre,
-        estado: user.estado
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        is_active: user.is_active
       };
 
       const token = generateToken(tokenPayload);
@@ -139,15 +142,136 @@ class UserController {
         data: {
           user: {
             id: user.id,
-            nombre: user.nombre,
-            phone: user.phone,
-            estado: user.estado
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            is_active: user.is_active
           },
           token: token
         }
       });
     } catch (error) {
       console.error('Error en loginUser:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Método para obtener información del usuario logueado
+  static async getCurrentUser(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del usuario es requerido'
+        });
+      }
+
+      const user = await User.getById(id);
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'Usuario no encontrado'
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Usuario obtenido exitosamente',
+        data: {
+          user: {
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            phone: user.phone,
+            email: user.email,
+            is_active: user.is_active
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error en getCurrentUser:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Método para verificar contraseña actual
+  static async verifyCurrentPassword(req, res) {
+    try {
+      const { userId, currentPassword } = req.body;
+
+      if (!userId || !currentPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de usuario y contraseña actual son requeridos'
+        });
+      }
+
+      const isPasswordValid = await User.verifyPassword(userId, currentPassword);
+
+      res.status(200).json({
+        success: true,
+        message: isPasswordValid ? 'Contraseña correcta' : 'Contraseña incorrecta',
+        data: { isValid: isPasswordValid }
+      });
+    } catch (error) {
+      console.error('Error en verifyCurrentPassword:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Método para cambiar contraseña
+  static async changePassword(req, res) {
+    try {
+      const { userId, currentPassword, newPassword } = req.body;
+
+      if (!userId || !currentPassword || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de usuario, contraseña actual y nueva contraseña son requeridos'
+        });
+      }
+
+      // Verificar que la contraseña actual sea correcta
+      const isCurrentPasswordValid = await User.verifyPassword(userId, currentPassword);
+      
+      if (!isCurrentPasswordValid) {
+        return res.status(400).json({
+          success: false,
+          message: 'La contraseña actual es incorrecta'
+        });
+      }
+
+      // Cambiar la contraseña
+      const updatedUser = await User.changePassword(userId, newPassword);
+
+      res.status(200).json({
+        success: true,
+        message: 'Contraseña cambiada exitosamente',
+        data: {
+          user: {
+            id: updatedUser.id,
+            firstName: updatedUser.firstName,
+            lastName: updatedUser.lastName,
+            email: updatedUser.email,
+            phone: updatedUser.phone,
+            is_active: updatedUser.is_active
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error en changePassword:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'

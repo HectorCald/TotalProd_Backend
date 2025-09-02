@@ -4,12 +4,12 @@ const bcrypt = require('bcryptjs');
 class User {
   constructor(data) {
     this.id = data.id;
-    this.nombre = data.name
+    this.firstName = data.first_name
+    this.lastName = data.last_name
+    this.email = data.email
     this.phone = data.phone;
     this.password = data.password
     this.is_active = data.is_active;
-    this.role = data.role_id
-    this.company_type_id = data.company_type_id
   }
 
   // Método estático para crear un usuario
@@ -17,13 +17,12 @@ class User {
     try {
       // Preparar datos para Supabase (mapear a la estructura de la tabla)
       const newUser = {
-        name: userData.nombre,                    // nombre → name
+        first_name: userData.firstName,                    // nombre → name
+        last_name: userData.lastName,
+        email: userData.email,
         phone: userData.phone,      // celular
         password: userData.password,            // contrasena → password
         is_active: true, // estado → is_active (boolean)
-        role_id: '00000000-0000-0000-0000-000000000001',                             // rol por defecto
-        company_type_id: userData.compañia,
-        created_at: new Date().toISOString()
       };
 
       // Insertar en Supabase
@@ -48,13 +47,13 @@ class User {
   }
 
   // Método estático para validar credenciales de login
-  static async login(phone, password) {
+  static async login(email, password) {
     try {
       // Buscar usuario por email
       const { data: user, error } = await supabase
         .from('users')
         .select('*')
-        .eq('phone', phone)
+        .eq('email', email)
         .single();
 
       if (error) {
@@ -93,26 +92,101 @@ class User {
   }
 
   // Método estático para obtener usuario por celular
-  static async getByPhone(phone) {
+  static async getByEmail(email) {
     try {
       const { data: user, error } = await supabase
         .from('users')
         .select('*')
-        .eq('phone', phone)
+        .eq('email', email)
         .single();
 
       if (error) {
         if (error.code === 'PGRST116') {
           return null; // Usuario no encontrado
         }
-        console.error('Error al obtener usuario por celular:', error);
+        console.error('Error al obtener usuario por email:', error);
         throw new Error('No se pudo obtener el usuario');
       }
 
       return new User(user);
     } catch (error) {
-      console.error('Error al obtener usuario por celular:', error);
+      console.error('Error al obtener usuario por email:', error);
       throw new Error('No se pudo obtener el usuario');
+    }
+  }
+
+  // Método estático para obtener usuario por ID
+  static async getById(id) {
+    try {
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Usuario no encontrado
+        }
+        console.error('Error al obtener usuario por ID:', error);
+        throw new Error('No se pudo obtener el usuario');
+      }
+
+      return new User(user);
+    } catch (error) {
+      console.error('Error al obtener usuario por ID:', error);
+      throw new Error('No se pudo obtener el usuario');
+    }
+  }
+
+  // Método estático para verificar contraseña actual
+  static async verifyPassword(userId, currentPassword) {
+    try {
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('password')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error al obtener usuario para verificar contraseña:', error);
+        throw new Error('No se pudo verificar la contraseña');
+      }
+
+      if (!user || !user.password) {
+        return false;
+      }
+
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      return isPasswordValid;
+    } catch (error) {
+      console.error('Error en verifyPassword:', error);
+      throw new Error('No se pudo verificar la contraseña');
+    }
+  }
+
+  // Método estático para cambiar contraseña
+  static async changePassword(userId, newPassword) {
+    try {
+      const saltRounds = 10;
+      const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+      const { data: updatedUser, error } = await supabase
+        .from('users')
+        .update({ password: hashedPassword })
+        .eq('id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error al cambiar contraseña:', error);
+        throw new Error('No se pudo cambiar la contraseña');
+      }
+
+      return new User(updatedUser);
+    } catch (error) {
+      console.error('Error en changePassword:', error);
+      throw new Error('No se pudo cambiar la contraseña');
     }
   }
 }

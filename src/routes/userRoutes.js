@@ -7,6 +7,9 @@ const router = express.Router();
 // Rutas para usuarios - IMPORTANTE: Las rutas específicas van ANTES que las dinámicas
 router.post('/create', UserController.createUser);
 router.post('/login', UserController.login);
-router.post('/getUserByPhone', UserController.getUserByPhone); // Verificar si email existe
+router.post('/getUserByEmail', UserController.getUserByEmail); // Verificar si email existe
+router.post('/verifyPassword', UserController.verifyCurrentPassword); // Verificar contraseña actual
+router.post('/changePassword', UserController.changePassword); // Cambiar contraseña
+router.get('/:id', UserController.getCurrentUser); // Obtener usuario por ID
 
 module.exports = router;
