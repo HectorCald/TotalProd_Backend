@@ -2,11 +2,14 @@
 const { supabase } = require('../config/supabase');
 
 class Plan {
+
+    // Constructor para crear un plan
     constructor(data) {
         this.id = data.id;
         this.name = data.name;
         this.price = data.price;
         this.duration = data.duration;
+        this.description = data.description;
         this.created_at = data.created_at;
         this.modules = data.modules || [];
     }

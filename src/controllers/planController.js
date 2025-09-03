@@ -3,12 +3,9 @@ const Plan = require('../models/Plan');
 class PlanController {
     // Método para obtener todos los planes
     static async getAllPlans(req, res) {
-        try {
-            console.log('🔍 PlanController - getAllPlans - Iniciando...');
-            
+        try { 
             const plans = await Plan.getAll();
             
-            console.log('🔍 PlanController - getAllPlans - Planes obtenidos:', plans.length);
             
             res.status(200).json({
                 success: true,

@@ -8,7 +8,7 @@ const planRoutes = require('./planRoutes');
 // Ruta principal
 router.get('/', (req, res) => {
   res.json({ 
-    message: 'Summa Backend API funcionando correctamente',
+    message: 'TotalProd Backend API funcionando correctamente',
     version: '1.0.0',
     timestamp: new Date().toISOString()
   });
@@ -26,6 +26,8 @@ router.get('/status', (req, res) => {
 // Rutas de usuarios
 router.use('/users', userRoutes);
 router.use('/passwordReset', passwordResetRoutes);
+
+// Rutas de clientes
 router.use('/clients', clientRoutes);
 
 // Rutas de planes

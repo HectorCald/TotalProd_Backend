@@ -1,6 +1,8 @@
 const { supabase } = require('../config/supabase');
 
 class clients {
+
+  // Constructor para crear un cliente
   constructor(data) {
     this.id = data.id;
     this.name = data.name;
@@ -11,6 +13,7 @@ class clients {
     this.user_id = data.user_id;
   }
 
+  // Método para obtener todos los clientes
   static async getAll(userId) {
     try {
       if (!userId) {
@@ -33,10 +36,48 @@ class clients {
     }
   }
 
+  // Nuevo método para paginación con búsqueda
+  static async getAllPaginated(userId, { page, limit, offset, search }) {
+    try {
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
+      let query = supabase
+        .from('clients')
+        .select('*', { count: 'exact' })
+        .eq('user_id', userId);
+
+      // Aplicar filtro de búsqueda si existe
+      if (search && search.trim()) {
+        const searchTerm = `%${search.trim()}%`;
+        query = query.or(`name.ilike.${searchTerm},phone.ilike.${searchTerm}`);
+      }
+
+      // Aplicar paginación y ordenamiento
+      query = query
+        .order('name', { ascending: true })
+        .range(offset, offset + limit - 1);
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        throw new Error('No se pudo obtener los clientes');
+      }
+      
+      return {
+        clients: data || [],
+        total: count || 0
+      };
+    } catch (error) {
+      console.error('Error al obtener los clientes paginados:', error);
+      throw new Error('No se pudo obtener los clientes');
+    }
+  }
+
+  // Crear un cliente
   static async create(clientData, userId) {
     try {
-      console.log('🔍 MODEL CREATE - Datos recibidos:', clientData);
-      console.log('🔍 MODEL CREATE - userId:', userId);
       
       // Preparar datos para la base de datos
       const dbData = {
@@ -72,6 +113,7 @@ class clients {
     }
   }
 
+  // Eliminar un cliente
   static async delete(id, userId) {
     try {
       if (!id) {
@@ -100,6 +142,7 @@ class clients {
     }
   }
 
+  // Actualizar un cliente
   static async update(id, clientData, userId) {
     try {
       if (!id) {

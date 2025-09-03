@@ -171,9 +171,7 @@ class UserController {
         });
       }
 
-      console.log('🔍 Backend - getCurrentUser - ID recibido:', id);
       const user = await User.getById(id);
-      console.log('🔍 Backend - getCurrentUser - Usuario obtenido:', user);
 
       if (!user) {
         return res.status(404).json({

@@ -9,12 +9,8 @@ class EmailService {
   // Método para enviar código de reset por email usando la API de Brevo
   async sendPasswordResetCode(email, code, userName) {
     try {
-      console.log('🔍 EmailService - email recibido:', email); // Debug
-      console.log('🔍 EmailService - code recibido:', code); // Debug
-      console.log('🔍 EmailService - userName recibido:', userName); // Debug
       
       const firstName = userName && userName.trim() ? userName.split(' ')[0] : 'Usuario';
-      console.log('🔍 EmailService - firstName extraído:', firstName); // Debug
       
       const emailData = {
         sender: {

@@ -46,8 +46,6 @@ async function testConnection() {
             console.log('⚠️ Conectado pero con error en la base de datos:', dbError.message);
             return true; // Aún retornamos true porque la conexión básica funciona
         }
-
-        console.log('📊 Base de datos accesible');
         return true;
     } catch (error) {
         console.error('❌ Error de conexión:', error.message);

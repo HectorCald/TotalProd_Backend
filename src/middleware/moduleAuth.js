@@ -7,8 +7,6 @@ const requireModuleAccess = (moduleName) => {
             // Obtener el ID del usuario del token (ya verificado por requireAuth)
             const userId = req.user.id;
             
-            console.log(`🔍 ModuleAuth - Verificando acceso al módulo: ${moduleName} para usuario: ${userId}`);
-            
             // Obtener el usuario con su plan y módulos
             const user = await User.getById(userId);
             
@@ -18,13 +16,6 @@ const requireModuleAccess = (moduleName) => {
                     message: 'Usuario no encontrado'
                 });
             }
-            
-            console.log(`🔍 ModuleAuth - Usuario obtenido:`, {
-                id: user.id,
-                plan: user.plan?.name,
-                modules: user.modules?.map(m => m.name)
-            });
-            
             // Verificar si el usuario tiene un plan asignado
             if (!user.plan) {
                 return res.status(403).json({
@@ -49,7 +40,6 @@ const requireModuleAccess = (moduleName) => {
                 });
             }
             
-            console.log(`✅ ModuleAuth - Acceso autorizado al módulo: ${moduleName}`);
             next();
             
         } catch (error) {

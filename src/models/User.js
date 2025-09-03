@@ -2,6 +2,8 @@ const { supabase } = require('../config/supabase');
 const bcrypt = require('bcryptjs');
 
 class User {
+
+  // Constructor para crear un usuario
   constructor(data) {
     this.id = data.id;
     this.firstName = data.first_name;
@@ -10,25 +12,37 @@ class User {
     this.phone = data.phone;
     this.password = data.password;
     this.is_active = data.is_active;
-    this.plan_id = data.plan_id;
-    this.plan = data.plans || null;
-    this.modules = data.plans?.modules || [];
+    this.plan_id = data.plan_id || null; // Ahora viene de user_plans
+    this.plan = data.plan || null; // Ahora viene de user_plans
+    this.modules = data.plan?.modules || [];
   }
 
   // Método estático para crear un usuario
   static async create(userData) {
     try {
-      // Preparar datos para Supabase (mapear a la estructura de la tabla)
+      // 1. Obtener el ID del plan Free
+      const { data: freePlan, error: planError } = await supabase
+        .from('plans')
+        .select('id')
+        .eq('name', 'Free')
+        .single();
+
+      if (planError || !freePlan) {
+        console.error('❌ Error al obtener plan Free:', planError);
+        throw new Error('No se pudo obtener el plan Free por defecto');
+      }
+
+      // 2. Preparar datos para Supabase (sin plan_id)
       const newUser = {
-        first_name: userData.firstName,                    // nombre → name
+        first_name: userData.firstName,
         last_name: userData.lastName,
         email: userData.email,
-        phone: userData.phone,      // celular
-        password: userData.password,            // contrasena → password
-        is_active: true, // estado → is_active (boolean)
+        phone: userData.phone,
+        password: userData.password,
+        is_active: true
       };
 
-      // Insertar en Supabase
+      // 3. Insertar usuario en Supabase
       const { data: insertedUser, error } = await supabase
         .from('users')
         .insert([newUser])
@@ -40,7 +54,25 @@ class User {
         throw new Error(`Error al crear usuario: ${error.message}`);
       }
 
-      // Retornar instancia del modelo User
+      // 4. Crear registro en user_plans
+      const userPlanData = {
+        user_id: insertedUser.id,
+        plan_id: freePlan.id,
+        start_date: new Date().toISOString(),
+        end_date: 'infinity', // Plan Free es infinito
+        is_active: true
+      };
+
+      const { error: userPlanError } = await supabase
+        .from('user_plans')
+        .insert([userPlanData]);
+
+      if (userPlanError) {
+        console.error('❌ Error al crear user_plan:', userPlanError);
+        // No lanzar error aquí, solo log
+      }
+
+      // 5. Retornar instancia del modelo User
       return new User(insertedUser);
 
     } catch (error) {
@@ -121,11 +153,27 @@ class User {
   // Método estático para obtener usuario por ID
   static async getById(id) {
     try {
+      // 1. Obtener el usuario básico
       const { data: user, error } = await supabase
         .from('users')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Usuario no encontrado
+        }
+        console.error('Error al obtener usuario por ID:', error);
+        throw new Error('No se pudo obtener el usuario');
+      }
+
+      // 2. Obtener el plan activo desde user_plans
+      const { data: activeUserPlan, error: userPlanError } = await supabase
+        .from('user_plans')
         .select(`
           *,
-          plans:plan_id (
+          plans (
             id,
             name,
             price,
@@ -139,27 +187,34 @@ class User {
             )
           )
         `)
-        .eq('id', id)
+        .eq('user_id', id)
+        .eq('is_active', true)
+        .or('end_date.is.null,end_date.gt.' + new Date().toISOString()) // Plan no expirado
+        .order('start_date', { ascending: false })
+        .limit(1)
         .single();
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          return null; // Usuario no encontrado
-        }
-        console.error('Error al obtener usuario por ID:', error);
-        throw new Error('No se pudo obtener el usuario');
+      if (userPlanError && userPlanError.code !== 'PGRST116') {
+        console.error('Error al obtener plan activo:', userPlanError);
+        // No lanzar error, continuar sin plan
       }
-
-      console.log('🔍 User Model - getById - Raw data from Supabase:', user);
       
-      // Procesar los módulos del plan
-      if (user.plans && user.plans.plan_modules) {
-        user.plans.modules = user.plans.plan_modules.map(pm => pm.modules);
-        delete user.plans.plan_modules; // Limpiar datos innecesarios
+      // 3. Procesar los datos del plan
+      if (activeUserPlan && activeUserPlan.plans) {
+        user.plan = activeUserPlan.plans;
+        user.plan_id = activeUserPlan.plans.id;
+        
+        // Procesar los módulos del plan
+        if (activeUserPlan.plans.plan_modules) {
+          user.plan.modules = activeUserPlan.plans.plan_modules.map(pm => pm.modules);
+          delete user.plan.plan_modules; // Limpiar datos innecesarios
+        }
+      } else {
+        user.plan = null;
+        user.plan_id = null;
       }
       
       const userInstance = new User(user);
-      console.log('🔍 User Model - getById - User instance:', userInstance);
       return userInstance;
     } catch (error) {
       console.error('Error al obtener usuario por ID:', error);

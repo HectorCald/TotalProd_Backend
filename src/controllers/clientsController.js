@@ -1,6 +1,8 @@
 const client = require('../models/clients');
 
 class clientsController {
+
+  // Obtener todos los clientes
   static async getAll(req, res) {
     try {
       // Obtener el userId del usuario autenticado
@@ -13,13 +15,28 @@ class clientsController {
         });
       }
 
-      const clients = await client.getAll(userId);
+      // Parámetros de paginación y búsqueda
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const search = req.query.search || '';
+      const offset = (page - 1) * limit;
+
+      const result = await client.getAllPaginated(userId, { page, limit, offset, search });
+      
       res.status(200).json({
         success: true,
         message: 'Clientes obtenidos exitosamente',
-        data: clients
+        data: result.clients,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(result.total / limit),
+          totalItems: result.total,
+          hasNextPage: page < Math.ceil(result.total / limit),
+          hasPrevPage: page > 1
+        }
       });
     } catch (error) {
+      console.error('Error en getAll:', error);
       res.status(500).json({
         success: false,
         message: error.message
@@ -27,12 +44,10 @@ class clientsController {
     }
   }
 
+  // Crear un cliente
   static async create(req, res) {
     try {
       const { name, phone, direccion, location } = req.body;
-
-      console.log('🔍 CREATE - Datos recibidos:', req.body);
-      console.log('🔍 CREATE - location:', location);
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -64,6 +79,7 @@ class clientsController {
     }
   }
 
+  // Eliminar un cliente
   static async delete(req, res) {
     try {
       const { id } = req.params;
@@ -91,14 +107,11 @@ class clientsController {
     }
   }
 
+  // Actualizar un cliente
   static async update(req, res) {
     try {
       const { id } = req.params;
       const { name, phone, direccion, location } = req.body;
-
-      console.log('🔍 UPDATE - ID:', id);
-      console.log('🔍 UPDATE - Datos recibidos:', req.body);
-      console.log('🔍 UPDATE - location:', location);
 
       if (!id) {
         return res.status(400).json({
