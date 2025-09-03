@@ -131,7 +131,7 @@ class UserController {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        is_active: user.is_active
+        is_active: user.is_active,
       };
 
       const token = generateToken(tokenPayload);
@@ -171,7 +171,9 @@ class UserController {
         });
       }
 
+      console.log('🔍 Backend - getCurrentUser - ID recibido:', id);
       const user = await User.getById(id);
+      console.log('🔍 Backend - getCurrentUser - Usuario obtenido:', user);
 
       if (!user) {
         return res.status(404).json({
@@ -190,7 +192,10 @@ class UserController {
             lastName: user.lastName,
             phone: user.phone,
             email: user.email,
-            is_active: user.is_active
+            is_active: user.is_active,
+            plan_id: user.plan_id,
+            plan: user.plan,
+            modules: user.modules
           }
         }
       });

@@ -4,5 +4,6 @@ CREATE TABLE clients (
     phone VARCHAR(20),
     location POINT, -- coordenadas lat/lon
     total_orders INT DEFAULT 0, -- contador de pedidos
+    user_id UUID REFERENCES users(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

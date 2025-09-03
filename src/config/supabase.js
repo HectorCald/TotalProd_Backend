@@ -1,10 +1,15 @@
 const { createClient } = require('@supabase/supabase-js');
 
 // Inicializar el cliente de Supabase
-const supabaseUrl = 'https://nitrxavzzadgpqlqqjwt.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5pdHJ4YXZ6emFkZ3BxbHFxand0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY1NTcwMTUsImV4cCI6MjA3MjEzMzAxNX0.SQA3EZWDGyqa3zqyWaDO-Qi-LqqCgvt88YGRcvKi7e0';
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('❌ Faltan variables de entorno: SUPABASE_URL y SUPABASE_SERVICE_KEY');
+    process.exit(1);
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
         autoRefreshToken: false,
         persistSession: false

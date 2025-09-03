@@ -8,11 +8,20 @@ class clients {
     this.location = data.location;
     this.total_orders = data.total_orders;
     this.created_at = data.created_at;
+    this.user_id = data.user_id;
   }
 
-  static async getAll() {
+  static async getAll(userId) {
     try {
-      const { data, error } = await supabase.from('clients').select('*');
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('user_id', userId);
+
       if (error) {
         throw new Error('No se pudo obtener los clientes');
       }
@@ -24,21 +33,22 @@ class clients {
     }
   }
 
-  static async create(clientData) {
+  static async create(clientData, userId) {
     try {
       console.log('🔍 MODEL CREATE - Datos recibidos:', clientData);
+      console.log('🔍 MODEL CREATE - userId:', userId);
       
       // Preparar datos para la base de datos
       const dbData = {
         name: clientData.name,
         phone: clientData.phone || null,
-        total_orders: 0
+        total_orders: 0,
+        user_id: userId,
       };
 
       // Si hay location, usarla directamente
       if (clientData.location) {
         dbData.location = clientData.location;
-        console.log('🔍 MODEL CREATE - location agregada:', clientData.location);
       }
 
       const { data, error } = await supabase
@@ -62,16 +72,21 @@ class clients {
     }
   }
 
-  static async delete(id) {
+  static async delete(id, userId) {
     try {
       if (!id) {
         throw new Error('ID del cliente es requerido');
       }
 
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
       const { error } = await supabase
         .from('clients')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', userId);
 
       if (error) {
         console.error('Error de Supabase:', error);
@@ -85,10 +100,14 @@ class clients {
     }
   }
 
-  static async update(id, clientData) {
+  static async update(id, clientData, userId) {
     try {
       if (!id) {
         throw new Error('ID del cliente es requerido');
+      }
+
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
       }
 
       // Preparar datos para la base de datos
@@ -106,6 +125,7 @@ class clients {
         .from('clients')
         .update(dbData)
         .eq('id', id)
+        .eq('user_id', userId)
         .select();
 
       if (error) {

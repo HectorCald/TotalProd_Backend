@@ -3,6 +3,7 @@ const router = express.Router();
 const userRoutes = require('./userRoutes');
 const passwordResetRoutes = require('./passwordResetRoutes');
 const clientRoutes = require('./clientRoutes');
+const planRoutes = require('./planRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -26,5 +27,8 @@ router.get('/status', (req, res) => {
 router.use('/users', userRoutes);
 router.use('/passwordReset', passwordResetRoutes);
 router.use('/clients', clientRoutes);
+
+// Rutas de planes
+router.use('/plans', planRoutes);
 
 module.exports = router;

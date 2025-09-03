@@ -4,12 +4,15 @@ const bcrypt = require('bcryptjs');
 class User {
   constructor(data) {
     this.id = data.id;
-    this.firstName = data.first_name
-    this.lastName = data.last_name
-    this.email = data.email
+    this.firstName = data.first_name;
+    this.lastName = data.last_name;
+    this.email = data.email;
     this.phone = data.phone;
-    this.password = data.password
+    this.password = data.password;
     this.is_active = data.is_active;
+    this.plan_id = data.plan_id;
+    this.plan = data.plans || null;
+    this.modules = data.plans?.modules || [];
   }
 
   // Método estático para crear un usuario
@@ -120,7 +123,22 @@ class User {
     try {
       const { data: user, error } = await supabase
         .from('users')
-        .select('*')
+        .select(`
+          *,
+          plans:plan_id (
+            id,
+            name,
+            price,
+            duration,
+            plan_modules (
+              modules (
+                id,
+                name,
+                description
+              )
+            )
+          )
+        `)
         .eq('id', id)
         .single();
 
@@ -132,7 +150,17 @@ class User {
         throw new Error('No se pudo obtener el usuario');
       }
 
-      return new User(user);
+      console.log('🔍 User Model - getById - Raw data from Supabase:', user);
+      
+      // Procesar los módulos del plan
+      if (user.plans && user.plans.plan_modules) {
+        user.plans.modules = user.plans.plan_modules.map(pm => pm.modules);
+        delete user.plans.plan_modules; // Limpiar datos innecesarios
+      }
+      
+      const userInstance = new User(user);
+      console.log('🔍 User Model - getById - User instance:', userInstance);
+      return userInstance;
     } catch (error) {
       console.error('Error al obtener usuario por ID:', error);
       throw new Error('No se pudo obtener el usuario');

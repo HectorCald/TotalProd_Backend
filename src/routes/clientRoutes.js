@@ -1,7 +1,15 @@
 const express = require('express');
 const clientsController = require('../controllers/clientsController');
+const { requireAuth } = require('../middleware/auth');
+const { requireModuleAccess } = require('../middleware/moduleAuth');
 
 const router = express.Router();
+
+// Aplicar middleware de autenticación a todas las rutas
+router.use(requireAuth);
+
+// Aplicar middleware de acceso al módulo 'Clientes' a todas las rutas
+router.use(requireModuleAccess('Clientes'));
 
 router.get('/', clientsController.getAll);
 router.post('/', clientsController.create);

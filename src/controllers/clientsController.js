@@ -3,7 +3,17 @@ const client = require('../models/clients');
 class clientsController {
   static async getAll(req, res) {
     try {
-      const clients = await client.getAll();
+      // Obtener el userId del usuario autenticado
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      const clients = await client.getAll(userId);
       res.status(200).json({
         success: true,
         message: 'Clientes obtenidos exitosamente',
@@ -38,7 +48,7 @@ class clientsController {
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
         location: location || null
-      });
+      }, req.user.id);
 
       res.status(201).json({
         success: true,
@@ -66,7 +76,7 @@ class clientsController {
       }
 
       // Eliminar el cliente
-      await client.delete(id);
+      await client.delete(id, req.user.id);
 
       res.status(200).json({
         success: true,
@@ -110,7 +120,7 @@ class clientsController {
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
         location: location || null
-      });
+      }, req.user.id);
 
       res.status(200).json({
         success: true,
