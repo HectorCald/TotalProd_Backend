@@ -1,4 +1,5 @@
 const Plan = require('../models/Plan');
+const User = require('../models/User');
 
 class PlanController {
     // Método para obtener todos los planes
@@ -16,6 +17,55 @@ class PlanController {
             });
         } catch (error) {
             console.error('Error en getAllPlans:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message || 'Error interno del servidor'
+            });
+        }
+    }
+
+    // Método para obtener el plan actual del usuario
+    static async getCurrentPlan(req, res) {
+        try {
+            const userId = req.user.id; // Obtener el ID del usuario desde el token
+
+            if (!userId) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Usuario no autenticado'
+                });
+            }
+
+            // Obtener el usuario con su plan
+            const user = await User.getById(userId);
+            
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Usuario no encontrado'
+                });
+            }
+
+            // El modelo User.getById ya retorna el plan completo en user.plan
+            if (!user.plan) {
+                return res.status(200).json({
+                    success: true,
+                    message: 'Usuario no tiene plan asignado',
+                    data: {
+                        plan: null
+                    }
+                });
+            }
+
+            res.status(200).json({
+                success: true,
+                message: 'Plan actual obtenido exitosamente',
+                data: {
+                    plan: user.plan
+                }
+            });
+        } catch (error) {
+            console.error('Error en getCurrentPlan:', error);
             res.status(500).json({
                 success: false,
                 message: error.message || 'Error interno del servidor'
