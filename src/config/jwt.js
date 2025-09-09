@@ -5,7 +5,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'summa-secret-key-2024';
 
 // Configuración del token
 const JWT_CONFIG = {
-  expiresIn: '24h', // El token expira en 24 horas
+  expiresIn: '10y', // El token expira en 10 años
   algorithm: 'HS256'
 };
 

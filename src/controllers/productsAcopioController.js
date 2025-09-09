@@ -200,6 +200,42 @@ class productsAcopioController {
     }
   }
 
+  // Verificar si un producto tiene movimientos
+  static async hasMovements(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del producto es requerido'
+        });
+      }
+
+      const hasMovements = await productsAcopio.hasMovements(id, userId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Verificación completada',
+        data: { hasMovements }
+      });
+    } catch (error) {
+      console.error('Error en hasMovements:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
   // Actualizar un producto
   static async update(req, res) {
     try {

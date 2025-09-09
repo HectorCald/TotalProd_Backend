@@ -14,6 +14,7 @@ router.use(requireAuth);
 // Rutas para los productos de acopio
 router.get('/', productsAcopioController.getAll);
 router.get('/category/:categoryId', productsAcopioController.getByCategory);
+router.get('/:id/has-movements', productsAcopioController.hasMovements);
 router.get('/:id', productsAcopioController.getById);
 router.post('/', productsAcopioController.create);
 router.put('/:id', productsAcopioController.update);

@@ -217,6 +217,36 @@ class productsAcopio {
     }
   }
 
+  // Verificar si un producto tiene movimientos
+  static async hasMovements(productId, userId) {
+    try {
+      if (!productId) {
+        throw new Error('ID del producto es requerido');
+      }
+
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('movimientos_acopio')
+        .select('id')
+        .eq('product_id', productId)
+        .eq('user_id', userId)
+        .limit(1);
+
+      if (error) {
+        console.error('Error de Supabase al verificar movimientos:', error);
+        throw new Error('No se pudo verificar los movimientos');
+      }
+
+      return data && data.length > 0;
+    } catch (error) {
+      console.error('Error al verificar movimientos:', error);
+      throw error;
+    }
+  }
+
   // Eliminar un producto
   static async delete(id, userId) {
     try {
@@ -226,6 +256,12 @@ class productsAcopio {
 
       if (!userId) {
         throw new Error('ID del usuario es requerido');
+      }
+
+      // Verificar si el producto tiene movimientos
+      const hasMovements = await this.hasMovements(id, userId);
+      if (hasMovements) {
+        throw new Error('No se puede eliminar el producto porque tiene movimientos registrados');
       }
 
       // Primero eliminar los lotes asociados
@@ -267,6 +303,29 @@ class productsAcopio {
 
       if (!userId) {
         throw new Error('ID del usuario es requerido');
+      }
+
+      // Obtener el producto actual para verificar si se está cambiando la unidad de medida
+      const { data: currentProduct, error: currentError } = await supabase
+        .from('products_acopio')
+        .select('type_measure_id')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
+
+      if (currentError) {
+        throw new Error('No se pudo obtener el producto actual');
+      }
+
+      // Verificar si se está cambiando la unidad de medida
+      const isChangingMeasure = currentProduct.type_measure_id !== productData.type_measure_id;
+      
+      if (isChangingMeasure) {
+        // Verificar si el producto tiene movimientos
+        const hasMovements = await this.hasMovements(id, userId);
+        if (hasMovements) {
+          throw new Error('No se puede cambiar la unidad de medida porque el producto tiene movimientos registrados');
+        }
       }
 
       // Preparar datos para la base de datos

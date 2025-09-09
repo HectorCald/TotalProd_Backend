@@ -7,6 +7,7 @@ const proveedorRoutes = require('./proveedoresRoutes');
 const productsAcopioRoutes = require('./productsAcopioRoutes');
 const typeMeasureRoutes = require('./typeMeasureRoutes');
 const categoryAcopioRoutes = require('./categoryAcopioRoutes');
+const movimientosAcopioRoutes = require('./movimientosAcopioRoutes');
 const planRoutes = require('./planRoutes');
 
 // Ruta principal
@@ -45,6 +46,9 @@ router.use('/type-measures', typeMeasureRoutes);
 
 // Rutas de categorías de acopio
 router.use('/category-acopio', categoryAcopioRoutes);
+
+// Rutas de movimientos de acopio
+router.use('/movimientos-acopio', movimientosAcopioRoutes);
 
 // Rutas de planes
 router.use('/plans', planRoutes);
