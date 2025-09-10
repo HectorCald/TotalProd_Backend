@@ -75,7 +75,7 @@ class productsAcopio {
   }
 
   // Nuevo método para paginación con búsqueda
-  static async getAllPaginated(userId, { page, limit, offset, search, categoria, ordenamiento }) {
+  static async getAllPaginated(userId, { page, limit, offset, search, categoria, tipoMedida, ordenamiento }) {
     try {
       if (!userId) {
         throw new Error('ID del usuario es requerido');
@@ -111,6 +111,15 @@ class productsAcopio {
         query = query.is('category_id', null);
       }
       // Si categoria es null o undefined, no aplicar filtro (mostrar todos)
+
+      // Aplicar filtro de tipo de medida si existe
+      if (tipoMedida && tipoMedida.trim()) {
+        query = query.eq('type_measure_id', tipoMedida);
+      } else if (tipoMedida === '') {
+        // Si tipoMedida es string vacío, mostrar solo productos sin tipo de medida
+        query = query.is('type_measure_id', null);
+      }
+      // Si tipoMedida es null o undefined, no aplicar filtro (mostrar todos)
 
       // Aplicar ordenamiento
       let orderBy = 'name';

@@ -20,11 +20,12 @@ class productsAcopioController {
       const limit = parseInt(req.query.limit) || 10;
       const search = req.query.search || '';
       const categoria = req.query.categoria;
+      const tipoMedida = req.query.tipo_medida;
       const ordenamiento = req.query.ordenamiento || 'nombre_asc';
       const offset = (page - 1) * limit;
 
 
-      const result = await productsAcopio.getAllPaginated(userId, { page, limit, offset, search, categoria, ordenamiento });
+      const result = await productsAcopio.getAllPaginated(userId, { page, limit, offset, search, categoria, tipoMedida, ordenamiento });
       
       res.status(200).json({
         success: true,
