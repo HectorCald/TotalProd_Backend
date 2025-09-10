@@ -146,6 +146,86 @@ class movimientosAcopioController {
       });
     }
   }
+
+  // Obtener movimientos por cliente
+  static async getByCliente(req, res) {
+    try {
+      const { clienteId } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!clienteId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del cliente es requerido'
+        });
+      }
+
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+
+      const result = await movimientosAcopio.getByCliente(clienteId, page, limit);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en getByCliente:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener movimientos por proveedor
+  static async getByProveedor(req, res) {
+    try {
+      const { proveedorId } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!proveedorId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del proveedor es requerido'
+        });
+      }
+
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+
+      const result = await movimientosAcopio.getByProveedor(proveedorId, page, limit);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en getByProveedor:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
 }
 
 module.exports = movimientosAcopioController;

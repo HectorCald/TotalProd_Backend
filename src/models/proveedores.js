@@ -2,12 +2,13 @@ const { supabase } = require('../config/supabase');
 
 class proveedores {
 
-  // Constructor para crear un cliente
+  // Constructor para crear un proveedor
   constructor(data) {
     this.id = data.id;
     this.name = data.name;
     this.phone = data.phone;
     this.location = data.location;
+    this.description = data.description;
     this.total_orders = data.total_orders;
     this.created_at = data.created_at;
     this.user_id = data.user_id;
@@ -83,6 +84,7 @@ class proveedores {
       const dbData = {
         name: proveedorData.name,
         phone: proveedorData.phone || null,
+        description: proveedorData.description || null,
         total_orders: 0,
         user_id: userId,
       };
@@ -156,7 +158,8 @@ class proveedores {
       // Preparar datos para la base de datos
       const dbData = {
         name: proveedorData.name,
-        phone: proveedorData.phone || null
+        phone: proveedorData.phone || null,
+        description: proveedorData.description || null
       };
 
       // Si hay location, usarla directamente

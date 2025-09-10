@@ -47,7 +47,7 @@ class clientsController {
   // Crear un cliente
   static async create(req, res) {
     try {
-      const { name, phone, direccion, location } = req.body;
+      const { name, phone, direccion, description, location } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -62,6 +62,7 @@ class clientsController {
         name: name.trim(),
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
+        description: description?.trim() || null,
         location: location || null
       }, req.user.id);
 
@@ -111,7 +112,7 @@ class clientsController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { name, phone, direccion, location } = req.body;
+      const { name, phone, direccion, description, location } = req.body;
 
       if (!id) {
         return res.status(400).json({
@@ -132,6 +133,7 @@ class clientsController {
         name: name.trim(),
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
+        description: description?.trim() || null,
         location: location || null
       }, req.user.id);
 

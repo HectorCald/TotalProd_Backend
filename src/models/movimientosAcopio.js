@@ -217,6 +217,140 @@ class movimientosAcopio {
       throw new Error('No se pudo obtener los movimientos');
     }
   }
+
+  // Obtener movimientos por cliente
+  static async getByCliente(clienteId, page = 1, limit = 20) {
+    try {
+      if (!clienteId) {
+        throw new Error('ID del cliente es requerido');
+      }
+
+      const offset = (page - 1) * limit;
+
+      const { data: movimientos, error } = await supabase
+        .from('movimientos_acopio')
+        .select(`
+          *,
+          product:product_id (
+            id,
+            name,
+            description,
+            quantity,
+            type_measure:type_measure_id (
+              id,
+              name,
+              code
+            )
+          ),
+          cliente:cliente_id (
+            id,
+            name
+          )
+        `, { count: 'exact' })
+        .eq('cliente_id', clienteId)
+        .order('date', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        throw new Error(`Error al obtener movimientos: ${error.message}`);
+      }
+
+      const { count, error: countError } = await supabase
+        .from('movimientos_acopio')
+        .select('*', { count: 'exact', head: true })
+        .eq('cliente_id', clienteId);
+
+      if (countError) {
+        throw new Error(`Error al contar movimientos: ${countError.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Movimientos obtenidos exitosamente',
+        data: movimientos,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(count / limit),
+          totalItems: count,
+          hasNextPage: page < Math.ceil(count / limit)
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en movimientosAcopio.getByCliente:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Obtener movimientos por proveedor
+  static async getByProveedor(proveedorId, page = 1, limit = 20) {
+    try {
+      if (!proveedorId) {
+        throw new Error('ID del proveedor es requerido');
+      }
+
+      const offset = (page - 1) * limit;
+
+      const { data: movimientos, error } = await supabase
+        .from('movimientos_acopio')
+        .select(`
+          *,
+          product:product_id (
+            id,
+            name,
+            description,
+            quantity,
+            type_measure:type_measure_id (
+              id,
+              name,
+              code
+            )
+          ),
+          proveedor:proveedor_id (
+            id,
+            name
+          )
+        `, { count: 'exact' })
+        .eq('proveedor_id', proveedorId)
+        .order('date', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        throw new Error(`Error al obtener movimientos: ${error.message}`);
+      }
+
+      const { count, error: countError } = await supabase
+        .from('movimientos_acopio')
+        .select('*', { count: 'exact', head: true })
+        .eq('proveedor_id', proveedorId);
+
+      if (countError) {
+        throw new Error(`Error al contar movimientos: ${countError.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Movimientos obtenidos exitosamente',
+        data: movimientos,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(count / limit),
+          totalItems: count,
+          hasNextPage: page < Math.ceil(count / limit)
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en movimientosAcopio.getByProveedor:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
 }
 
 module.exports = movimientosAcopio;

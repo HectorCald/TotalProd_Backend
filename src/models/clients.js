@@ -8,6 +8,7 @@ class clients {
     this.name = data.name;
     this.phone = data.phone;
     this.location = data.location;
+    this.description = data.description;
     this.total_orders = data.total_orders;
     this.created_at = data.created_at;
     this.user_id = data.user_id;
@@ -83,6 +84,7 @@ class clients {
       const dbData = {
         name: clientData.name,
         phone: clientData.phone || null,
+        description: clientData.description || null,
         total_orders: 0,
         user_id: userId,
       };
@@ -156,7 +158,8 @@ class clients {
       // Preparar datos para la base de datos
       const dbData = {
         name: clientData.name,
-        phone: clientData.phone || null
+        phone: clientData.phone || null,
+        description: clientData.description || null
       };
 
       // Si hay location, usarla directamente

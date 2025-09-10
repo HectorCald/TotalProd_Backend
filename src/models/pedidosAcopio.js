@@ -243,6 +243,43 @@ class pedidosAcopio {
     }
   }
 
+  // Verificar si un producto tiene pedidos asociados
+  static async verificarProductoEnPedidos(productoId) {
+    try {
+      if (!productoId) {
+        throw new Error('ID del producto es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('pedido_acopio_detalle')
+        .select('id')
+        .eq('producto_id', productoId)
+        .limit(1);
+
+      if (error) {
+        throw new Error(`Error al verificar pedidos: ${error.message}`);
+      }
+
+      const tienePedidos = data && data.length > 0;
+
+      return {
+        success: true,
+        message: 'Verificación completada',
+        data: {
+          tienePedidos,
+          cantidadPedidos: data ? data.length : 0
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAcopio.verificarProductoEnPedidos:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
   // Convertir medida abreviada a nombre completo
   static convertirMedida(medidaAbreviada) {
     const medidas = {

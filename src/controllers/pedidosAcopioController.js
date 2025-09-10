@@ -189,6 +189,43 @@ class pedidosAcopioController {
       });
     }
   }
+
+  // Verificar si un producto tiene pedidos asociados
+  static async verificarProductoEnPedidos(req, res) {
+    try {
+      const { productoId } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!productoId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del producto es requerido'
+        });
+      }
+
+      const result = await pedidosAcopio.verificarProductoEnPedidos(productoId);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAcopioController.verificarProductoEnPedidos:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
 }
 
 module.exports = pedidosAcopioController;
