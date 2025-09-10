@@ -16,8 +16,6 @@ class categoryAcopio {
         throw new Error('ID del usuario es requerido');
       }
 
-      console.log('Obteniendo categorías para usuario:', userId);
-
       const { data, error } = await supabase
         .from('category_acopio')
         .select('*')
@@ -29,7 +27,6 @@ class categoryAcopio {
         throw new Error('No se pudo obtener las categorías');
       }
 
-      console.log('Categorías obtenidas:', data);
       
       // Por ahora, devolver las categorías sin conteo para que funcione
       const categoriesWithCount = (data || []).map(category => ({

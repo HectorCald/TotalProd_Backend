@@ -4,8 +4,9 @@ class movimientosAcopioController {
   // Crear un movimiento
   static async create(req, res) {
     try {
-      const { product_id, type, observations, proveedor_id, quantity } = req.body;
+      const { product_id, type, observations, proveedor_id, cliente_id, quantity } = req.body;
       const userId = req.user?.id;
+
 
       if (!userId) {
         return res.status(401).json({
@@ -52,6 +53,7 @@ class movimientosAcopioController {
         type,
         observations: observations ? observations.trim() : null,
         proveedor_id: proveedor_id || null,
+        cliente_id: cliente_id || null,
         quantity: quantity.toString().trim()
       }, userId);
 

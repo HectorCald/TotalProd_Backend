@@ -26,8 +26,11 @@ class movimientosAcopio {
         type: movimientoData.type,
         observations: movimientoData.observations || null,
         proveedor_id: movimientoData.proveedor_id || null,
-        quantity: movimientoData.quantity
+        cliente_id: movimientoData.cliente_id || null,
+        quantity: movimientoData.quantity,
+        date: new Date().toISOString() // Usar timestamp completo con hora
       };
+
 
       // Primero obtener el producto actual para actualizar su cantidad
       const { data: productoActual, error: errorProducto } = await supabase
@@ -141,6 +144,10 @@ class movimientosAcopio {
             )
           ),
           proveedor:proveedor_id (
+            id,
+            name
+          ),
+          cliente:cliente_id (
             id,
             name
           )
