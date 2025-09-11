@@ -66,6 +66,7 @@ router.use('/movimientos-acopio', movimientosAcopioRoutes);
 // Rutas de pedidos de acopio
 router.use('/pedidos-acopio', pedidosAcopioRoutes);
 
+
 // Rutas de planes
 router.use('/plans', planRoutes);
 

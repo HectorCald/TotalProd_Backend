@@ -61,6 +61,9 @@ class movimientosAcopio {
         if (nuevaCantidad < 0) {
           throw new Error('No hay suficiente cantidad en stock para esta salida');
         }
+      } else if (movimientoData.type === 'consumo_receta') {
+        // Para consumo de receta, no actualizar el stock (ya se actualizó manualmente)
+        nuevaCantidad = cantidadActual; // Mantener el stock actual
       } else {
         throw new Error('Tipo de movimiento inválido');
       }
@@ -349,6 +352,57 @@ class movimientosAcopio {
         success: false,
         message: error.message
       };
+    }
+  }
+
+  // Método para restar ingredientes del stock cuando se hace una entrada con receta
+  static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, userId) {
+    try {
+      const movimientos = [];
+      
+      for (const ingrediente of ingredientes) {
+        // Verificar estructura del ingrediente
+        if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
+          continue;
+        }
+        
+        // Calcular cantidad a restar
+        const cantidadARestar = ingrediente.cantidad * cantidadEntrada;
+        
+        // Obtener cantidad actual del ingrediente
+        const cantidadActual = ingrediente.products_acopio.quantity;
+        
+        // Calcular nueva cantidad
+        const nuevaCantidad = cantidadActual - cantidadARestar;
+        
+        // Actualizar el stock del ingrediente
+        const { error: updateError } = await supabase
+          .from('products_acopio')
+          .update({ quantity: nuevaCantidad })
+          .eq('id', ingrediente.products_acopio.id)
+          .eq('user_id', userId);
+
+        if (updateError) {
+          throw new Error(`Error actualizando stock de ${ingrediente.products_acopio.name}`);
+        }
+
+        // Crear movimiento de consumo para el ingrediente
+        const unidadMedida = productoPrincipal.type_measure ? productoPrincipal.type_measure.name : 'unidades';
+        const movimientoIngrediente = {
+          product_id: ingrediente.products_acopio.id,
+          type: 'consumo_receta', // Tipo especial que no afecta el stock
+          observations: `Consumido por ${productoPrincipal.name} (${cantidadEntrada} ${unidadMedida})`,
+          quantity: cantidadARestar,
+          date: new Date().toISOString()
+        };
+
+        movimientos.push(movimientoIngrediente);
+      }
+
+      return movimientos;
+    } catch (error) {
+      console.error('Error en restarIngredientes:', error);
+      throw new Error('Error al restar ingredientes del stock');
     }
   }
 }

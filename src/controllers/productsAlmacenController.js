@@ -34,7 +34,7 @@ class productsAlmacenController {
         });
       }
 
-      if (!stock || isNaN(stock) || parseInt(stock) < 0) {
+      if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
         return res.status(400).json({
           success: false,
           message: 'El stock es obligatorio y debe ser un número válido mayor o igual a 0'
@@ -86,7 +86,7 @@ class productsAlmacenController {
         });
       }
 
-      if (!stock || isNaN(stock) || parseInt(stock) < 0) {
+      if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
         return res.status(400).json({
           success: false,
           message: 'El stock es obligatorio y debe ser un número válido mayor o igual a 0'

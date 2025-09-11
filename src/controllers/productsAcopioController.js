@@ -25,19 +25,12 @@ class productsAcopioController {
       const offset = (page - 1) * limit;
 
 
-      const result = await productsAcopio.getAllPaginated(userId, { page, limit, offset, search, categoria, tipoMedida, ordenamiento });
+      const products = await productsAcopio.getAll(userId);
       
       res.status(200).json({
         success: true,
         message: 'Productos obtenidos exitosamente',
-        data: result.products,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(result.total / limit),
-          totalItems: result.total,
-          hasNextPage: page < Math.ceil(result.total / limit),
-          hasPrevPage: page > 1
-        }
+        data: products
       });
     } catch (error) {
       console.error('Error en getAll:', error);
@@ -123,7 +116,7 @@ class productsAcopioController {
   // Crear un producto
   static async create(req, res) {
     try {
-      const { name, description, quantity, type_measure_id, category_id } = req.body;
+      const { name, description, quantity, type_measure_id, category_id, receta } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -153,8 +146,9 @@ class productsAcopioController {
         description: description?.trim() || null,
         quantity: quantity,
         type_measure_id: type_measure_id,
-        category_id: category_id || null
-      }, null, req.user.id);
+        category_id: category_id || null,
+        receta: receta
+      }, req.user.id);
 
       // Obtener el producto creado con sus relaciones
       const productWithRelations = await productsAcopio.getByIdWithLotes(newProduct.id, req.user.id);
@@ -241,7 +235,7 @@ class productsAcopioController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { name, description, quantity, type_measure_id, category_id } = req.body;
+      const { name, description, quantity, type_measure_id, category_id, receta } = req.body;
 
       if (!id) {
         return res.status(400).json({
@@ -277,7 +271,8 @@ class productsAcopioController {
         description: description?.trim() || null,
         quantity: quantity,
         type_measure_id: type_measure_id,
-        category_id: category_id || null
+        category_id: category_id || null,
+        receta: receta
       }, null, req.user.id);
 
       // Obtener el producto actualizado con sus relaciones

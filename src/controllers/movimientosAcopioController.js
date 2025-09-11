@@ -1,12 +1,12 @@
 const movimientosAcopio = require('../models/movimientosAcopio');
+const productsAcopio = require('../models/productsAcopio');
 
 class movimientosAcopioController {
   // Crear un movimiento
   static async create(req, res) {
     try {
-      const { product_id, type, observations, proveedor_id, cliente_id, quantity } = req.body;
+      const { product_id, type, observations, proveedor_id, cliente_id, quantity, restar_materia_prima } = req.body;
       const userId = req.user?.id;
-
 
       if (!userId) {
         return res.status(401).json({
@@ -15,47 +15,45 @@ class movimientosAcopioController {
         });
       }
 
-      // Validaciones básicas
-      if (!product_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del producto es requerido'
-        });
-      }
-
-      if (!type) {
-        return res.status(400).json({
-          success: false,
-          message: 'Tipo de movimiento es requerido'
-        });
-      }
-
-      // Las observaciones son opcionales
-
-      if (!quantity || !quantity.toString().trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'La cantidad es requerida'
-        });
-      }
-
-      // Validar que el tipo sea válido
-      if (!['entrada', 'salida'].includes(type)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Tipo de movimiento debe ser "entrada" o "salida"'
-        });
-      }
-
-      // Crear el movimiento
+      // Crear el movimiento principal
       const newMovimiento = await movimientosAcopio.create({
         product_id,
         type,
-        observations: observations ? observations.trim() : null,
-        proveedor_id: proveedor_id || null,
-        cliente_id: cliente_id || null,
-        quantity: quantity.toString().trim()
+        observations,
+        proveedor_id,
+        cliente_id,
+        quantity
       }, userId);
+
+      // Procesar ingredientes si es entrada y tiene receta
+      if (type === 'entrada' && restar_materia_prima) {
+        try {
+          // Obtener producto con receta e ingredientes
+          const producto = await productsAcopio.getByIdWithLotes(product_id, userId);
+          
+          if (producto && producto.recetas_acopio && producto.recetas_acopio.length > 0) {
+            const receta = producto.recetas_acopio[0];
+            
+            if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
+              // Restar ingredientes del stock
+              const movimientosIngredientes = await movimientosAcopio.restarIngredientes(
+                producto, 
+                parseFloat(quantity), 
+                receta.recetas_acopio_detalle,
+                userId
+              );
+              
+              // Crear movimientos de consumo para cada ingrediente
+              for (const movimientoIngrediente of movimientosIngredientes) {
+                await movimientosAcopio.create(movimientoIngrediente, userId);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error procesando ingredientes:', error);
+          // No fallar el movimiento principal si hay error con ingredientes
+        }
+      }
 
       res.status(201).json({
         success: true,
@@ -84,62 +82,14 @@ class movimientosAcopioController {
         });
       }
 
-      if (!productId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del producto es requerido'
-        });
-      }
-
       const movimientos = await movimientosAcopio.getByProduct(productId, userId);
 
-      res.status(200).json({
+      res.json({
         success: true,
-        message: 'Movimientos obtenidos exitosamente',
         data: movimientos
       });
     } catch (error) {
       console.error('Error en getByProduct:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
-  }
-
-  // Obtener todos los movimientos
-  static async getAll(req, res) {
-    try {
-      const userId = req.user?.id;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      // Parámetros de paginación
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
-      const offset = (page - 1) * limit;
-
-      const result = await movimientosAcopio.getAllPaginated(userId, { page, limit, offset });
-
-      res.status(200).json({
-        success: true,
-        message: 'Movimientos obtenidos exitosamente',
-        data: result.movimientos,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(result.total / limit),
-          totalItems: result.total,
-          hasNextPage: page < Math.ceil(result.total / limit),
-          hasPrevPage: page > 1
-        }
-      });
-    } catch (error) {
-      console.error('Error en getAll:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'
@@ -160,29 +110,17 @@ class movimientosAcopioController {
         });
       }
 
-      if (!clienteId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del cliente es requerido'
-        });
-      }
+      const movimientos = await movimientosAcopio.getByCliente(clienteId, userId);
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
-
-      const result = await movimientosAcopio.getByCliente(clienteId, page, limit);
-
-      if (result.success) {
-        return res.status(200).json(result);
-      } else {
-        return res.status(400).json(result);
-      }
-
+      res.json({
+        success: true,
+        data: movimientos
+      });
     } catch (error) {
       console.error('Error en getByCliente:', error);
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: error.message || 'Error interno del servidor'
       });
     }
   }
@@ -200,29 +138,51 @@ class movimientosAcopioController {
         });
       }
 
-      if (!proveedorId) {
-        return res.status(400).json({
+      const movimientos = await movimientosAcopio.getByProveedor(proveedorId, userId);
+
+      res.json({
+        success: true,
+        data: movimientos
+      });
+    } catch (error) {
+      console.error('Error en getByProveedor:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener todos los movimientos
+  static async getAll(req, res) {
+    try {
+      const { page = 1, limit = 20 } = req.query;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
           success: false,
-          message: 'ID del proveedor es requerido'
+          message: 'Usuario no autenticado'
         });
       }
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const result = await movimientosAcopio.getAll(userId, parseInt(page), parseInt(limit));
 
-      const result = await movimientosAcopio.getByProveedor(proveedorId, page, limit);
-
-      if (result.success) {
-        return res.status(200).json(result);
-      } else {
-        return res.status(400).json(result);
-      }
-
+      res.json({
+        success: true,
+        data: result.movimientos,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(result.total / parseInt(limit)),
+          totalItems: result.total,
+          itemsPerPage: parseInt(limit)
+        }
+      });
     } catch (error) {
-      console.error('Error en getByProveedor:', error);
-      return res.status(500).json({
+      console.error('Error en getAll:', error);
+      res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: error.message || 'Error interno del servidor'
       });
     }
   }

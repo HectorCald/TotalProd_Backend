@@ -21,14 +21,44 @@ class productsAcopio {
 
       const { data, error } = await supabase
         .from('products_acopio')
-        .select('*')
-        .eq('user_id', userId);
+        .select(`
+          *,
+          category:category_id (
+            id,
+            name
+          ),
+          type_measure:type_measure_id (
+            id,
+            name,
+            code
+          ),
+          recetas_acopio (
+            id,
+            description,
+            recetas_acopio_detalle (
+              id,
+              cantidad,
+              products_acopio:producto_acopio_id (
+                id,
+                name,
+                quantity,
+                type_measure:type_measure_id (
+                  id,
+                  name,
+                  code
+                )
+              )
+            )
+          )
+        `)
+        .eq('user_id', userId)
+        .order('name', { ascending: true });
 
       if (error) {
         throw new Error('No se pudo obtener los productos');
       }
       
-      return data;
+      return data || [];
     } catch (error) {
       console.error('Error al obtener los productos:', error);
       throw new Error('No se pudo obtener los productos');
@@ -169,22 +199,26 @@ class productsAcopio {
     }
   }
 
-  // Crear un producto con sus lotes
-  static async create(productData, lotesData, userId) {
+  // Crear un producto con receta opcional
+  static async create(productData, userId) {
     try {
-      // Preparar datos para la base de datos
-      const dbData = {
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
+      // 1. Crear el producto principal
+      const dbProductData = {
         name: productData.name,
         description: productData.description || null,
-        quantity: productData.quantity || null,
+        quantity: productData.quantity,
         type_measure_id: productData.type_measure_id || null,
         category_id: productData.category_id || null,
-        user_id: userId,
+        user_id: userId
       };
 
       const { data: product, error: productError } = await supabase
         .from('products_acopio')
-        .insert([dbData])
+        .insert([dbProductData])
         .select();
 
       if (productError) {
@@ -198,24 +232,38 @@ class productsAcopio {
 
       const productId = product[0].id;
 
-      // Crear los lotes si existen
-      if (lotesData && lotesData.length > 0) {
-        const lotesToInsert = lotesData.map(lote => ({
-          product_id: productId,
-          num_lote: lote.num_lote,
-          quantity: lote.quantity,
-          date_entry: lote.date_entry || new Date().toISOString().split('T')[0],
-          date_expiration: lote.date_expiration || null,
-          proveedor_id: lote.proveedor_id || null
-        }));
+      // 2. Crear la receta si existe
+      if (productData.receta && productData.receta.productos && productData.receta.productos.length > 0) {
+        // Crear la receta principal
+        const { data: receta, error: recetaError } = await supabase
+          .from('recetas_acopio')
+          .insert([{
+            producto_acopio_id: productId,
+            description: productData.receta.descripcion || null
+          }])
+          .select();
 
-        const { error: lotesError } = await supabase
-          .from('lotes_acopio')
-          .insert(lotesToInsert);
+        if (recetaError) {
+          console.error('Error al crear receta:', recetaError);
+          // No lanzar error aquí, solo log
+        } else if (receta && receta.length > 0) {
+          const recetaId = receta[0].id;
 
-        if (lotesError) {
-          console.error('Error de Supabase al crear lotes:', lotesError);
-          // No lanzamos error aquí, el producto ya se creó
+          // Crear los detalles de la receta
+          const recetaDetalleInserts = productData.receta.productos.map(detalle => ({
+            receta_acopio_id: recetaId,
+            producto_acopio_id: detalle.producto_acopio_id,
+            cantidad: detalle.cantidad
+          }));
+
+          const { error: recetaDetalleError } = await supabase
+            .from('recetas_acopio_detalle')
+            .insert(recetaDetalleInserts);
+
+          if (recetaDetalleError) {
+            console.error('Error al crear detalles de receta:', recetaDetalleError);
+            // No lanzar error aquí, solo log
+          }
         }
       }
 
@@ -273,7 +321,43 @@ class productsAcopio {
         throw new Error('No se puede eliminar el producto porque tiene movimientos registrados');
       }
 
-      // Primero eliminar los lotes asociados
+      // 1. Primero eliminar los detalles de recetas asociados
+      const { data: recetas, error: errorRecetasQuery } = await supabase
+        .from('recetas_acopio')
+        .select('id')
+        .eq('producto_acopio_id', id);
+
+      if (errorRecetasQuery) {
+        console.error('Error obteniendo recetas:', errorRecetasQuery);
+        throw new Error('No se pudieron obtener las recetas del producto');
+      }
+
+      // 2. Eliminar detalles de recetas si existen
+      if (recetas && recetas.length > 0) {
+        const recetaIds = recetas.map(r => r.id);
+        const { error: errorDetalles } = await supabase
+          .from('recetas_acopio_detalle')
+          .delete()
+          .in('receta_acopio_id', recetaIds);
+
+        if (errorDetalles) {
+          console.error('Error al eliminar detalles de recetas:', errorDetalles);
+          throw new Error('No se pudieron eliminar los detalles de las recetas');
+        }
+
+        // 3. Eliminar las recetas
+        const { error: errorRecetas } = await supabase
+          .from('recetas_acopio')
+          .delete()
+          .eq('producto_acopio_id', id);
+
+        if (errorRecetas) {
+          console.error('Error al eliminar recetas:', errorRecetas);
+          throw new Error('No se pudieron eliminar las recetas');
+        }
+      }
+
+      // 4. Eliminar los lotes asociados
       const { error: lotesError } = await supabase
         .from('lotes_acopio')
         .delete()
@@ -284,7 +368,7 @@ class productsAcopio {
         // Continuar con la eliminación del producto
       }
 
-      // Luego eliminar el producto
+      // 5. Finalmente eliminar el producto
       const { error } = await supabase
         .from('products_acopio')
         .delete()
@@ -395,6 +479,67 @@ class productsAcopio {
         }
       }
 
+      // Actualizar receta si se proporciona
+      if (productData.receta !== undefined) {
+        // Eliminar receta existente y sus detalles
+        const { data: existingRecetas } = await supabase
+          .from('recetas_acopio')
+          .select('id')
+          .eq('producto_acopio_id', id);
+
+        if (existingRecetas && existingRecetas.length > 0) {
+          const recetaId = existingRecetas[0].id;
+          
+          // Eliminar detalles de receta
+          await supabase
+            .from('recetas_acopio_detalle')
+            .delete()
+            .eq('receta_acopio_id', recetaId);
+
+          // Eliminar receta
+          await supabase
+            .from('recetas_acopio')
+            .delete()
+            .eq('id', recetaId);
+        }
+
+        // Crear nueva receta si tiene datos
+        if (productData.receta && (productData.receta.descripcion || (productData.receta.productos && productData.receta.productos.length > 0))) {
+          const { data: newReceta, error: recetaError } = await supabase
+            .from('recetas_acopio')
+            .insert({
+              producto_acopio_id: id,
+              description: productData.receta.descripcion || null
+            })
+            .select();
+
+          if (recetaError) {
+            console.error('Error creando receta:', recetaError);
+            throw new Error('Error al actualizar la receta');
+          }
+
+          const recetaId = newReceta[0].id;
+
+          // Crear detalles de receta si existen
+          if (productData.receta.productos && productData.receta.productos.length > 0) {
+            const detalles = productData.receta.productos.map(producto => ({
+              receta_acopio_id: recetaId,
+              producto_acopio_id: producto.producto_acopio_id,
+              cantidad: parseFloat(producto.cantidad) || 0
+            }));
+
+            const { error: detallesError } = await supabase
+              .from('recetas_acopio_detalle')
+              .insert(detalles);
+
+            if (detallesError) {
+              console.error('Error creando detalles de receta:', detallesError);
+              throw new Error('Error al actualizar los detalles de la receta');
+            }
+          }
+        }
+      }
+
       return data[0];
     } catch (error) {
       console.error('Error al actualizar el producto:', error);
@@ -413,7 +558,7 @@ class productsAcopio {
         throw new Error('ID del usuario es requerido');
       }
 
-      // Obtener el producto con su tipo de medida y categoría
+      // Obtener el producto con su tipo de medida, categoría y recetas
       const { data: product, error: productError } = await supabase
         .from('products_acopio')
         .select(`
@@ -426,6 +571,24 @@ class productsAcopio {
           category:category_id (
             id,
             name
+          ),
+          recetas_acopio (
+            id,
+            description,
+            recetas_acopio_detalle (
+              id,
+              cantidad,
+              products_acopio:producto_acopio_id (
+                id,
+                name,
+                quantity,
+                type_measure:type_measure_id (
+                  id,
+                  name,
+                  code
+                )
+              )
+            )
           )
         `)
         .eq('id', id)

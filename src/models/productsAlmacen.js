@@ -157,7 +157,54 @@ class productsAlmacen {
         }
       }
 
-      return product[0];
+      // Devolver el producto completo con todos los joins
+      const { data: completeProduct, error: completeError } = await supabase
+        .from('products_almacen')
+        .select(`
+          *,
+          category_almacen:category_id (
+            id,
+            name
+          ),
+          price_product (
+            id,
+            valor,
+            prices_types (
+              id,
+              name,
+              description
+            )
+          ),
+          recetas (
+            id,
+            descripcion,
+            recetas_detalle (
+              id,
+              cantidad,
+              products_acopio:producto_acopio_id (
+                id,
+                name,
+                quantity,
+                type_measure:type_measure_id (
+                  id,
+                  name,
+                  code
+                )
+              )
+            )
+          )
+        `)
+        .eq('id', product[0].id)
+        .eq('user_id', userId)
+        .single();
+
+      if (completeError) {
+        console.error('Error al obtener producto completo:', completeError);
+        // Si hay error, devolver al menos el producto básico
+        return product[0];
+      }
+
+      return completeProduct;
     } catch (error) {
       console.error('Error al crear el producto:', error);
       throw error;
@@ -347,7 +394,54 @@ class productsAlmacen {
         throw new Error('ID del usuario es requerido');
       }
 
-      // Las foreign keys con CASCADE se encargarán de eliminar los registros relacionados
+      // 1. Obtener las recetas del producto para eliminar sus detalles
+      const { data: recetas, error: errorRecetasQuery } = await supabase
+        .from('recetas')
+        .select('id')
+        .eq('producto_almacen_id', id);
+
+      if (errorRecetasQuery) {
+        console.error('Error obteniendo recetas:', errorRecetasQuery);
+        throw new Error('No se pudieron obtener las recetas del producto');
+      }
+
+      // 2. Eliminar detalles de recetas si existen
+      if (recetas && recetas.length > 0) {
+        const recetaIds = recetas.map(r => r.id);
+        const { error: errorDetalles } = await supabase
+          .from('recetas_detalle')
+          .delete()
+          .in('receta_id', recetaIds);
+
+        if (errorDetalles) {
+          console.error('Error eliminando detalles de recetas:', errorDetalles);
+          throw new Error('No se pudieron eliminar los detalles de las recetas');
+        }
+      }
+
+      // 3. Eliminar las recetas
+      const { error: errorRecetas } = await supabase
+        .from('recetas')
+        .delete()
+        .eq('producto_almacen_id', id);
+
+      if (errorRecetas) {
+        console.error('Error eliminando recetas:', errorRecetas);
+        throw new Error('No se pudieron eliminar las recetas');
+      }
+
+      // 4. Eliminar los precios del producto
+      const { error: errorPrecios } = await supabase
+        .from('price_product')
+        .delete()
+        .eq('producto_almacen_id', id);
+
+      if (errorPrecios) {
+        console.error('Error eliminando precios:', errorPrecios);
+        throw new Error('No se pudieron eliminar los precios del producto');
+      }
+
+      // 5. Finalmente eliminar el producto principal
       const { error } = await supabase
         .from('products_almacen')
         .delete()
@@ -355,7 +449,7 @@ class productsAlmacen {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('Error de Supabase:', error);
+        console.error('Error eliminando producto principal:', error);
         throw new Error('No se pudo eliminar el producto');
       }
 
