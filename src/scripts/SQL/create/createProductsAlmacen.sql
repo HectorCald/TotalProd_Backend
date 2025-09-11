@@ -1,0 +1,14 @@
+CREATE TABLE products_almacen (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR NOT NULL,
+    stock INTEGER NOT NULL DEFAULT 0,
+    codigo_barras VARCHAR,
+    category_id UUID,
+    description VARCHAR,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
+    user_id UUID NOT NULL,
+    CONSTRAINT products_almacen_category_id_fkey 
+        FOREIGN KEY (category_id) REFERENCES category_almacen (id) ON DELETE SET NULL,
+    CONSTRAINT products_almacen_user_id_fkey 
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
