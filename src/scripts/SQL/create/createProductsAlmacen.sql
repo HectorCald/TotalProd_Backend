@@ -1,7 +1,7 @@
 CREATE TABLE products_almacen (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR NOT NULL,
-    stock INTEGER NOT NULL DEFAULT 0,
+    stock NUMERIC NOT NULL DEFAULT 0,
     codigo_barras VARCHAR,
     category_id UUID,
     description VARCHAR,

@@ -1,0 +1,299 @@
+const movimientosAlmacen = require('../models/movimientosAlmacen');
+
+class movimientosAlmacenController {
+    // Crear un nuevo movimiento
+    static async create(req, res) {
+        try {
+            const { tipo, observaciones, metodo_pago, cliente_id, proveedor_id, productos, restar_ingredientes } = req.body;
+            const user_id = req.user.id;
+
+            // Validaciones básicas
+            if (!tipo || !['entrada', 'salida'].includes(tipo)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El tipo de movimiento es obligatorio y debe ser "entrada" o "salida"'
+                });
+            }
+
+            if (!productos || !Array.isArray(productos) || productos.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Debe incluir al menos un producto en el movimiento'
+                });
+            }
+
+            // Validar que los productos tengan los campos requeridos
+            for (const producto of productos) {
+                if (!producto.id) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Todos los productos deben tener un ID válido'
+                    });
+                }
+                if (!producto.cantidad || producto.cantidad <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Todos los productos deben tener una cantidad válida mayor a 0'
+                    });
+                }
+                if (producto.precio === undefined || producto.precio === null || producto.precio < 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Todos los productos deben tener un precio válido mayor o igual a 0'
+                    });
+                }
+            }
+
+            // Validaciones específicas por tipo
+            if (tipo === 'entrada' && proveedor_id && typeof proveedor_id !== 'string') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El ID del proveedor debe ser válido'
+                });
+            }
+
+            if (tipo === 'salida' && cliente_id && typeof cliente_id !== 'string') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El ID del cliente debe ser válido'
+                });
+            }
+
+            if (tipo === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo'].includes(metodo_pago)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El método de pago debe ser uno de: qr, transferencia, tarjeta, efectivo'
+                });
+            }
+
+            // Preparar datos del movimiento
+            const movimientoData = {
+                user_id,
+                tipo,
+                observaciones: observaciones || null,
+                metodo_pago: tipo === 'salida' ? (metodo_pago || null) : null,
+                cliente_id: tipo === 'salida' ? (cliente_id || null) : null,
+                proveedor_id: tipo === 'entrada' ? (proveedor_id || null) : null,
+                productos
+            };
+
+            // Crear el movimiento
+            const result = await movimientosAlmacen.create(movimientoData);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            // Procesar ingredientes si es entrada y tiene restar_ingredientes activado
+            if (tipo === 'entrada' && restar_ingredientes) {
+                try {
+                    // Obtener productos con recetas
+                    const productsAlmacen = require('../models/productsAlmacen');
+                    
+                    for (const productoData of productos) {
+                        // Obtener producto con recetas e ingredientes
+                        const producto = await productsAlmacen.getById(productoData.id, user_id);
+                        
+                        if (producto && producto.recetas && producto.recetas.length > 0) {
+                            const receta = producto.recetas[0];
+                            
+                            if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
+                                // Restar ingredientes del stock (SIN crear movimientos)
+                                await movimientosAlmacen.restarIngredientes(
+                                    producto, 
+                                    parseFloat(productoData.cantidad), 
+                                    receta.recetas_detalle,
+                                    user_id
+                                );
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error procesando ingredientes:', error);
+                    // No fallar el movimiento principal si hay error con ingredientes
+                }
+            }
+
+
+            res.status(201).json({
+                success: true,
+                message: `${tipo === 'entrada' ? 'Entrada' : 'Salida'} registrada correctamente`,
+                data: result.data
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.create:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
+    // Obtener todos los movimientos del usuario
+    static async getAll(req, res) {
+        try {
+            const user_id = req.user.id;
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 10;
+            const tipo = req.query.tipo || null;
+            const ordenamiento = req.query.ordenamiento || 'fecha_desc';
+
+            const result = await movimientosAlmacen.getAll(user_id, page, limit, tipo, ordenamiento);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json({
+                success: true,
+                data: result.data,
+                pagination: result.pagination
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.getAll:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
+    // Obtener movimientos por tipo
+    static async getByType(req, res) {
+        try {
+            const user_id = req.user.id;
+            const { tipo } = req.params;
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 10;
+
+            if (!['entrada', 'salida'].includes(tipo)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El tipo debe ser "entrada" o "salida"'
+                });
+            }
+
+            const result = await movimientosAlmacen.getByType(user_id, tipo, page, limit);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json({
+                success: true,
+                data: result.data,
+                pagination: result.pagination
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.getByType:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
+    // Obtener un movimiento por ID
+    static async getById(req, res) {
+        try {
+            const { id } = req.params;
+            const user_id = req.user.id;
+
+            const result = await movimientosAlmacen.getById(id);
+
+            if (!result.success) {
+                return res.status(404).json(result);
+            }
+
+            // Verificar que el movimiento pertenece al usuario
+            if (result.data.user_id !== user_id) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tienes permisos para ver este movimiento'
+                });
+            }
+
+            res.json({
+                success: true,
+                data: result.data
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.getById:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
+    // Anular un movimiento
+    static async anular(req, res) {
+        try {
+            const { id } = req.params;
+            const user_id = req.user.id;
+
+            const result = await movimientosAlmacen.anular(id, user_id);
+
+            if (!result.success) {
+                return res.status(400).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+            res.json({
+                success: true,
+                message: 'Movimiento anulado correctamente',
+                data: result.data
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.anular:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
+    // Eliminar un movimiento
+    static async eliminar(req, res) {
+        try {
+            const { id } = req.params;
+            const user_id = req.user.id;
+
+            const result = await movimientosAlmacen.eliminar(id, user_id);
+
+            if (!result.success) {
+                return res.status(400).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+            res.json({
+                success: true,
+                message: 'Movimiento eliminado correctamente'
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.eliminar:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+}
+
+module.exports = movimientosAlmacenController;

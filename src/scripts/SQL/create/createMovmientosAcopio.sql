@@ -6,6 +6,7 @@ CREATE TABLE movimientos_acopio (
     observations VARCHAR,
     proveedor_id UUID,
     quantity VARCHAR NOT NULL,
+    estado VARCHAR,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT movimientos_acopio_product_id_fkey 
         FOREIGN KEY (product_id) REFERENCES products_acopio (id),

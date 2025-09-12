@@ -13,6 +13,66 @@ class productsAlmacen {
     this.created_at = data.created_at;
   }
 
+  // Método para obtener un producto por ID con recetas
+  static async getById(id, userId) {
+    try {
+      if (!id) {
+        throw new Error('ID del producto es requerido');
+      }
+
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('products_almacen')
+        .select(`
+          *,
+          category_almacen:category_id (
+            id,
+            name
+          ),
+          price_product (
+            id,
+            valor,
+            prices_types:price_id (
+              id,
+              name,
+              description
+            )
+          ),
+          recetas (
+            id,
+            descripcion,
+            recetas_detalle (
+              id,
+              cantidad,
+              products_acopio:producto_acopio_id (
+                id,
+                name,
+                quantity
+              )
+            )
+          )
+        `)
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Producto no encontrado
+        }
+        throw new Error('No se pudo obtener el producto');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error al obtener el producto:', error);
+      throw error;
+    }
+  }
+
   // Método para obtener todos los productos de un usuario
   static async getAll(userId) {
     try {
@@ -46,12 +106,7 @@ class productsAlmacen {
               products_acopio:producto_acopio_id (
                 id,
                 name,
-                quantity,
-                type_measure:type_measure_id (
-                  id,
-                  name,
-                  code
-                )
+                quantity
               )
             )
           )
@@ -184,12 +239,7 @@ class productsAlmacen {
               products_acopio:producto_acopio_id (
                 id,
                 name,
-                quantity,
-                type_measure:type_measure_id (
-                  id,
-                  name,
-                  code
-                )
+                quantity
               )
             )
           )

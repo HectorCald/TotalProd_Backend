@@ -171,12 +171,14 @@ class movimientosAcopio {
     }
   }
 
-  // Obtener todos los movimientos paginados
-  static async getAllPaginated(userId, { page, limit, offset }) {
+  // Obtener todos los movimientos
+  static async getAll(userId, page = 1, limit = 20, tipo = null, ordenamiento = 'fecha_desc') {
     try {
       if (!userId) {
         throw new Error('ID del usuario es requerido');
       }
+
+      const offset = (page - 1) * limit;
 
       let query = supabase
         .from('movimientos_acopio')
@@ -196,13 +198,47 @@ class movimientosAcopio {
           proveedor:proveedor_id (
             id,
             name
+          ),
+          cliente:cliente_id (
+            id,
+            name
           )
         `, { count: 'exact' })
         .eq('user_id', userId);
 
-      // Aplicar paginación y ordenamiento
+      // Aplicar filtro de tipo si se especifica
+      if (tipo) {
+        query = query.eq('type', tipo);
+      }
+
+      // Aplicar ordenamiento
+      let orderColumn = 'date';
+      let ascending = false;
+
+      switch (ordenamiento) {
+        case 'fecha_asc':
+          orderColumn = 'date';
+          ascending = true;
+          break;
+        case 'fecha_desc':
+          orderColumn = 'date';
+          ascending = false;
+          break;
+        case 'tipo_asc':
+          orderColumn = 'type';
+          ascending = true;
+          break;
+        case 'tipo_desc':
+          orderColumn = 'type';
+          ascending = false;
+          break;
+        default:
+          orderColumn = 'date';
+          ascending = false;
+      }
+
       query = query
-        .order('created_at', { ascending: false })
+        .order(orderColumn, { ascending })
         .range(offset, offset + limit - 1);
 
       const { data, error, count } = await query;
@@ -216,7 +252,7 @@ class movimientosAcopio {
         total: count || 0
       };
     } catch (error) {
-      console.error('Error al obtener los movimientos paginados:', error);
+      console.error('Error al obtener los movimientos:', error);
       throw new Error('No se pudo obtener los movimientos');
     }
   }
@@ -290,7 +326,7 @@ class movimientosAcopio {
 
       // Normalizar el UUID a minúsculas para evitar problemas de case
       const normalizedProveedorId = proveedorId.toLowerCase();
-      
+
       const { data: movimientos, error } = await supabase
         .from('movimientos_acopio')
         .select(`
@@ -341,24 +377,28 @@ class movimientosAcopio {
   // Método para restar ingredientes del stock cuando se hace una entrada con receta
   static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, userId) {
     try {
-      const movimientos = [];
-      
       for (const ingrediente of ingredientes) {
         // Verificar estructura del ingrediente
         if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
           continue;
         }
-        
+
         // Calcular cantidad a restar
         const cantidadARestar = ingrediente.cantidad * cantidadEntrada;
-        
+
         // Obtener cantidad actual del ingrediente
         const cantidadActual = ingrediente.products_acopio.quantity;
-        
+
         // Calcular nueva cantidad
         const nuevaCantidad = cantidadActual - cantidadARestar;
-        
-        // Actualizar el stock del ingrediente
+
+        // Verificar que hay suficiente stock
+        if (nuevaCantidad < 0) {
+          console.warn(`Stock insuficiente para ingrediente ${ingrediente.products_acopio.name}. Stock actual: ${cantidadActual}, Requerido: ${cantidadARestar}`);
+          continue; // Saltar este ingrediente si no hay suficiente stock
+        }
+
+        // Actualizar el stock del ingrediente (SIN crear movimiento)
         const { error: updateError } = await supabase
           .from('products_acopio')
           .update({ quantity: nuevaCantidad })
@@ -366,26 +406,190 @@ class movimientosAcopio {
           .eq('user_id', userId);
 
         if (updateError) {
-          throw new Error(`Error actualizando stock de ${ingrediente.products_acopio.name}`);
+          console.error(`Error actualizando stock del ingrediente ${ingrediente.products_acopio.name}:`, updateError);
+          continue; // Continuar con el siguiente ingrediente
         }
-
-        // Crear movimiento de consumo para el ingrediente
-        const unidadMedida = productoPrincipal.type_measure ? productoPrincipal.type_measure.name : 'unidades';
-        const movimientoIngrediente = {
-          product_id: ingrediente.products_acopio.id,
-          type: 'consumo_receta', // Tipo especial que no afecta el stock
-          observations: `Consumido por ${productoPrincipal.name} (${cantidadEntrada} ${unidadMedida})`,
-          quantity: cantidadARestar,
-          date: new Date().toISOString()
-        };
-
-        movimientos.push(movimientoIngrediente);
       }
 
-      return movimientos;
+      return { success: true, message: 'Ingredientes restados correctamente' };
     } catch (error) {
       console.error('Error en restarIngredientes:', error);
       throw new Error('Error al restar ingredientes del stock');
+    }
+  }
+
+  // Anular un movimiento
+  static async anular(movimientoId, userId) {
+    try {
+      // Obtener el movimiento con todos sus datos
+      const { data: movimiento, error: movimientoError } = await supabase
+        .from('movimientos_acopio')
+        .select(`
+          *,
+          product:product_id (
+            id,
+            name,
+            quantity,
+            recetas_acopio (
+              id,
+              description,
+              recetas_acopio_detalle (
+                id,
+                cantidad,
+                products_acopio:producto_acopio_id (
+                  id,
+                  name,
+                  quantity
+                )
+              )
+            )
+          )
+        `)
+        .eq('id', movimientoId)
+        .eq('user_id', userId)
+        .single();
+
+      if (movimientoError) {
+        console.error('Error obteniendo movimiento:', movimientoError);
+        return { success: false, message: 'Movimiento no encontrado' };
+      }
+
+      if (!movimiento) {
+        return { success: false, message: 'Movimiento no encontrado' };
+      }
+
+      // Verificar que no esté ya anulado
+      if (movimiento.estado === 'anulado') {
+        return { success: false, message: 'El movimiento ya está anulado' };
+      }
+
+      // Actualizar estado a anulado
+      const { error: updateError } = await supabase
+        .from('movimientos_acopio')
+        .update({ estado: 'anulado' })
+        .eq('id', movimientoId)
+        .eq('user_id', userId);
+
+      if (updateError) {
+        console.error('Error actualizando estado:', updateError);
+        return { success: false, message: 'Error al anular el movimiento' };
+      }
+
+      // Revertir el stock del producto principal
+      const cantidadMovimiento = parseFloat(movimiento.quantity);
+      let nuevaCantidad;
+
+      if (movimiento.type === 'entrada') {
+        // Anular entrada = restar del stock
+        nuevaCantidad = movimiento.product.quantity - cantidadMovimiento;
+      } else {
+        // Anular salida = sumar al stock
+        nuevaCantidad = movimiento.product.quantity + cantidadMovimiento;
+      }
+
+      // Actualizar stock del producto principal
+      const { error: stockError } = await supabase
+        .from('products_acopio')
+        .update({ quantity: nuevaCantidad })
+        .eq('id', movimiento.product_id)
+        .eq('user_id', userId);
+
+      if (stockError) {
+        console.error('Error actualizando stock:', stockError);
+        // Revertir el estado del movimiento
+        await supabase
+          .from('movimientos_acopio')
+          .update({ estado: 'activo' })
+          .eq('id', movimientoId);
+        return { success: false, message: 'Error al actualizar el stock' };
+      }
+
+      // Si es entrada y tiene receta, devolver ingredientes consumidos
+      if (movimiento.type === 'entrada' && movimiento.product.recetas_acopio && movimiento.product.recetas_acopio.length > 0) {
+        const receta = movimiento.product.recetas_acopio[0];
+        
+        if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
+          // Devolver ingredientes (sumar al stock)
+          for (const ingrediente of receta.recetas_acopio_detalle) {
+            if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
+              continue;
+            }
+
+            const cantidadADevolver = ingrediente.cantidad * cantidadMovimiento;
+            const cantidadActual = ingrediente.products_acopio.quantity;
+            const nuevaCantidadIngrediente = cantidadActual + cantidadADevolver;
+
+            const { error: ingredienteError } = await supabase
+              .from('products_acopio')
+              .update({ quantity: nuevaCantidadIngrediente })
+              .eq('id', ingrediente.products_acopio.id)
+              .eq('user_id', userId);
+
+            if (ingredienteError) {
+              console.error(`Error devolviendo ingrediente ${ingrediente.products_acopio.name}:`, ingredienteError);
+              // Continuar con el siguiente ingrediente
+            }
+          }
+        }
+      }
+
+      return { 
+        success: true, 
+        message: 'Movimiento anulado correctamente',
+        data: { ...movimiento, estado: 'anulado' }
+      };
+
+    } catch (error) {
+      console.error('Error en anular movimiento:', error);
+      return { success: false, message: 'Error interno del servidor' };
+    }
+  }
+
+  // Eliminar un movimiento
+  static async eliminar(movimientoId, userId) {
+    try {
+      // Verificar que el movimiento existe y pertenece al usuario
+      const { data: movimiento, error: movimientoError } = await supabase
+        .from('movimientos_acopio')
+        .select('id, estado')
+        .eq('id', movimientoId)
+        .eq('user_id', userId)
+        .single();
+
+      if (movimientoError) {
+        console.error('Error obteniendo movimiento:', movimientoError);
+        return { success: false, message: 'Movimiento no encontrado' };
+      }
+
+      if (!movimiento) {
+        return { success: false, message: 'Movimiento no encontrado' };
+      }
+
+      // Verificar que esté anulado
+      if (movimiento.estado !== 'anulado') {
+        return { success: false, message: 'Solo se pueden eliminar movimientos anulados' };
+      }
+
+      // Eliminar el movimiento
+      const { error: deleteError } = await supabase
+        .from('movimientos_acopio')
+        .delete()
+        .eq('id', movimientoId)
+        .eq('user_id', userId);
+
+      if (deleteError) {
+        console.error('Error eliminando movimiento:', deleteError);
+        return { success: false, message: 'Error al eliminar el movimiento' };
+      }
+
+      return { 
+        success: true, 
+        message: 'Movimiento eliminado correctamente'
+      };
+
+    } catch (error) {
+      console.error('Error en eliminar movimiento:', error);
+      return { success: false, message: 'Error interno del servidor' };
     }
   }
 }

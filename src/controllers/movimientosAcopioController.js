@@ -29,24 +29,19 @@ class movimientosAcopioController {
       if (type === 'entrada' && restar_materia_prima) {
         try {
           // Obtener producto con receta e ingredientes
-          const producto = await productsAcopio.getByIdWithLotes(product_id, userId);
+          const producto = await productsAcopio.getById(product_id, userId);
           
           if (producto && producto.recetas_acopio && producto.recetas_acopio.length > 0) {
             const receta = producto.recetas_acopio[0];
             
             if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
-              // Restar ingredientes del stock
-              const movimientosIngredientes = await movimientosAcopio.restarIngredientes(
+              // Restar ingredientes del stock (SIN crear movimientos)
+              await movimientosAcopio.restarIngredientes(
                 producto, 
                 parseFloat(quantity), 
                 receta.recetas_acopio_detalle,
                 userId
               );
-              
-              // Crear movimientos de consumo para cada ingrediente
-              for (const movimientoIngrediente of movimientosIngredientes) {
-                await movimientosAcopio.create(movimientoIngrediente, userId);
-              }
             }
           }
         } catch (error) {
@@ -156,7 +151,7 @@ class movimientosAcopioController {
   // Obtener todos los movimientos
   static async getAll(req, res) {
     try {
-      const { page = 1, limit = 20 } = req.query;
+      const { page = 1, limit = 20, tipo, ordenamiento = 'fecha_desc' } = req.query;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -166,7 +161,7 @@ class movimientosAcopioController {
         });
       }
 
-      const result = await movimientosAcopio.getAll(userId, parseInt(page), parseInt(limit));
+      const result = await movimientosAcopio.getAll(userId, parseInt(page), parseInt(limit), tipo, ordenamiento);
 
       res.json({
         success: true,
@@ -180,6 +175,77 @@ class movimientosAcopioController {
       });
     } catch (error) {
       console.error('Error en getAll:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Anular un movimiento
+  static async anular(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      const result = await movimientosAcopio.anular(id, userId);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.message
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Movimiento anulado correctamente',
+        data: result.data
+      });
+    } catch (error) {
+      console.error('Error en anular:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Eliminar un movimiento
+  static async eliminar(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      const result = await movimientosAcopio.eliminar(id, userId);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.message
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Movimiento eliminado correctamente'
+      });
+    } catch (error) {
+      console.error('Error en eliminar:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'

@@ -12,6 +12,67 @@ class productsAcopio {
     this.created_at = data.created_at;
   }
 
+  // Método para obtener un producto por ID con recetas
+  static async getById(id, userId) {
+    try {
+      if (!id) {
+        throw new Error('ID del producto es requerido');
+      }
+
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('products_acopio')
+        .select(`
+          *,
+          category:category_id (
+            id,
+            name
+          ),
+          type_measure:type_measure_id (
+            id,
+            name,
+            code
+          ),
+          recetas_acopio (
+            id,
+            description,
+            recetas_acopio_detalle (
+              id,
+              cantidad,
+              products_acopio:producto_acopio_id (
+                id,
+                name,
+                quantity,
+                type_measure:type_measure_id (
+                  id,
+                  name,
+                  code
+                )
+              )
+            )
+          )
+        `)
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Producto no encontrado
+        }
+        throw new Error('No se pudo obtener el producto');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error al obtener el producto:', error);
+      throw error;
+    }
+  }
+
   // Método para obtener todos los productos
   static async getAll(userId) {
     try {
@@ -57,144 +118,10 @@ class productsAcopio {
       if (error) {
         throw new Error('No se pudo obtener los productos');
       }
-      
+
       return data || [];
     } catch (error) {
       console.error('Error al obtener los productos:', error);
-      throw new Error('No se pudo obtener los productos');
-    }
-  }
-
-  // Obtener productos por categoría
-  static async getByCategory(categoryId, userId) {
-    try {
-      if (!categoryId) {
-        throw new Error('ID de la categoría es requerido');
-      }
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
-      }
-
-      const { data, error } = await supabase
-        .from('products_acopio')
-        .select(`
-          *,
-          type_measure:type_measure_id (
-            id,
-            name,
-            code
-          ),
-          category:category_id (
-            id,
-            name
-          )
-        `)
-        .eq('user_id', userId)
-        .eq('category_id', categoryId)
-        .order('name', { ascending: true });
-
-      if (error) {
-        throw new Error('No se pudo obtener los productos de la categoría');
-      }
-
-      return data || [];
-    } catch (error) {
-      console.error('Error al obtener productos por categoría:', error);
-      throw error;
-    }
-  }
-
-  // Nuevo método para paginación con búsqueda
-  static async getAllPaginated(userId, { page, limit, offset, search, categoria, tipoMedida, ordenamiento }) {
-    try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
-      }
-
-      let query = supabase
-        .from('products_acopio')
-        .select(`
-          *,
-          type_measure:type_measure_id (
-            id,
-            name,
-            code
-          ),
-          category:category_id (
-            id,
-            name
-          )
-        `, { count: 'exact' })
-        .eq('user_id', userId);
-
-      // Aplicar filtro de búsqueda si existe
-      if (search && search.trim()) {
-        const searchTerm = `%${search.trim()}%`;
-        query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm}`);
-      }
-
-      // Aplicar filtro de categoría si existe
-      if (categoria && categoria.trim()) {
-        query = query.eq('category_id', categoria);
-      } else if (categoria === '') {
-        // Si categoria es string vacío, mostrar solo productos sin categoría
-        query = query.is('category_id', null);
-      }
-      // Si categoria es null o undefined, no aplicar filtro (mostrar todos)
-
-      // Aplicar filtro de tipo de medida si existe
-      if (tipoMedida && tipoMedida.trim()) {
-        query = query.eq('type_measure_id', tipoMedida);
-      } else if (tipoMedida === '') {
-        // Si tipoMedida es string vacío, mostrar solo productos sin tipo de medida
-        query = query.is('type_measure_id', null);
-      }
-      // Si tipoMedida es null o undefined, no aplicar filtro (mostrar todos)
-
-      // Aplicar ordenamiento
-      let orderBy = 'name';
-      let ascending = true;
-
-      switch (ordenamiento) {
-        case 'nombre_asc':
-          orderBy = 'name';
-          ascending = true;
-          break;
-        case 'nombre_desc':
-          orderBy = 'name';
-          ascending = false;
-          break;
-        case 'cantidad_asc':
-          orderBy = 'quantity';
-          ascending = true;
-          break;
-        case 'cantidad_desc':
-          orderBy = 'quantity';
-          ascending = false;
-          break;
-        default:
-          orderBy = 'name';
-          ascending = true;
-      }
-
-      // Aplicar paginación y ordenamiento
-      query = query
-        .order(orderBy, { ascending })
-        .range(offset, offset + limit - 1);
-
-      const { data, error, count } = await query;
-
-      if (error) {
-        throw new Error('No se pudo obtener los productos');
-      }
-
-      
-      return {
-        products: data || [],
-        total: count || 0
-      };
-    } catch (error) {
-      console.error('Error al obtener los productos paginados:', error);
       throw new Error('No se pudo obtener los productos');
     }
   }
@@ -270,36 +197,6 @@ class productsAcopio {
       return product[0];
     } catch (error) {
       console.error('Error al crear el producto:', error);
-      throw error;
-    }
-  }
-
-  // Verificar si un producto tiene movimientos
-  static async hasMovements(productId, userId) {
-    try {
-      if (!productId) {
-        throw new Error('ID del producto es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
-      }
-
-      const { data, error } = await supabase
-        .from('movimientos_acopio')
-        .select('id')
-        .eq('product_id', productId)
-        .eq('user_id', userId)
-        .limit(1);
-
-      if (error) {
-        console.error('Error de Supabase al verificar movimientos:', error);
-        throw new Error('No se pudo verificar los movimientos');
-      }
-
-      return data && data.length > 0;
-    } catch (error) {
-      console.error('Error al verificar movimientos:', error);
       throw error;
     }
   }
@@ -412,7 +309,7 @@ class productsAcopio {
 
       // Verificar si se está cambiando la unidad de medida
       const isChangingMeasure = currentProduct.type_measure_id !== productData.type_measure_id;
-      
+
       if (isChangingMeasure) {
         // Verificar si el producto tiene movimientos
         const hasMovements = await this.hasMovements(id, userId);
@@ -489,7 +386,7 @@ class productsAcopio {
 
         if (existingRecetas && existingRecetas.length > 0) {
           const recetaId = existingRecetas[0].id;
-          
+
           // Eliminar detalles de receta
           await supabase
             .from('recetas_acopio_detalle')
@@ -547,19 +444,21 @@ class productsAcopio {
     }
   }
 
-  // Obtener un producto con sus lotes
-  static async getByIdWithLotes(id, userId) {
-    try {
-      if (!id) {
-        throw new Error('ID del producto es requerido');
-      }
 
+
+
+  
+  // Obtener productos por categoría
+  static async getByCategory(categoryId, userId) {
+    try {
+      if (!categoryId) {
+        throw new Error('ID de la categoría es requerido');
+      }
       if (!userId) {
         throw new Error('ID del usuario es requerido');
       }
 
-      // Obtener el producto con su tipo de medida, categoría y recetas
-      const { data: product, error: productError } = await supabase
+      const { data, error } = await supabase
         .from('products_acopio')
         .select(`
           *,
@@ -571,40 +470,54 @@ class productsAcopio {
           category:category_id (
             id,
             name
-          ),
-          recetas_acopio (
-            id,
-            description,
-            recetas_acopio_detalle (
-              id,
-              cantidad,
-              products_acopio:producto_acopio_id (
-                id,
-                name,
-                quantity,
-                type_measure:type_measure_id (
-                  id,
-                  name,
-                  code
-                )
-              )
-            )
           )
         `)
-        .eq('id', id)
         .eq('user_id', userId)
-        .single();
+        .eq('category_id', categoryId)
+        .order('name', { ascending: true });
 
-      if (productError) {
-        throw new Error('No se pudo obtener el producto');
+      if (error) {
+        throw new Error('No se pudo obtener los productos de la categoría');
       }
 
-      return product;
+      return data || [];
     } catch (error) {
-      console.error('Error al obtener el producto con lotes:', error);
+      console.error('Error al obtener productos por categoría:', error);
       throw error;
     }
   }
+
+  // Verificar si un producto tiene movimientos
+  static async hasMovements(productId, userId) {
+    try {
+      if (!productId) {
+        throw new Error('ID del producto es requerido');
+      }
+
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('movimientos_acopio')
+        .select('id')
+        .eq('product_id', productId)
+        .eq('user_id', userId)
+        .limit(1);
+
+      if (error) {
+        console.error('Error de Supabase al verificar movimientos:', error);
+        throw new Error('No se pudo verificar los movimientos');
+      }
+
+      return data && data.length > 0;
+    } catch (error) {
+      console.error('Error al verificar movimientos:', error);
+      throw error;
+    }
+  }
+
+  
 }
 
 module.exports = productsAcopio;
