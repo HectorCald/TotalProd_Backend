@@ -222,12 +222,14 @@ class movimientosAcopio {
   }
 
   // Obtener movimientos por cliente
-  static async getByCliente(clienteId, page = 1, limit = 20) {
+  static async getByCliente(clienteId, userId, page = 1, limit = 20) {
     try {
       if (!clienteId) {
         throw new Error('ID del cliente es requerido');
       }
 
+      // Normalizar el UUID a minúsculas para evitar problemas de case
+      const normalizedClienteId = clienteId.toLowerCase();
       const offset = (page - 1) * limit;
 
       const { data: movimientos, error } = await supabase
@@ -250,7 +252,8 @@ class movimientosAcopio {
             name
           )
         `, { count: 'exact' })
-        .eq('cliente_id', clienteId)
+        .eq('cliente_id', normalizedClienteId)
+        .eq('user_id', userId)
         .order('date', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -261,35 +264,23 @@ class movimientosAcopio {
       const { count, error: countError } = await supabase
         .from('movimientos_acopio')
         .select('*', { count: 'exact', head: true })
-        .eq('cliente_id', clienteId);
+        .eq('cliente_id', normalizedClienteId)
+        .eq('user_id', userId);
 
       if (countError) {
         throw new Error(`Error al contar movimientos: ${countError.message}`);
       }
 
-      return {
-        success: true,
-        message: 'Movimientos obtenidos exitosamente',
-        data: movimientos,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(count / limit),
-          totalItems: count,
-          hasNextPage: page < Math.ceil(count / limit)
-        }
-      };
+      return movimientos || [];
 
     } catch (error) {
       console.error('Error en movimientosAcopio.getByCliente:', error);
-      return {
-        success: false,
-        message: error.message
-      };
+      throw error;
     }
   }
 
   // Obtener movimientos por proveedor
-  static async getByProveedor(proveedorId, page = 1, limit = 20) {
+  static async getByProveedor(proveedorId, userId, page = 1, limit = 20) {
     try {
       if (!proveedorId) {
         throw new Error('ID del proveedor es requerido');
@@ -297,6 +288,9 @@ class movimientosAcopio {
 
       const offset = (page - 1) * limit;
 
+      // Normalizar el UUID a minúsculas para evitar problemas de case
+      const normalizedProveedorId = proveedorId.toLowerCase();
+      
       const { data: movimientos, error } = await supabase
         .from('movimientos_acopio')
         .select(`
@@ -317,7 +311,8 @@ class movimientosAcopio {
             name
           )
         `, { count: 'exact' })
-        .eq('proveedor_id', proveedorId)
+        .eq('proveedor_id', normalizedProveedorId)
+        .eq('user_id', userId)
         .order('date', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -328,30 +323,18 @@ class movimientosAcopio {
       const { count, error: countError } = await supabase
         .from('movimientos_acopio')
         .select('*', { count: 'exact', head: true })
-        .eq('proveedor_id', proveedorId);
+        .eq('proveedor_id', normalizedProveedorId)
+        .eq('user_id', userId);
 
       if (countError) {
         throw new Error(`Error al contar movimientos: ${countError.message}`);
       }
 
-      return {
-        success: true,
-        message: 'Movimientos obtenidos exitosamente',
-        data: movimientos,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(count / limit),
-          totalItems: count,
-          hasNextPage: page < Math.ceil(count / limit)
-        }
-      };
+      return movimientos || [];
 
     } catch (error) {
       console.error('Error en movimientosAcopio.getByProveedor:', error);
-      return {
-        success: false,
-        message: error.message
-      };
+      throw error;
     }
   }
 
