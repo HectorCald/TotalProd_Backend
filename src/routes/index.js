@@ -14,6 +14,7 @@ const movimientosAcopioRoutes = require('./movimientosAcopioRoutes');
 const movimientosAlmacenRoutes = require('./movimientosAlmacenRoutes');
 const pedidosAcopioRoutes = require('./pedidosAcopioRoutes');
 const planRoutes = require('./planRoutes');
+const codigoPromocionalRoutes = require('./codigoPromocionalRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -73,5 +74,8 @@ router.use('/pedidos-acopio', pedidosAcopioRoutes);
 
 // Rutas de planes
 router.use('/plans', planRoutes);
+
+// Rutas de códigos promocionales
+router.use('/codigo-promocional', codigoPromocionalRoutes);
 
 module.exports = router;

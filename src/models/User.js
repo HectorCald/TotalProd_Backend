@@ -168,7 +168,7 @@ class User {
         throw new Error('No se pudo obtener el usuario');
       }
 
-      // 2. Obtener el plan activo desde user_plans
+      // 2. Obtener el plan actual desde user_plans (activo o no)
       const { data: activeUserPlan, error: userPlanError } = await supabase
         .from('user_plans')
         .select(`
@@ -188,8 +188,6 @@ class User {
           )
         `)
         .eq('user_id', id)
-        .eq('is_active', true)
-        .or('end_date.is.null,end_date.gt.' + new Date().toISOString()) // Plan no expirado
         .order('start_date', { ascending: false })
         .limit(1)
         .single();
@@ -203,6 +201,8 @@ class User {
       if (activeUserPlan && activeUserPlan.plans) {
         user.plan = activeUserPlan.plans;
         user.plan_id = activeUserPlan.plans.id;
+        user.plan.is_active = activeUserPlan.is_active; // Incluir el estado del plan
+        user.plan.end_date = activeUserPlan.end_date; // Incluir la fecha de fin del plan
         
         // Procesar los módulos del plan
         if (activeUserPlan.plans.plan_modules) {
@@ -270,6 +270,58 @@ class User {
     } catch (error) {
       console.error('Error en changePassword:', error);
       throw new Error('No se pudo cambiar la contraseña');
+    }
+  }
+
+  // Método estático para actualizar el plan del usuario
+  static async updatePlan(userId, planName) {
+    try {
+      // 1. Obtener el ID del plan por nombre
+      const { data: plan, error: planError } = await supabase
+        .from('plans')
+        .select('id')
+        .eq('name', planName)
+        .single();
+
+      if (planError || !plan) {
+        console.error('Error al obtener plan:', planError);
+        throw new Error(`No se pudo encontrar el plan: ${planName}`);
+      }
+
+      // 2. Desactivar el plan actual del usuario
+      const { error: deactivateError } = await supabase
+        .from('user_plans')
+        .update({ is_active: false })
+        .eq('user_id', userId)
+        .eq('is_active', true);
+
+      if (deactivateError) {
+        console.error('Error al desactivar plan actual:', deactivateError);
+        throw new Error('No se pudo desactivar el plan actual');
+      }
+
+      // 3. Crear nuevo registro de plan
+      const userPlanData = {
+        user_id: userId,
+        plan_id: plan.id,
+        start_date: new Date().toISOString(),
+        end_date: planName === 'Free' ? 'infinity' : null, // Plan Free es infinito
+        is_active: true
+      };
+
+      const { error: insertError } = await supabase
+        .from('user_plans')
+        .insert([userPlanData]);
+
+      if (insertError) {
+        console.error('Error al crear nuevo plan:', insertError);
+        throw new Error('No se pudo asignar el nuevo plan');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error en updatePlan:', error);
+      throw error;
     }
   }
 }

@@ -112,12 +112,26 @@ class pricesTypes {
         throw new Error('ID del usuario es requerido');
       }
 
-      // Primero verificar si el tipo de precio tiene productos asignados
+      // Primero verificar cuántos tipos de precio tiene el usuario
+      const { data: allPrices, error: countError } = await supabase
+        .from('prices_types')
+        .select('id')
+        .eq('user_id', userId);
+
+      if (countError) {
+        console.error('Error al contar tipos de precio:', countError);
+        throw new Error('No se pudo verificar la cantidad de tipos de precio');
+      }
+
+      if (!allPrices || allPrices.length <= 1) {
+        throw new Error('No se puede eliminar el tipo de precio. Debe haber al menos un tipo de precio en el sistema');
+      }
+
+      // Verificar si el tipo de precio tiene productos asignados
       const { data: products, error: productsError } = await supabase
         .from('price_product')
         .select('id')
-        .eq('price_type_id', id)
-        .eq('user_id', userId)
+        .eq('price_id', id)
         .limit(1);
 
       if (productsError) {
@@ -129,7 +143,7 @@ class pricesTypes {
         throw new Error('No se puede eliminar el tipo de precio porque tiene productos asignados');
       }
 
-      // Si no tiene productos, proceder con la eliminación
+      // Si no tiene productos y hay más de uno, proceder con la eliminación
       const { error } = await supabase
         .from('prices_types')
         .delete()
