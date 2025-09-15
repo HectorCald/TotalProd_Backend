@@ -21,6 +21,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
         headers: {
             'x-my-custom-header': 'my-app-name'
         }
+    },
+    // Optimizaciones para desarrollo
+    realtime: {
+        enabled: false // Deshabilitar realtime en desarrollo
     }
 });
 

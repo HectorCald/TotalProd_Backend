@@ -1,6 +1,6 @@
 const { supabase } = require('../config/supabase');
 
-class pedidosAcopio {
+class pedidosAlmacen {
   // Crear un pedido
   static async create(pedidoData, userId) {
     try {
@@ -20,7 +20,7 @@ class pedidosAcopio {
       };
 
       const { data: pedido, error: pedidoError } = await supabase
-        .from('pedidos_acopio')
+        .from('pedidos_almacen')
         .insert(pedidoPrincipal)
         .select('id')
         .single();
@@ -31,21 +31,20 @@ class pedidosAcopio {
 
       // Crear los detalles del pedido
       const detalles = pedidoData.productos.map(producto => ({
-        pedido_id: pedido.id,
-        producto_id: producto.id,
+        pedido_almacen_id: pedido.id,
+        producto_almacen_id: producto.id,
         cantidad: producto.cantidad,
-        medida: producto.medida || 'u',
         precio: producto.precio || 0
       }));
 
       const { error: detallesError } = await supabase
-        .from('pedido_acopio_detalle')
+        .from('pedido_almacen_detalle')
         .insert(detalles);
 
       if (detallesError) {
         // Si hay error en los detalles, eliminar el pedido principal
         await supabase
-          .from('pedidos_acopio')
+          .from('pedidos_almacen')
           .delete()
           .eq('id', pedido.id);
         
@@ -54,12 +53,12 @@ class pedidosAcopio {
 
       // Obtener el pedido completo con detalles
       const { data: pedidoCompleto, error: fetchError } = await supabase
-        .from('pedidos_acopio')
+        .from('pedidos_almacen')
         .select(`
           *,
-          pedido_acopio_detalle (
+          pedido_almacen_detalle (
             *,
-            producto_acopio:producto_id (
+            producto_almacen:producto_almacen_id (
               id,
               name,
               description
@@ -80,7 +79,7 @@ class pedidosAcopio {
       };
 
     } catch (error) {
-      console.error('Error en pedidosAcopio.create:', error);
+      console.error('Error en pedidosAlmacen.create:', error);
       return {
         success: false,
         message: error.message
@@ -98,12 +97,12 @@ class pedidosAcopio {
       const offset = (page - 1) * limit;
 
       const { data: pedidos, error } = await supabase
-        .from('pedidos_acopio')
+        .from('pedidos_almacen')
         .select(`
           *,
-          pedido_acopio_detalle (
+          pedido_almacen_detalle (
             *,
-            producto_acopio:producto_id (
+            producto_almacen:producto_almacen_id (
               id,
               name,
               description
@@ -118,8 +117,9 @@ class pedidosAcopio {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
       }
 
+      // Obtener el total de pedidos para la paginación
       const { count, error: countError } = await supabase
-        .from('pedidos_acopio')
+        .from('pedidos_almacen')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId);
 
@@ -140,7 +140,7 @@ class pedidosAcopio {
       };
 
     } catch (error) {
-      console.error('Error en pedidosAcopio.getAll:', error);
+      console.error('Error en pedidosAlmacen.getAll:', error);
       return {
         success: false,
         message: error.message
@@ -160,12 +160,12 @@ class pedidosAcopio {
       }
 
       const { data: pedido, error } = await supabase
-        .from('pedidos_acopio')
+        .from('pedidos_almacen')
         .select(`
           *,
-          pedido_acopio_detalle (
+          pedido_almacen_detalle (
             *,
-            producto_acopio:producto_id (
+            producto_almacen:producto_almacen_id (
               id,
               name,
               description
@@ -190,7 +190,7 @@ class pedidosAcopio {
       };
 
     } catch (error) {
-      console.error('Error en pedidosAcopio.getById:', error);
+      console.error('Error en pedidosAlmacen.getById:', error);
       return {
         success: false,
         message: error.message
@@ -198,7 +198,7 @@ class pedidosAcopio {
     }
   }
 
-  // Actualizar estado de un pedido
+  // Actualizar estado del pedido
   static async updateEstado(pedidoId, nuevoEstado, userId) {
     try {
       if (!pedidoId) {
@@ -214,7 +214,7 @@ class pedidosAcopio {
       }
 
       const { data, error } = await supabase
-        .from('pedidos_acopio')
+        .from('pedidos_almacen')
         .update({ estado: nuevoEstado })
         .eq('id', pedidoId)
         .eq('user_id', userId)
@@ -235,7 +235,7 @@ class pedidosAcopio {
       };
 
     } catch (error) {
-      console.error('Error en pedidosAcopio.updateEstado:', error);
+      console.error('Error en pedidosAlmacen.updateEstado:', error);
       return {
         success: false,
         message: error.message
@@ -243,7 +243,7 @@ class pedidosAcopio {
     }
   }
 
-  // Verificar si un producto está en algún pedido
+  // Verificar si un producto tiene pedidos asociados
   static async verificarProductoEnPedidos(productoId) {
     try {
       if (!productoId) {
@@ -251,9 +251,9 @@ class pedidosAcopio {
       }
 
       const { data, error } = await supabase
-        .from('pedido_acopio_detalle')
+        .from('pedido_almacen_detalle')
         .select('id')
-        .eq('producto_id', productoId)
+        .eq('producto_almacen_id', productoId)
         .limit(1);
 
       if (error) {
@@ -272,7 +272,7 @@ class pedidosAcopio {
       };
 
     } catch (error) {
-      console.error('Error en pedidosAcopio.verificarProductoEnPedidos:', error);
+      console.error('Error en pedidosAlmacen.verificarProductoEnPedidos:', error);
       return {
         success: false,
         message: error.message
@@ -281,4 +281,4 @@ class pedidosAcopio {
   }
 }
 
-module.exports = pedidosAcopio;
+module.exports = pedidosAlmacen;

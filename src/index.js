@@ -32,10 +32,10 @@ app.get('/health', (req, res) => {
 
 // Start server
 if (process.env.NODE_ENV !== "production") {
-  app.listen(5000, async () => {
+  app.listen(5000, () => {
     console.log("✅ Servidor local en http://localhost:5000");
-    // Probar conexión a Supabase
-    await testConnection();
+    console.log("📊 Health check: http://localhost:5000/health");
+    // La conexión a Supabase se probará cuando se haga la primera petición
   });
 }
 
