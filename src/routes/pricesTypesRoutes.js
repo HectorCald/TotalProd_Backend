@@ -7,18 +7,17 @@ const { requireModuleAccess } = require('../middleware/moduleAuth');
 // Aplicar middleware de autenticación a todas las rutas
 router.use(requireAuth);
 
-router.use(requireModuleAccess('Precios'));
 
 // GET /api/prices-types - Obtener todos los tipos de precios
-router.get('/', pricesTypesController.getAll);
+router.get('/',pricesTypesController.getAll);
 
 // POST /api/prices-types - Crear un tipo de precio
-router.post('/', pricesTypesController.create);
+router.post('/', requireModuleAccess('Precios'), pricesTypesController.create);
 
 // PUT /api/prices-types/:id - Actualizar un tipo de precio
-router.put('/:id', pricesTypesController.update);
+router.put('/:id', requireModuleAccess('Precios'), pricesTypesController.update);
 
 // DELETE /api/prices-types/:id - Eliminar un tipo de precio
-router.delete('/:id', pricesTypesController.delete);
+router.delete('/:id', requireModuleAccess('Precios'), pricesTypesController.delete);
 
 module.exports = router;

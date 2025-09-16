@@ -671,13 +671,7 @@ class Personal {
       
       const tokenPayload = {
         id: personal.id,
-        codigo: personal.codigo,
-        first_name: personal.first_name,
-        last_name: personal.last_name,
         empresa_id: personal.empresa_id,
-        sucursal_id: personal.sucursal_id,
-        is_active: personal.is_active,
-        modules: personal.modules,
         type: 'employee'
       };
 

@@ -174,7 +174,7 @@ class User {
       return new User(user);
 
     } catch (error) {
-      console.error('💥 Error en validateCredentials:', error);
+      console.error('💥 Error en login:', error);
       throw new Error('Error en la validación de credenciales');
     }
   }

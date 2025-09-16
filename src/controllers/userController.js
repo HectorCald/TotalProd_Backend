@@ -32,12 +32,8 @@ class UserController {
       // Generar token JWT
       const tokenPayload = {
         id: newUser.id,
-        phone: newUser.phone,
-        email: newUser.email,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        is_active: newUser.is_active,
-        empresa_id: newUser.empresa_id
+        empresa_id: newUser.empresa_id,
+        type: 'user' // Identificar que es un usuario normal
       };
 
       const token = generateToken(tokenPayload);
@@ -129,11 +125,8 @@ class UserController {
       // Generar token JWT
       const tokenPayload = {
         id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        is_active: user.is_active,
-        empresa_id: user.empresa_id
+        empresa_id: user.empresa_id,
+        type: 'user' // Identificar que es un usuario normal
       };
 
       const token = generateToken(tokenPayload);
