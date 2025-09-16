@@ -18,6 +18,7 @@ const modulesRoutes = require('./modulesRoutes');
 const planRoutes = require('./planRoutes');
 const codigoPromocionalRoutes = require('./codigoPromocionalRoutes');
 const sucursalesRoutes = require('./sucursalesRoutes');
+const personalRoutes = require('./personalRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -88,5 +89,8 @@ router.use('/codigo-promocional', codigoPromocionalRoutes);
 
 // Rutas de sucursales
 router.use('/sucursales', sucursalesRoutes);
+
+// Rutas de personal
+router.use('/personal', personalRoutes);
 
 module.exports = router;

@@ -2,14 +2,14 @@ const { supabase } = require('../config/supabase');
 
 class pedidosAcopio {
   // Crear un pedido (un registro por cada producto)
-  static async create(pedidoData, userId, empresaId) {
+  static async create(pedidoData, userId, empresaId, personalId = null) {
     try {
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
         throw new Error('La lista de productos es requerida');
       }
 
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!userId && !personalId) {
+        throw new Error('ID del usuario o personal es requerido');
       }
 
       if (!empresaId) {
@@ -17,15 +17,26 @@ class pedidosAcopio {
       }
 
       // Crear un registro por cada producto
-      const pedidos = pedidoData.productos.map(producto => ({
-        user_id: userId,
-        empresa_id: empresaId,
-        observaciones: pedidoData.observaciones || null,
-        estado: 'Pendiente',
-        producto_acopio_id: producto.id,
-        cantidad: producto.cantidad,
-        tipo_medida: producto.medidaPedido || 'kg'
-      }));
+      const pedidos = pedidoData.productos.map(producto => {
+        const pedido = {
+          empresa_id: empresaId,
+          observaciones: pedidoData.observaciones || null,
+          estado: 'Pendiente',
+          producto_acopio_id: producto.id,
+          cantidad: producto.cantidad,
+          tipo_medida: producto.medidaPedido || 'kg'
+        };
+
+        // Solo incluir user_id o personal_id si no son null
+        if (userId && userId !== null) {
+          pedido.user_id = userId;
+        }
+        if (personalId && personalId !== null) {
+          pedido.personal_id = personalId;
+        }
+
+        return pedido;
+      });
 
       const { data: pedidosCreados, error: pedidosError } = await supabase
         .from('pedidos_acopio')

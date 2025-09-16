@@ -107,9 +107,25 @@ class User {
           console.error('❌ Error al crear sucursal:', sucursalError);
           // No lanzar error aquí, solo log
         }
+
+        // 7. Crear tipo de precio por defecto "Principal" para la empresa
+        const precioTypeData = {
+          empresa_id: insertedEmpresa.id,
+          name: 'Principal',
+          description: 'Precio principal del producto'
+        };
+
+        const { error: precioTypeError } = await supabase
+          .from('prices_types')
+          .insert([precioTypeData]);
+
+        if (precioTypeError) {
+          console.error('❌ Error al crear tipo de precio por defecto:', precioTypeError);
+          // No lanzar error aquí, solo log
+        }
       }
 
-      // 7. Retornar instancia del modelo User
+      // 8. Retornar instancia del modelo User
       return new User(insertedUser);
 
     } catch (error) {

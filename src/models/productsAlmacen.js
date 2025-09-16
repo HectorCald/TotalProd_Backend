@@ -487,6 +487,16 @@ class productsAlmacen {
 
       if (error) {
         console.error('Error eliminando producto principal:', error);
+        
+        // Verificar si es un error de foreign key constraint
+        if (error.code === '23503') {
+          if (error.message.includes('pedido_almacen_detalle')) {
+            throw new Error('No se puede eliminar este producto porque está siendo utilizado en pedidos existentes. Primero elimine o modifique los pedidos que contienen este producto.');
+          } else if (error.message.includes('foreign key constraint')) {
+            throw new Error('No se puede eliminar este producto porque está siendo utilizado en otras partes del sistema.');
+          }
+        }
+        
         throw new Error('No se pudo eliminar el producto');
       }
 

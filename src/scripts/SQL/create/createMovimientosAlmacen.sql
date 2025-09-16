@@ -1,7 +1,8 @@
 CREATE TABLE movimientos_almacen (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
+    user_id TEXT,
     sucu_id UUID NOT NULL,
+    personal_id TEXT,
     fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
     observaciones VARCHAR,
     metodo_pago VARCHAR,
@@ -13,8 +14,6 @@ CREATE TABLE movimientos_almacen (
         FOREIGN KEY (cliente_id) REFERENCES clients (id),
     CONSTRAINT movimientos_almacen_proveedor_id_fkey
         FOREIGN KEY (proveedor_id) REFERENCES proveedores (id),
-    CONSTRAINT movimientos_almacen_user_id_fkey
-        FOREIGN KEY (user_id) REFERENCES users (id),
     CONSTRAINT movimientos_almacen_sucu_id_fkey
         FOREIGN KEY (sucu_id) REFERENCES sucursales (id)
 );

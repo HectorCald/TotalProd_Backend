@@ -5,13 +5,18 @@ class movimientosAcopioController {
   // Crear un movimiento
   static async create(req, res) {
     try {
-      const { product_id, type, observations, proveedor_id, cliente_id, quantity, restar_materia_prima, sucu_id } = req.body;
+      const { product_id, type, observations, proveedor_id, cliente_id, quantity, restar_materia_prima, sucu_id, personal_id } = req.body;
       const userId = req.user?.id;
+      const userType = req.user?.type;
 
-      if (!userId) {
+      // Si es empleado, usar personal_id, si es usuario normal, usar userId
+      const finalUserId = userType === 'employee' ? null : userId;
+      const finalPersonalId = userType === 'employee' ? personal_id : null;
+
+      if (!finalUserId && !finalPersonalId) {
         return res.status(401).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'Usuario no autenticado o personal no válido'
         });
       }
 
@@ -31,7 +36,7 @@ class movimientosAcopioController {
         cliente_id,
         quantity,
         sucu_id
-      }, userId);
+      }, finalUserId, finalPersonalId);
 
       // Procesar ingredientes si es entrada y tiene receta
       if (type === 'entrada' && restar_materia_prima) {

@@ -4,20 +4,30 @@ class movimientosAlmacen {
     // Crear un nuevo movimiento de almacén
     static async create(movimientoData) {
         try {
-            const { user_id, sucu_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, productos } = movimientoData;
+            const { user_id, personal_id, sucu_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, productos } = movimientoData;
 
             // Iniciar transacción
+            const insertData = {
+                sucu_id,
+                tipo,
+                observaciones,
+                metodo_pago,
+                cliente_id: cliente_id || null,
+                proveedor_id: proveedor_id || null
+            };
+
+            // Solo agregar user_id o personal_id si tienen valor
+            // IMPORTANTE: No enviar campos null para evitar problemas de foreign key
+            if (user_id && user_id !== null) {
+                insertData.user_id = user_id;
+            }
+            if (personal_id && personal_id !== null) {
+                insertData.personal_id = personal_id;
+            }
+
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
-                .insert({
-                    user_id,
-                    sucu_id,
-                    tipo,
-                    observaciones,
-                    metodo_pago,
-                    cliente_id: cliente_id || null,
-                    proveedor_id: proveedor_id || null
-                })
+                .insert(insertData)
                 .select()
                 .single();
 

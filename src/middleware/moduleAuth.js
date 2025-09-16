@@ -28,7 +28,6 @@ const requireModuleAccess = (moduleName) => {
           
           if (!error && sucursal) {
             empresaId = sucursal.empresa_id;
-            console.log('🔍 moduleAuth - empresa_id obtenido de sucu_id:', empresaId);
           }
         } catch (error) {
           console.error('Error al obtener empresa_id de sucu_id:', error);

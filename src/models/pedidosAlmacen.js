@@ -2,14 +2,14 @@ const { supabase } = require('../config/supabase');
 
 class pedidosAlmacen {
   // Crear un pedido
-  static async create(pedidoData, userId, empresaId) {
+  static async create(pedidoData, userId, empresaId, personalId = null) {
     try {
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
         throw new Error('La lista de productos es requerida');
       }
 
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!userId && !personalId) {
+        throw new Error('ID del usuario o personal es requerido');
       }
 
       if (!empresaId) {
@@ -18,11 +18,19 @@ class pedidosAlmacen {
 
       // Crear el pedido principal
       const pedidoPrincipal = {
-        user_id: userId,
         empresa_id: empresaId,
         observaciones: pedidoData.observaciones || null,
         estado: 'Pendiente'
       };
+
+      // Solo agregar user_id o personal_id si tienen valor
+      // IMPORTANTE: No enviar campos null para evitar problemas de foreign key
+      if (userId && userId !== null) {
+        pedidoPrincipal.user_id = userId;
+      }
+      if (personalId && personalId !== null) {
+        pedidoPrincipal.personal_id = personalId;
+      }
 
       const { data: pedido, error: pedidoError } = await supabase
         .from('pedidos_almacen')

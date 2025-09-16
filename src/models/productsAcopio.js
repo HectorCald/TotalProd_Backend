@@ -264,6 +264,16 @@ class productsAcopio {
 
       if (error) {
         console.error('Error de Supabase:', error);
+        
+        // Verificar si es un error de foreign key constraint
+        if (error.code === '23503') {
+          if (error.message.includes('recetas_acopio_detalle')) {
+            throw new Error('No se puede eliminar este producto porque está siendo utilizado como ingrediente en recetas de otros productos. Primero elimine o modifique las recetas que contienen este producto.');
+          } else if (error.message.includes('foreign key constraint')) {
+            throw new Error('No se puede eliminar este producto porque está siendo utilizado en otras partes del sistema.');
+          }
+        }
+        
         throw new Error('No se pudo eliminar el producto');
       }
 

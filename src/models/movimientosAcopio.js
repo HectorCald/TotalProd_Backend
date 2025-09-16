@@ -2,7 +2,7 @@ const { supabase } = require('../config/supabase');
 
 class movimientosAcopio {
   // Crear un movimiento
-  static async create(movimientoData, userId) {
+  static async create(movimientoData, userId, personalId = null) {
     try {
       if (!movimientoData.product_id) {
         throw new Error('ID del producto es requerido');
@@ -16,8 +16,8 @@ class movimientosAcopio {
         throw new Error('La cantidad es requerida');
       }
 
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!userId && !personalId) {
+        throw new Error('ID del usuario o personal es requerido');
       }
 
 
@@ -27,7 +27,6 @@ class movimientosAcopio {
 
       const dbData = {
         product_id: movimientoData.product_id,
-        user_id: userId,
         sucu_id: movimientoData.sucu_id,
         type: movimientoData.type,
         observations: movimientoData.observations || null,
@@ -36,6 +35,14 @@ class movimientosAcopio {
         quantity: movimientoData.quantity,
         date: new Date().toISOString() // Usar timestamp completo con hora
       };
+
+      // Solo incluir user_id o personal_id si no son null
+      if (userId && userId !== null) {
+        dbData.user_id = userId;
+      }
+      if (personalId && personalId !== null) {
+        dbData.personal_id = personalId;
+      }
 
 
       // Primero obtener el producto actual para actualizar su cantidad

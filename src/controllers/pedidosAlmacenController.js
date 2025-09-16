@@ -4,13 +4,18 @@ class pedidosAlmacenController {
   // Crear un pedido
   static async create(req, res) {
     try {
-      const { productos, observaciones } = req.body;
+      const { productos, observaciones, personal_id } = req.body;
       const userId = req.user?.id;
+      const userType = req.user?.type; // Verificar si es empleado o usuario normal
 
-      if (!userId) {
+      // Si es empleado, usar personal_id, si es usuario normal, usar userId
+      const finalUserId = userType === 'employee' ? null : userId;
+      const finalPersonalId = userType === 'employee' ? personal_id : null;
+
+      if (!finalUserId && !finalPersonalId) {
         return res.status(401).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'Usuario no autenticado o personal no válido'
         });
       }
 
@@ -44,7 +49,7 @@ class pedidosAlmacenController {
         observaciones
       };
 
-      const result = await pedidosAlmacen.create(pedidoData, userId, req.body.empresa_id);
+      const result = await pedidosAlmacen.create(pedidoData, finalUserId, req.body.empresa_id, finalPersonalId);
 
       if (result.success) {
         return res.status(201).json(result);

@@ -4,8 +4,13 @@ class movimientosAlmacenController {
     // Crear un nuevo movimiento
     static async create(req, res) {
         try {
-            const { sucu_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, productos, restar_ingredientes } = req.body;
-            const user_id = req.user.id;
+            const { sucu_id, personal_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, productos, restar_ingredientes } = req.body;
+            const user_id = req.user?.id;
+            const userType = req.user?.type; // Verificar si es empleado o usuario normal
+
+            // Si es empleado, usar personal_id, si es usuario normal, usar user_id
+            const finalUserId = userType === 'employee' ? null : user_id;
+            const finalPersonalId = userType === 'employee' ? personal_id : null;
 
             // Validar que se proporcione sucu_id
             if (!sucu_id) {
@@ -76,7 +81,8 @@ class movimientosAlmacenController {
 
             // Preparar datos del movimiento
             const movimientoData = {
-                user_id,
+                user_id: finalUserId,
+                personal_id: finalPersonalId,
                 sucu_id,
                 tipo,
                 observaciones: observaciones || null,
