@@ -14,8 +14,8 @@ class productsAlmacen {
     this.empresa_id = data.empresa_id;
   }
 
-  // Método para obtener un producto por ID con recetas
-  static async getById(id) {
+  // Método para obtener un producto por ID con recetas y stock de sucursal
+  static async getById(id, sucuId = null) {
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
@@ -50,6 +50,11 @@ class productsAlmacen {
                 quantity
               )
             )
+          ),
+          productos_sucursal (
+            id,
+            stock,
+            sucursal_id
           )
         `)
         .eq('id', id)
@@ -62,6 +67,12 @@ class productsAlmacen {
         throw new Error('No se pudo obtener el producto');
       }
 
+      // Si se especifica sucuId, agregar el stock de esa sucursal específica
+      if (sucuId && data) {
+        const stockSucursal = data.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
+        data.stock = stockSucursal ? stockSucursal.stock : 0;
+      }
+
       return data;
     } catch (error) {
       console.error('Error al obtener el producto:', error);
@@ -69,14 +80,14 @@ class productsAlmacen {
     }
   }
 
-  // Método para obtener todos los productos de una empresa
-  static async getAll(empresaId) {
+  // Método para obtener todos los productos de una empresa con stock de sucursal
+  static async getAll(empresaId, sucuId = null) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('products_almacen')
         .select(`
           *,
@@ -105,14 +116,29 @@ class productsAlmacen {
                 quantity
               )
             )
+          ),
+          productos_sucursal (
+            id,
+            stock,
+            sucursal_id
           )
         `)
         .eq('empresa_id', empresaId)
         .order('name', { ascending: true });
 
+      const { data, error } = await query;
+
       if (error) {
         console.error('Error de Supabase:', error);
         throw new Error('No se pudo obtener los productos');
+      }
+
+      // Si se especifica sucuId, agregar el stock de esa sucursal específica
+      if (sucuId && data) {
+        data.forEach(producto => {
+          const stockSucursal = producto.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
+          producto.stock = stockSucursal ? stockSucursal.stock : 0;
+        });
       }
 
       return data || [];
@@ -122,17 +148,16 @@ class productsAlmacen {
     }
   }
 
-  // Crear un producto con precios y receta
-  static async create(productData, empresaId) {
+  // Crear un producto con precios, receta y stock en sucursal
+  static async create(productData, empresaId, sucuId = null) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
       }
 
-      // 1. Crear el producto principal
+      // 1. Crear el producto principal (sin stock, ya que se maneja en productos_sucursal)
       const dbProductData = {
         name: productData.name,
-        stock: productData.stock,
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
         description: productData.description || null,
@@ -155,7 +180,23 @@ class productsAlmacen {
 
       const productId = product[0].id;
 
-      // 2. Crear los precios para todos los tipos de precios
+      // 2. Crear el stock en la sucursal si se proporciona sucuId
+      if (sucuId && productData.stock !== undefined) {
+        const { error: stockError } = await supabase
+          .from('productos_sucursal')
+          .insert([{
+            producto_id: productId,
+            sucursal_id: sucuId,
+            stock: productData.stock || 0
+          }]);
+
+        if (stockError) {
+          console.error('Error al crear stock en sucursal:', stockError);
+          // No lanzar error aquí, solo log
+        }
+      }
+
+      // 3. Crear los precios para todos los tipos de precios
       if (productData.prices && Object.keys(productData.prices).length > 0) {
         const priceInserts = Object.entries(productData.prices).map(([priceTypeId, valor]) => ({
           producto_almacen_id: productId,
@@ -238,6 +279,11 @@ class productsAlmacen {
                 quantity
               )
             )
+          ),
+          productos_sucursal (
+            id,
+            stock,
+            sucursal_id
           )
         `)
         .eq('id', product[0].id)
@@ -250,6 +296,12 @@ class productsAlmacen {
         return product[0];
       }
 
+      // Si se especifica sucuId, agregar el stock de esa sucursal específica
+      if (sucuId && completeProduct) {
+        const stockSucursal = completeProduct.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
+        completeProduct.stock = stockSucursal ? stockSucursal.stock : 0;
+      }
+
       return completeProduct;
     } catch (error) {
       console.error('Error al crear el producto:', error);
@@ -258,7 +310,7 @@ class productsAlmacen {
   }
 
   // Actualizar un producto
-  static async update(id, productData) {
+  static async update(id, productData, sucuId = null) {
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
@@ -266,7 +318,6 @@ class productsAlmacen {
 
       const updateData = {
         name: productData.name,
-        stock: productData.stock,
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
         description: productData.description || null
@@ -289,6 +340,43 @@ class productsAlmacen {
       }
 
       const productId = data[0].id;
+
+      // Actualizar stock en productos_sucursal si se proporciona sucuId
+      if (sucuId && productData.stock !== undefined) {
+        // Verificar si ya existe la relación
+        const { data: existingStock } = await supabase
+          .from('productos_sucursal')
+          .select('id')
+          .eq('producto_id', productId)
+          .eq('sucursal_id', sucuId)
+          .single();
+
+        if (existingStock) {
+          // Actualizar stock existente
+          const { error: stockUpdateError } = await supabase
+            .from('productos_sucursal')
+            .update({ stock: productData.stock || 0 })
+            .eq('producto_id', productId)
+            .eq('sucursal_id', sucuId);
+
+          if (stockUpdateError) {
+            console.error('Error al actualizar stock en sucursal:', stockUpdateError);
+          }
+        } else {
+          // Crear nueva relación con stock
+          const { error: stockCreateError } = await supabase
+            .from('productos_sucursal')
+            .insert([{
+              producto_id: productId,
+              sucursal_id: sucuId,
+              stock: productData.stock || 0
+            }]);
+
+          if (stockCreateError) {
+            console.error('Error al crear stock en sucursal:', stockCreateError);
+          }
+        }
+      }
 
       // Actualizar precios si se proporcionan
       if (productData.prices && Object.keys(productData.prices).length > 0) {
@@ -407,6 +495,11 @@ class productsAlmacen {
                 )
               )
             )
+          ),
+          productos_sucursal (
+            id,
+            stock,
+            sucursal_id
           )
         `)
         .eq('id', productId)
@@ -416,6 +509,12 @@ class productsAlmacen {
         console.error('Error obteniendo producto completo:', errorCompleto);
         // Si hay error obteniendo el producto completo, devolver al menos el básico
         return data[0];
+      }
+
+      // Si se especifica sucuId, agregar el stock de esa sucursal específica
+      if (sucuId && productoCompleto) {
+        const stockSucursal = productoCompleto.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
+        productoCompleto.stock = stockSucursal ? stockSucursal.stock : 0;
       }
 
       return productoCompleto;
@@ -479,7 +578,18 @@ class productsAlmacen {
         throw new Error('No se pudieron eliminar los precios del producto');
       }
 
-      // 5. Finalmente eliminar el producto principal
+      // 5. Eliminar todas las relaciones de stock en productos_sucursal
+      const { error: errorStock } = await supabase
+        .from('productos_sucursal')
+        .delete()
+        .eq('producto_id', id);
+
+      if (errorStock) {
+        console.error('Error eliminando stock de sucursales:', errorStock);
+        throw new Error('No se pudieron eliminar las relaciones de stock del producto');
+      }
+
+      // 6. Finalmente eliminar el producto principal
       const { error } = await supabase
         .from('products_almacen')
         .delete()

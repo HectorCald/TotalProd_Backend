@@ -7,6 +7,7 @@ class productsAlmacenController {
     try {
       // Obtener el empresa_id de la empresa seleccionada
       const empresaId = req.query.empresa_id;
+      const sucuId = req.query.sucu_id;
       
       if (!empresaId) {
         return res.status(400).json({
@@ -15,7 +16,7 @@ class productsAlmacenController {
         });
       }
 
-      const products = await productsAlmacen.getAll(empresaId);
+      const products = await productsAlmacen.getAll(empresaId, sucuId);
       
       res.status(200).json({
         success: true,
@@ -34,7 +35,7 @@ class productsAlmacenController {
   // Crear un producto
   static async create(req, res) {
     try {
-      const { name, description, stock, codigo_barras, category_id, prices, receta, empresa_id } = req.body;
+      const { name, description, stock, codigo_barras, category_id, prices, receta, empresa_id, sucu_id } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -58,6 +59,13 @@ class productsAlmacenController {
         });
       }
 
+      if (!sucu_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la sucursal es requerido'
+        });
+      }
+
       // Crear el producto
       const newProduct = await productsAlmacen.create({
         name: name.trim(),
@@ -67,7 +75,7 @@ class productsAlmacenController {
         category_id: category_id || null,
         prices: prices || {},
         receta: receta || null
-      }, empresa_id);
+      }, empresa_id, sucu_id);
 
       res.status(201).json({
         success: true,
@@ -87,7 +95,7 @@ class productsAlmacenController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { name, description, stock, codigo_barras, category_id, prices, receta } = req.body;
+      const { name, description, stock, codigo_barras, category_id, prices, receta, sucu_id } = req.body;
 
       if (!id) {
         return res.status(400).json({
@@ -110,7 +118,12 @@ class productsAlmacenController {
         });
       }
 
-
+      if (!sucu_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la sucursal es requerido'
+        });
+      }
 
       // Actualizar el producto
       const updatedProduct = await productsAlmacen.update(id, {
@@ -121,7 +134,7 @@ class productsAlmacenController {
         category_id: category_id || null,
         prices: prices || {},
         receta: receta || null
-      });
+      }, sucu_id);
 
       res.status(200).json({
         success: true,
