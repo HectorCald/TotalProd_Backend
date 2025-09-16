@@ -2,9 +2,10 @@ CREATE TABLE clients (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     phone VARCHAR(20),
-    location POINT, -- coordenadas lat/lon
+    location POINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    total_orders INT NOT NULL,
+    sucu_id UUID NOT NULL,
     description TEXT,
-    total_orders INT DEFAULT 0, -- contador de pedidos
-    user_id UUID REFERENCES users(id),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    CONSTRAINT clients_sucu_id_fkey FOREIGN KEY (sucu_id) REFERENCES sucursales (id)
 );

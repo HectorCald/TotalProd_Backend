@@ -1,8 +1,8 @@
 const { supabase } = require('../config/supabase');
 
 class pedidosAcopio {
-  // Crear un pedido
-  static async create(pedidoData, userId) {
+  // Crear un pedido (un registro por cada producto)
+  static async create(pedidoData, userId, empresaId) {
     try {
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
         throw new Error('La lista de productos es requerida');
@@ -12,71 +12,41 @@ class pedidosAcopio {
         throw new Error('ID del usuario es requerido');
       }
 
-      // Crear el pedido principal
-      const pedidoPrincipal = {
-        user_id: userId,
-        observaciones: pedidoData.observaciones || null,
-        estado: 'Pendiente'
-      };
-
-      const { data: pedido, error: pedidoError } = await supabase
-        .from('pedidos_acopio')
-        .insert(pedidoPrincipal)
-        .select('id')
-        .single();
-
-      if (pedidoError) {
-        throw new Error(`Error al crear el pedido: ${pedidoError.message}`);
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
-      // Crear los detalles del pedido
-      const detalles = pedidoData.productos.map(producto => ({
-        pedido_id: pedido.id,
-        producto_id: producto.id,
+      // Crear un registro por cada producto
+      const pedidos = pedidoData.productos.map(producto => ({
+        user_id: userId,
+        empresa_id: empresaId,
+        observaciones: pedidoData.observaciones || null,
+        estado: 'Pendiente',
+        producto_acopio_id: producto.id,
         cantidad: producto.cantidad,
-        medida: producto.medida || 'u',
-        precio: producto.precio || 0
+        tipo_medida: producto.medidaPedido || 'kg'
       }));
 
-      const { error: detallesError } = await supabase
-        .from('pedido_acopio_detalle')
-        .insert(detalles);
-
-      if (detallesError) {
-        // Si hay error en los detalles, eliminar el pedido principal
-        await supabase
-          .from('pedidos_acopio')
-          .delete()
-          .eq('id', pedido.id);
-        
-        throw new Error(`Error al crear los detalles del pedido: ${detallesError.message}`);
-      }
-
-      // Obtener el pedido completo con detalles
-      const { data: pedidoCompleto, error: fetchError } = await supabase
+      const { data: pedidosCreados, error: pedidosError } = await supabase
         .from('pedidos_acopio')
+        .insert(pedidos)
         .select(`
           *,
-          pedido_acopio_detalle (
-            *,
-            producto_acopio:producto_id (
-              id,
-              name,
-              description
-            )
+          producto_acopio:producto_acopio_id (
+            id,
+            name,
+            description
           )
-        `)
-        .eq('id', pedido.id)
-        .single();
+        `);
 
-      if (fetchError) {
-        throw new Error(`Error al obtener el pedido creado: ${fetchError.message}`);
+      if (pedidosError) {
+        throw new Error(`Error al crear los pedidos: ${pedidosError.message}`);
       }
 
       return {
         success: true,
-        message: 'Pedido creado exitosamente',
-        data: pedidoCompleto
+        message: 'Pedidos creados exitosamente',
+        data: pedidosCreados
       };
 
     } catch (error) {
@@ -88,31 +58,61 @@ class pedidosAcopio {
     }
   }
 
-  // Obtener todos los pedidos del usuario
-  static async getAll(userId, page = 1, limit = 20) {
+  // Obtener todos los pedidos de la empresa
+  static async getAll(empresaId, page = 1, limit = 20, searchQuery = null, ordenamiento = 'fecha_desc') {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       const offset = (page - 1) * limit;
 
-      const { data: pedidos, error } = await supabase
+      // Configurar ordenamiento
+      let orderBy = 'fecha';
+      let ascending = false;
+      
+      switch (ordenamiento) {
+        case 'fecha_asc':
+          orderBy = 'fecha';
+          ascending = true;
+          break;
+        case 'fecha_desc':
+          orderBy = 'fecha';
+          ascending = false;
+          break;
+        case 'estado_asc':
+          orderBy = 'estado';
+          ascending = true;
+          break;
+        case 'estado_desc':
+          orderBy = 'estado';
+          ascending = false;
+          break;
+        default:
+          orderBy = 'fecha';
+          ascending = false;
+      }
+
+      let query = supabase
         .from('pedidos_acopio')
         .select(`
           *,
-          pedido_acopio_detalle (
-            *,
-            producto_acopio:producto_id (
-              id,
-              name,
-              description
-            )
+          producto_acopio:producto_acopio_id (
+            id,
+            name,
+            description
           )
         `)
-        .eq('user_id', userId)
-        .order('fecha', { ascending: false })
+        .eq('empresa_id', empresaId)
+        .order(orderBy, { ascending: ascending })
         .range(offset, offset + limit - 1);
+
+      // Aplicar búsqueda si se proporciona
+      if (searchQuery && searchQuery.trim() !== '') {
+        query = query.or(`observaciones.ilike.%${searchQuery}%,producto_acopio.name.ilike.%${searchQuery}%`);
+      }
+
+      const { data: pedidos, error } = await query;
 
       if (error) {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
@@ -121,7 +121,7 @@ class pedidosAcopio {
       const { count, error: countError } = await supabase
         .from('pedidos_acopio')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
+        .eq('empresa_id', empresaId);
 
       if (countError) {
         throw new Error(`Error al contar pedidos: ${countError.message}`);
@@ -149,31 +149,23 @@ class pedidosAcopio {
   }
 
   // Obtener un pedido por ID
-  static async getById(pedidoId, userId) {
+  static async getById(pedidoId) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const { data: pedido, error } = await supabase
         .from('pedidos_acopio')
         .select(`
           *,
-          pedido_acopio_detalle (
-            *,
-            producto_acopio:producto_id (
-              id,
-              name,
-              description
-            )
+          producto_acopio:producto_acopio_id (
+            id,
+            name,
+            description
           )
         `)
         .eq('id', pedidoId)
-        .eq('user_id', userId)
         .single();
 
       if (error) {
@@ -199,7 +191,7 @@ class pedidosAcopio {
   }
 
   // Actualizar estado de un pedido
-  static async updateEstado(pedidoId, nuevoEstado, userId) {
+  static async updateEstado(pedidoId, nuevoEstado) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
@@ -209,15 +201,10 @@ class pedidosAcopio {
         throw new Error('Nuevo estado es requerido');
       }
 
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
-      }
-
       const { data, error } = await supabase
         .from('pedidos_acopio')
         .update({ estado: nuevoEstado })
         .eq('id', pedidoId)
-        .eq('user_id', userId)
         .select()
         .single();
 
@@ -251,9 +238,9 @@ class pedidosAcopio {
       }
 
       const { data, error } = await supabase
-        .from('pedido_acopio_detalle')
+        .from('pedidos_acopio')
         .select('id')
-        .eq('producto_id', productoId)
+        .eq('producto_acopio_id', productoId)
         .limit(1);
 
       if (error) {
@@ -273,6 +260,39 @@ class pedidosAcopio {
 
     } catch (error) {
       console.error('Error en pedidosAcopio.verificarProductoEnPedidos:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Eliminar pedido
+  static async eliminar(pedidoId) {
+    try {
+      if (!pedidoId) {
+        throw new Error('ID del pedido es requerido');
+      }
+
+      const { error } = await supabase
+        .from('pedidos_acopio')
+        .delete()
+        .eq('id', pedidoId);
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          throw new Error('Pedido no encontrado');
+        }
+        throw new Error(`Error al eliminar el pedido: ${error.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Pedido eliminado exitosamente'
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAcopio.eliminar:', error);
       return {
         success: false,
         message: error.message

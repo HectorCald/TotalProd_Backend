@@ -5,7 +5,16 @@ class pricesTypesController {
   // Obtener todos los tipos de precios
   static async getAll(req, res) {
     try {
-      const priceTypes = await pricesTypes.getAll(req.user.id);
+      const empresaId = req.query.empresa_id;
+      
+      if (!empresaId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
+      const priceTypes = await pricesTypes.getAll(empresaId);
       
       res.status(200).json({
         success: true,
@@ -24,7 +33,7 @@ class pricesTypesController {
   // Crear un tipo de precio
   static async create(req, res) {
     try {
-      const { name, description } = req.body;
+      const { name, description, empresa_id } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -34,11 +43,18 @@ class pricesTypesController {
         });
       }
 
+      if (!empresa_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
       // Crear el tipo de precio
       const newPriceType = await pricesTypes.create({
         name: name.trim(),
         description: description ? description.trim() : null
-      }, req.user.id);
+      }, empresa_id);
 
       res.status(201).json({
         success: true,
@@ -78,7 +94,7 @@ class pricesTypesController {
       const updatedPriceType = await pricesTypes.update(id, {
         name: name.trim(),
         description: description ? description.trim() : null
-      }, req.user.id);
+      });
 
       res.status(200).json({
         success: true,
@@ -107,7 +123,7 @@ class pricesTypesController {
       }
 
       // Eliminar el tipo de precio
-      await pricesTypes.delete(id, req.user.id);
+      await pricesTypes.delete(id);
 
       res.status(200).json({
         success: true,

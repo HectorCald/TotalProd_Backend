@@ -20,9 +20,15 @@ class movimientosAcopio {
         throw new Error('ID del usuario es requerido');
       }
 
+
+      if (!movimientoData.sucu_id) {
+        throw new Error('ID de la sucursal es requerido');
+      }
+
       const dbData = {
         product_id: movimientoData.product_id,
         user_id: userId,
+        sucu_id: movimientoData.sucu_id,
         type: movimientoData.type,
         observations: movimientoData.observations || null,
         proveedor_id: movimientoData.proveedor_id || null,
@@ -37,7 +43,6 @@ class movimientosAcopio {
         .from('products_acopio')
         .select('quantity')
         .eq('id', movimientoData.product_id)
-        .eq('user_id', userId)
         .single();
 
       if (errorProducto) {
@@ -72,8 +77,7 @@ class movimientosAcopio {
       const { error: errorUpdate } = await supabase
         .from('products_acopio')
         .update({ quantity: nuevaCantidad })
-        .eq('id', movimientoData.product_id)
-        .eq('user_id', userId);
+        .eq('id', movimientoData.product_id);
 
       if (errorUpdate) {
         console.error('Error al actualizar la cantidad del producto:', errorUpdate);
@@ -121,14 +125,14 @@ class movimientosAcopio {
   }
 
   // Obtener movimientos por producto
-  static async getByProduct(productId, userId) {
+  static async getByProduct(productId, sucuId) {
     try {
       if (!productId) {
         throw new Error('ID del producto es requerido');
       }
 
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
       }
 
       const { data, error } = await supabase
@@ -156,7 +160,7 @@ class movimientosAcopio {
           )
         `)
         .eq('product_id', productId)
-        .eq('user_id', userId)
+        .eq('sucu_id', sucuId)
         .order('date', { ascending: false });
 
       if (error) {
@@ -172,10 +176,10 @@ class movimientosAcopio {
   }
 
   // Obtener todos los movimientos
-  static async getAll(userId, page = 1, limit = 20, tipo = null, ordenamiento = 'fecha_desc') {
+  static async getAll(sucuId, page = 1, limit = 20, tipo = null, ordenamiento = 'fecha_desc') {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
       }
 
       const offset = (page - 1) * limit;
@@ -204,7 +208,7 @@ class movimientosAcopio {
             name
           )
         `, { count: 'exact' })
-        .eq('user_id', userId);
+        .eq('sucu_id', sucuId);
 
       // Aplicar filtro de tipo si se especifica
       if (tipo) {
@@ -258,10 +262,14 @@ class movimientosAcopio {
   }
 
   // Obtener movimientos por cliente
-  static async getByCliente(clienteId, userId, page = 1, limit = 20) {
+  static async getByCliente(clienteId, sucuId, page = 1, limit = 20) {
     try {
       if (!clienteId) {
         throw new Error('ID del cliente es requerido');
+      }
+
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
       }
 
       // Normalizar el UUID a minúsculas para evitar problemas de case
@@ -289,7 +297,7 @@ class movimientosAcopio {
           )
         `, { count: 'exact' })
         .eq('cliente_id', normalizedClienteId)
-        .eq('user_id', userId)
+        .eq('sucu_id', sucuId)
         .order('date', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -301,7 +309,7 @@ class movimientosAcopio {
         .from('movimientos_acopio')
         .select('*', { count: 'exact', head: true })
         .eq('cliente_id', normalizedClienteId)
-        .eq('user_id', userId);
+        .eq('sucu_id', sucuId);
 
       if (countError) {
         throw new Error(`Error al contar movimientos: ${countError.message}`);
@@ -316,10 +324,14 @@ class movimientosAcopio {
   }
 
   // Obtener movimientos por proveedor
-  static async getByProveedor(proveedorId, userId, page = 1, limit = 20) {
+  static async getByProveedor(proveedorId, sucuId, page = 1, limit = 20) {
     try {
       if (!proveedorId) {
         throw new Error('ID del proveedor es requerido');
+      }
+
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
       }
 
       const offset = (page - 1) * limit;
@@ -348,7 +360,7 @@ class movimientosAcopio {
           )
         `, { count: 'exact' })
         .eq('proveedor_id', normalizedProveedorId)
-        .eq('user_id', userId)
+        .eq('sucu_id', sucuId)
         .order('date', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -360,7 +372,7 @@ class movimientosAcopio {
         .from('movimientos_acopio')
         .select('*', { count: 'exact', head: true })
         .eq('proveedor_id', normalizedProveedorId)
-        .eq('user_id', userId);
+        .eq('sucu_id', sucuId);
 
       if (countError) {
         throw new Error(`Error al contar movimientos: ${countError.message}`);
@@ -375,7 +387,7 @@ class movimientosAcopio {
   }
 
   // Método para restar ingredientes del stock cuando se hace una entrada con receta
-  static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, userId) {
+  static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, empresaId) {
     try {
       for (const ingrediente of ingredientes) {
         // Verificar estructura del ingrediente
@@ -402,8 +414,7 @@ class movimientosAcopio {
         const { error: updateError } = await supabase
           .from('products_acopio')
           .update({ quantity: nuevaCantidad })
-          .eq('id', ingrediente.products_acopio.id)
-          .eq('user_id', userId);
+          .eq('id', ingrediente.products_acopio.id);
 
         if (updateError) {
           console.error(`Error actualizando stock del ingrediente ${ingrediente.products_acopio.name}:`, updateError);
@@ -419,7 +430,7 @@ class movimientosAcopio {
   }
 
   // Anular un movimiento
-  static async anular(movimientoId, userId) {
+  static async anular(movimientoId) {
     try {
       // Obtener el movimiento con todos sus datos
       const { data: movimiento, error: movimientoError } = await supabase
@@ -446,7 +457,6 @@ class movimientosAcopio {
           )
         `)
         .eq('id', movimientoId)
-        .eq('user_id', userId)
         .single();
 
       if (movimientoError) {
@@ -467,8 +477,7 @@ class movimientosAcopio {
       const { error: updateError } = await supabase
         .from('movimientos_acopio')
         .update({ estado: 'anulado' })
-        .eq('id', movimientoId)
-        .eq('user_id', userId);
+        .eq('id', movimientoId);
 
       if (updateError) {
         console.error('Error actualizando estado:', updateError);
@@ -491,8 +500,7 @@ class movimientosAcopio {
       const { error: stockError } = await supabase
         .from('products_acopio')
         .update({ quantity: nuevaCantidad })
-        .eq('id', movimiento.product_id)
-        .eq('user_id', userId);
+        .eq('id', movimiento.product_id);
 
       if (stockError) {
         console.error('Error actualizando stock:', stockError);
@@ -522,8 +530,7 @@ class movimientosAcopio {
             const { error: ingredienteError } = await supabase
               .from('products_acopio')
               .update({ quantity: nuevaCantidadIngrediente })
-              .eq('id', ingrediente.products_acopio.id)
-              .eq('user_id', userId);
+              .eq('id', ingrediente.products_acopio.id);
 
             if (ingredienteError) {
               console.error(`Error devolviendo ingrediente ${ingrediente.products_acopio.name}:`, ingredienteError);
@@ -546,14 +553,13 @@ class movimientosAcopio {
   }
 
   // Eliminar un movimiento
-  static async eliminar(movimientoId, userId) {
+  static async eliminar(movimientoId) {
     try {
-      // Verificar que el movimiento existe y pertenece al usuario
+      // Verificar que el movimiento existe
       const { data: movimiento, error: movimientoError } = await supabase
         .from('movimientos_acopio')
         .select('id, estado')
         .eq('id', movimientoId)
-        .eq('user_id', userId)
         .single();
 
       if (movimientoError) {
@@ -574,8 +580,7 @@ class movimientosAcopio {
       const { error: deleteError } = await supabase
         .from('movimientos_acopio')
         .delete()
-        .eq('id', movimientoId)
-        .eq('user_id', userId);
+        .eq('id', movimientoId);
 
       if (deleteError) {
         console.error('Error eliminando movimiento:', deleteError);

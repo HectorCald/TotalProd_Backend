@@ -6,9 +6,9 @@ CREATE TABLE products_almacen (
     category_id UUID,
     description VARCHAR,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
-    user_id UUID NOT NULL,
+    empresa_id UUID NOT NULL,
     CONSTRAINT products_almacen_category_id_fkey 
         FOREIGN KEY (category_id) REFERENCES category_almacen (id) ON DELETE SET NULL,
-    CONSTRAINT products_almacen_user_id_fkey 
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    CONSTRAINT products_almacen_empresa_id_fkey 
+        FOREIGN KEY (empresa_id) REFERENCES empresas (id)
 );

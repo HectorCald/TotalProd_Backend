@@ -2,30 +2,20 @@ const productsAcopio = require('../models/productsAcopio');
 
 class productsAcopioController {
 
-  // Obtener todos los productos
+  // Obtener todos los productos de la empresa
   static async getAll(req, res) {
     try {
-      // Obtener el userId del usuario autenticado
-      const userId = req.user?.id;
+      // Obtener el empresa_id de la empresa seleccionada
+      const empresaId = req.query.empresa_id;
       
-      if (!userId) {
-        return res.status(401).json({
+      if (!empresaId) {
+        return res.status(400).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'ID de la empresa es requerido'
         });
       }
 
-      // Parámetros de paginación y búsqueda
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const search = req.query.search || '';
-      const categoria = req.query.categoria;
-      const tipoMedida = req.query.tipo_medida;
-      const ordenamiento = req.query.ordenamiento || 'nombre_asc';
-      const offset = (page - 1) * limit;
-
-
-      const products = await productsAcopio.getAll(userId);
+      const products = await productsAcopio.getAll(empresaId);
       
       res.status(200).json({
         success: true,
@@ -44,7 +34,7 @@ class productsAcopioController {
   // Crear un producto
   static async create(req, res) {
     try {
-      const { name, description, quantity, type_measure_id, category_id, receta } = req.body;
+      const { name, description, quantity, type_measure_id, category_id, receta, empresa_id } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -68,6 +58,13 @@ class productsAcopioController {
         });
       }
 
+      if (!empresa_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
       // Crear el producto
       const newProduct = await productsAcopio.create({
         name: name.trim(),
@@ -76,10 +73,10 @@ class productsAcopioController {
         type_measure_id: type_measure_id,
         category_id: category_id || null,
         receta: receta
-      }, req.user.id);
+      }, empresa_id);
 
       // Obtener el producto creado con sus relaciones
-      const productWithRelations = await productsAcopio.getByIdWithLotes(newProduct.id, req.user.id);
+      const productWithRelations = await productsAcopio.getById(newProduct.id, empresa_id);
 
       res.status(201).json({
         success: true,
@@ -108,7 +105,7 @@ class productsAcopioController {
       }
 
       // Eliminar el producto
-      await productsAcopio.delete(id, req.user.id);
+      await productsAcopio.delete(id);
 
       res.status(200).json({
         success: true,
@@ -135,28 +132,6 @@ class productsAcopioController {
           message: 'ID del producto es requerido'
         });
       }
-
-      if (!name || !name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'El nombre es obligatorio'
-        });
-      }
-
-      if (!quantity || !quantity.toString().trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'La cantidad es obligatoria'
-        });
-      }
-
-      if (!type_measure_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'El tipo de medida es obligatorio'
-        });
-      }
-
       // Actualizar el producto
       await productsAcopio.update(id, {
         name: name.trim(),
@@ -165,10 +140,10 @@ class productsAcopioController {
         type_measure_id: type_measure_id,
         category_id: category_id || null,
         receta: receta
-      }, null, req.user.id);
+      }, null);
 
       // Obtener el producto actualizado con sus relaciones
-      const updatedProduct = await productsAcopio.getByIdWithLotes(id, req.user.id);
+      const updatedProduct = await productsAcopio.getById(id);
 
       res.status(200).json({
         success: true,
@@ -192,9 +167,9 @@ class productsAcopioController {
   static async getByCategory(req, res) {
     try {
       const { categoryId } = req.params;
-      const userId = req.user?.id;
 
-      if (!userId) {
+
+      if (!categoryId) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
@@ -208,7 +183,7 @@ class productsAcopioController {
         });
       }
 
-      const products = await productsAcopio.getByCategory(categoryId, userId);
+      const products = await productsAcopio.getByCategory(categoryId);
 
       res.status(200).json({
         success: true,
@@ -228,14 +203,7 @@ class productsAcopioController {
   static async hasMovements(req, res) {
     try {
       const { id } = req.params;
-      const userId = req.user?.id;
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
 
       if (!id) {
         return res.status(400).json({
@@ -244,7 +212,7 @@ class productsAcopioController {
         });
       }
 
-      const hasMovements = await productsAcopio.hasMovements(id, userId);
+      const hasMovements = await productsAcopio.hasMovements(id);
 
       res.status(200).json({
         success: true,

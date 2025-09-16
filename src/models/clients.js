@@ -11,20 +11,20 @@ class clients {
     this.description = data.description;
     this.total_orders = data.total_orders;
     this.created_at = data.created_at;
-    this.user_id = data.user_id;
+    this.sucu_id = data.sucu_id;
   }
 
-  // Método para obtener todos los clientes
-  static async getAll(userId) {
+  // Método para obtener todos los clientes de una sucursal
+  static async getAll(sucuId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
       }
 
       const { data, error } = await supabase
         .from('clients')
         .select('*')
-        .eq('user_id', userId);
+        .eq('sucu_id', sucuId);
 
       if (error) {
         throw new Error('No se pudo obtener los clientes');
@@ -38,16 +38,16 @@ class clients {
   }
 
   // Nuevo método para paginación con búsqueda
-  static async getAllPaginated(userId, { page, limit, offset, search }) {
+  static async getAllPaginated(sucuId, { page, limit, offset, search }) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
       }
 
       let query = supabase
         .from('clients')
         .select('*', { count: 'exact' })
-        .eq('user_id', userId);
+        .eq('sucu_id', sucuId);
 
       // Aplicar filtro de búsqueda si existe
       if (search && search.trim()) {
@@ -77,7 +77,7 @@ class clients {
   }
 
   // Crear un cliente
-  static async create(clientData, userId) {
+  static async create(clientData, sucuId) {
     try {
       
       // Preparar datos para la base de datos
@@ -86,7 +86,7 @@ class clients {
         phone: clientData.phone || null,
         description: clientData.description || null,
         total_orders: 0,
-        user_id: userId,
+        sucu_id: sucuId,
       };
 
       // Si hay location, usarla directamente
@@ -116,21 +116,15 @@ class clients {
   }
 
   // Eliminar un cliente
-  static async delete(id, userId) {
+  static async delete(id) {
     try {
       if (!id) {
         throw new Error('ID del cliente es requerido');
       }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
-      }
-
       const { error } = await supabase
         .from('clients')
         .delete()
         .eq('id', id)
-        .eq('user_id', userId);
 
       if (error) {
         console.error('Error de Supabase:', error);
@@ -145,14 +139,10 @@ class clients {
   }
 
   // Actualizar un cliente
-  static async update(id, clientData, userId) {
+  static async update(id, clientData) {
     try {
       if (!id) {
         throw new Error('ID del cliente es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       // Preparar datos para la base de datos
@@ -171,7 +161,6 @@ class clients {
         .from('clients')
         .update(dbData)
         .eq('id', id)
-        .eq('user_id', userId)
         .select();
 
       if (error) {

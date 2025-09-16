@@ -4,8 +4,16 @@ class movimientosAlmacenController {
     // Crear un nuevo movimiento
     static async create(req, res) {
         try {
-            const { tipo, observaciones, metodo_pago, cliente_id, proveedor_id, productos, restar_ingredientes } = req.body;
+            const { sucu_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, productos, restar_ingredientes } = req.body;
             const user_id = req.user.id;
+
+            // Validar que se proporcione sucu_id
+            if (!sucu_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
 
             // Validaciones básicas
             if (!tipo || !['entrada', 'salida'].includes(tipo)) {
@@ -69,6 +77,7 @@ class movimientosAlmacenController {
             // Preparar datos del movimiento
             const movimientoData = {
                 user_id,
+                sucu_id,
                 tipo,
                 observaciones: observaciones || null,
                 metodo_pago: tipo === 'salida' ? (metodo_pago || null) : null,
@@ -92,7 +101,7 @@ class movimientosAlmacenController {
                     
                     for (const productoData of productos) {
                         // Obtener producto con recetas e ingredientes
-                        const producto = await productsAlmacen.getById(productoData.id, user_id);
+                        const producto = await productsAlmacen.getById(productoData.id, req.user.empresa_id);
                         
                         if (producto && producto.recetas && producto.recetas.length > 0) {
                             const receta = producto.recetas[0];
@@ -103,7 +112,7 @@ class movimientosAlmacenController {
                                     producto, 
                                     parseFloat(productoData.cantidad), 
                                     receta.recetas_detalle,
-                                    user_id
+                                    req.user.empresa_id
                                 );
                             }
                         }
@@ -131,16 +140,23 @@ class movimientosAlmacenController {
         }
     }
 
-    // Obtener todos los movimientos del usuario
+    // Obtener todos los movimientos de la sucursal
     static async getAll(req, res) {
         try {
-            const user_id = req.user.id;
+            const sucu_id = req.query.sucu_id;
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 10;
             const tipo = req.query.tipo || null;
             const ordenamiento = req.query.ordenamiento || 'fecha_desc';
 
-            const result = await movimientosAlmacen.getAll(user_id, page, limit, tipo, ordenamiento);
+            if (!sucu_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
+
+            const result = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, ordenamiento);
 
             if (!result.success) {
                 return res.status(400).json(result);
@@ -165,10 +181,17 @@ class movimientosAlmacenController {
     // Obtener movimientos por tipo
     static async getByType(req, res) {
         try {
-            const user_id = req.user.id;
+            const sucu_id = req.query.sucu_id;
             const { tipo } = req.params;
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 10;
+
+            if (!sucu_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
 
             if (!['entrada', 'salida'].includes(tipo)) {
                 return res.status(400).json({
@@ -177,7 +200,7 @@ class movimientosAlmacenController {
                 });
             }
 
-            const result = await movimientosAlmacen.getByType(user_id, tipo, page, limit);
+            const result = await movimientosAlmacen.getByType(sucu_id, tipo, page, limit);
 
             if (!result.success) {
                 return res.status(400).json(result);
@@ -203,7 +226,14 @@ class movimientosAlmacenController {
     static async getById(req, res) {
         try {
             const { id } = req.params;
-            const user_id = req.user.id;
+            const sucu_id = req.query.sucu_id;
+
+            if (!sucu_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
 
             const result = await movimientosAlmacen.getById(id);
 
@@ -211,8 +241,8 @@ class movimientosAlmacenController {
                 return res.status(404).json(result);
             }
 
-            // Verificar que el movimiento pertenece al usuario
-            if (result.data.user_id !== user_id) {
+            // Verificar que el movimiento pertenece a la sucursal
+            if (result.data.sucu_id !== sucu_id) {
                 return res.status(403).json({
                     success: false,
                     message: 'No tienes permisos para ver este movimiento'
@@ -238,9 +268,8 @@ class movimientosAlmacenController {
     static async anular(req, res) {
         try {
             const { id } = req.params;
-            const user_id = req.user.id;
 
-            const result = await movimientosAlmacen.anular(id, user_id);
+            const result = await movimientosAlmacen.anular(id);
 
             if (!result.success) {
                 return res.status(400).json({
@@ -269,9 +298,8 @@ class movimientosAlmacenController {
     static async eliminar(req, res) {
         try {
             const { id } = req.params;
-            const user_id = req.user.id;
 
-            const result = await movimientosAlmacen.eliminar(id, user_id);
+            const result = await movimientosAlmacen.eliminar(id);
 
             if (!result.success) {
                 return res.status(400).json({

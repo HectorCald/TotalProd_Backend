@@ -2,10 +2,20 @@ const productsAlmacen = require('../models/productsAlmacen');
 
 class productsAlmacenController {
 
-  // Obtener todos los productos
+  // Obtener todos los productos de la empresa
   static async getAll(req, res) {
     try {
-      const products = await productsAlmacen.getAll(req.user.id);
+      // Obtener el empresa_id de la empresa seleccionada
+      const empresaId = req.query.empresa_id;
+      
+      if (!empresaId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
+      const products = await productsAlmacen.getAll(empresaId);
       
       res.status(200).json({
         success: true,
@@ -24,7 +34,7 @@ class productsAlmacenController {
   // Crear un producto
   static async create(req, res) {
     try {
-      const { name, description, stock, codigo_barras, category_id, prices, receta } = req.body;
+      const { name, description, stock, codigo_barras, category_id, prices, receta, empresa_id } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -41,6 +51,13 @@ class productsAlmacenController {
         });
       }
 
+      if (!empresa_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
       // Crear el producto
       const newProduct = await productsAlmacen.create({
         name: name.trim(),
@@ -50,7 +67,7 @@ class productsAlmacenController {
         category_id: category_id || null,
         prices: prices || {},
         receta: receta || null
-      }, req.user.id);
+      }, empresa_id);
 
       res.status(201).json({
         success: true,
@@ -93,6 +110,8 @@ class productsAlmacenController {
         });
       }
 
+
+
       // Actualizar el producto
       const updatedProduct = await productsAlmacen.update(id, {
         name: name.trim(),
@@ -102,7 +121,7 @@ class productsAlmacenController {
         category_id: category_id || null,
         prices: prices || {},
         receta: receta || null
-      }, req.user.id);
+      });
 
       res.status(200).json({
         success: true,
@@ -130,8 +149,10 @@ class productsAlmacenController {
         });
       }
 
+
+
       // Eliminar el producto
-      await productsAlmacen.delete(id, req.user.id);
+      await productsAlmacen.delete(id);
 
       res.status(200).json({
         success: true,

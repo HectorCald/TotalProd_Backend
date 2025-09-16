@@ -8,19 +8,15 @@ class productsAcopio {
     this.name = data.name;
     this.description = data.description;
     this.category_id = data.category_id;
-    this.user_id = data.user_id;
+    this.empresa_id = data.empresa_id;
     this.created_at = data.created_at;
   }
 
   // Método para obtener un producto por ID con recetas
-  static async getById(id, userId) {
+  static async getById(id) {
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const { data, error } = await supabase
@@ -56,7 +52,6 @@ class productsAcopio {
           )
         `)
         .eq('id', id)
-        .eq('user_id', userId)
         .single();
 
       if (error) {
@@ -74,10 +69,10 @@ class productsAcopio {
   }
 
   // Método para obtener todos los productos
-  static async getAll(userId) {
+  static async getAll(empresaId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       const { data, error } = await supabase
@@ -112,7 +107,7 @@ class productsAcopio {
             )
           )
         `)
-        .eq('user_id', userId)
+        .eq('empresa_id', empresaId)
         .order('name', { ascending: true });
 
       if (error) {
@@ -127,10 +122,10 @@ class productsAcopio {
   }
 
   // Crear un producto con receta opcional
-  static async create(productData, userId) {
+  static async create(productData, empresaId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       // 1. Crear el producto principal
@@ -140,7 +135,7 @@ class productsAcopio {
         quantity: productData.quantity,
         type_measure_id: productData.type_measure_id || null,
         category_id: productData.category_id || null,
-        user_id: userId
+        empresa_id: empresaId
       };
 
       const { data: product, error: productError } = await supabase
@@ -202,18 +197,14 @@ class productsAcopio {
   }
 
   // Eliminar un producto
-  static async delete(id, userId) {
+  static async delete(id) {
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
       }
 
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
-      }
-
       // Verificar si el producto tiene movimientos
-      const hasMovements = await this.hasMovements(id, userId);
+      const hasMovements = await this.hasMovements(id);
       if (hasMovements) {
         throw new Error('No se puede eliminar el producto porque tiene movimientos registrados');
       }
@@ -270,7 +261,6 @@ class productsAcopio {
         .from('products_acopio')
         .delete()
         .eq('id', id)
-        .eq('user_id', userId);
 
       if (error) {
         console.error('Error de Supabase:', error);
@@ -285,14 +275,10 @@ class productsAcopio {
   }
 
   // Actualizar un producto
-  static async update(id, productData, lotesData, userId) {
+  static async update(id, productData) {
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       // Obtener el producto actual para verificar si se está cambiando la unidad de medida
@@ -300,7 +286,6 @@ class productsAcopio {
         .from('products_acopio')
         .select('type_measure_id')
         .eq('id', id)
-        .eq('user_id', userId)
         .single();
 
       if (currentError) {
@@ -312,7 +297,7 @@ class productsAcopio {
 
       if (isChangingMeasure) {
         // Verificar si el producto tiene movimientos
-        const hasMovements = await this.hasMovements(id, userId);
+        const hasMovements = await this.hasMovements(id);
         if (hasMovements) {
           throw new Error('No se puede cambiar la unidad de medida porque el producto tiene movimientos registrados');
         }
@@ -331,7 +316,6 @@ class productsAcopio {
         .from('products_acopio')
         .update(dbData)
         .eq('id', id)
-        .eq('user_id', userId)
         .select();
 
       if (error) {
@@ -343,38 +327,6 @@ class productsAcopio {
         throw new Error('No se pudo actualizar el producto');
       }
 
-      // Actualizar lotes si se proporcionan
-      if (lotesData !== undefined) {
-        // Eliminar lotes existentes
-        const { error: deleteLotesError } = await supabase
-          .from('lotes_acopio')
-          .delete()
-          .eq('product_id', id);
-
-        if (deleteLotesError) {
-          console.error('Error al eliminar lotes existentes:', deleteLotesError);
-        }
-
-        // Crear nuevos lotes si existen
-        if (lotesData && lotesData.length > 0) {
-          const lotesToInsert = lotesData.map(lote => ({
-            product_id: id,
-            num_lote: lote.num_lote,
-            quantity: lote.quantity,
-            date_entry: lote.date_entry || new Date().toISOString().split('T')[0],
-            date_expiration: lote.date_expiration || null,
-            proveedor_id: lote.proveedor_id || null
-          }));
-
-          const { error: lotesError } = await supabase
-            .from('lotes_acopio')
-            .insert(lotesToInsert);
-
-          if (lotesError) {
-            console.error('Error de Supabase al crear lotes:', lotesError);
-          }
-        }
-      }
 
       // Actualizar receta si se proporciona
       if (productData.receta !== undefined) {
@@ -449,13 +401,10 @@ class productsAcopio {
 
   
   // Obtener productos por categoría
-  static async getByCategory(categoryId, userId) {
+  static async getByCategory(categoryId) {
     try {
       if (!categoryId) {
         throw new Error('ID de la categoría es requerido');
-      }
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const { data, error } = await supabase
@@ -472,7 +421,6 @@ class productsAcopio {
             name
           )
         `)
-        .eq('user_id', userId)
         .eq('category_id', categoryId)
         .order('name', { ascending: true });
 
@@ -488,21 +436,16 @@ class productsAcopio {
   }
 
   // Verificar si un producto tiene movimientos
-  static async hasMovements(productId, userId) {
+  static async hasMovements(productId) {
     try {
       if (!productId) {
         throw new Error('ID del producto es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const { data, error } = await supabase
         .from('movimientos_acopio')
         .select('id')
         .eq('product_id', productId)
-        .eq('user_id', userId)
         .limit(1);
 
       if (error) {

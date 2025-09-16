@@ -11,17 +11,14 @@ class productsAlmacen {
     this.category_id = data.category_id;
     this.description = data.description;
     this.created_at = data.created_at;
+    this.empresa_id = data.empresa_id;
   }
 
   // Método para obtener un producto por ID con recetas
-  static async getById(id, userId) {
+  static async getById(id) {
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const { data, error } = await supabase
@@ -56,7 +53,6 @@ class productsAlmacen {
           )
         `)
         .eq('id', id)
-        .eq('user_id', userId)
         .single();
 
       if (error) {
@@ -73,11 +69,11 @@ class productsAlmacen {
     }
   }
 
-  // Método para obtener todos los productos de un usuario
-  static async getAll(userId) {
+  // Método para obtener todos los productos de una empresa
+  static async getAll(empresaId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       const { data, error } = await supabase
@@ -111,7 +107,7 @@ class productsAlmacen {
             )
           )
         `)
-        .eq('user_id', userId)
+        .eq('empresa_id', empresaId)
         .order('name', { ascending: true });
 
       if (error) {
@@ -127,10 +123,10 @@ class productsAlmacen {
   }
 
   // Crear un producto con precios y receta
-  static async create(productData, userId) {
+  static async create(productData, empresaId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       // 1. Crear el producto principal
@@ -140,7 +136,7 @@ class productsAlmacen {
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
         description: productData.description || null,
-        user_id: userId
+        empresa_id: empresaId
       };
 
       const { data: product, error: productError } = await supabase
@@ -245,7 +241,7 @@ class productsAlmacen {
           )
         `)
         .eq('id', product[0].id)
-        .eq('user_id', userId)
+        .eq('empresa_id', empresaId)
         .single();
 
       if (completeError) {
@@ -262,13 +258,10 @@ class productsAlmacen {
   }
 
   // Actualizar un producto
-  static async update(id, productData, userId) {
+  static async update(id, productData) {
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
-      }
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const updateData = {
@@ -284,7 +277,6 @@ class productsAlmacen {
         .from('products_almacen')
         .update(updateData)
         .eq('id', id)
-        .eq('user_id', userId)
         .select();
 
       if (error) {
@@ -418,7 +410,6 @@ class productsAlmacen {
           )
         `)
         .eq('id', productId)
-        .eq('user_id', userId)
         .single();
 
       if (errorCompleto) {
@@ -435,13 +426,10 @@ class productsAlmacen {
   }
 
   // Eliminar un producto
-  static async delete(id, userId) {
+  static async delete(id) {
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
-      }
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       // 1. Obtener las recetas del producto para eliminar sus detalles
@@ -496,7 +484,6 @@ class productsAlmacen {
         .from('products_almacen')
         .delete()
         .eq('id', id)
-        .eq('user_id', userId);
 
       if (error) {
         console.error('Error eliminando producto principal:', error);

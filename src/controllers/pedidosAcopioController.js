@@ -26,7 +26,7 @@ class pedidosAcopioController {
       }
 
       const pedidoData = { productos, observaciones };
-      const result = await pedidosAcopio.create(pedidoData, userId);
+      const result = await pedidosAcopio.create(pedidoData, userId, req.body.empresa_id);
 
       if (result.success) {
         return res.status(201).json(result);
@@ -40,18 +40,23 @@ class pedidosAcopioController {
     }
   }
 
-  // Obtener todos los pedidos
+  // Obtener todos los pedidos de la empresa
   static async getAll(req, res) {
     try {
-      const userId = req.user?.id;
+      const { empresa_id } = req.query;
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 20;
+      const searchQuery = req.query.search || null;
+      const ordenamiento = req.query.ordenamiento || 'fecha_desc';
 
-      if (!userId) {
-        return res.status(401).json({ success: false, message: 'Usuario no autenticado' });
+      if (!empresa_id) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'ID de la empresa es requerido' 
+        });
       }
 
-      const result = await pedidosAcopio.getAll(userId, page, limit);
+      const result = await pedidosAcopio.getAll(empresa_id, page, limit, searchQuery, ordenamiento);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -158,6 +163,34 @@ class pedidosAcopioController {
 
     } catch (error) {
       console.error('Error en pedidosAcopioController.verificarProductoEnPedidos:', error);
+      return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+    }
+  }
+
+  // Eliminar pedido
+  static async eliminar(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Usuario no autenticado' });
+      }
+
+      if (!id) {
+        return res.status(400).json({ success: false, message: 'ID del pedido es requerido' });
+      }
+
+      const result = await pedidosAcopio.eliminar(id, userId);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(404).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAcopioController.eliminar:', error);
       return res.status(500).json({ success: false, message: 'Error interno del servidor' });
     }
   }

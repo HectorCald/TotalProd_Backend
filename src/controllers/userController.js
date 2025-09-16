@@ -5,13 +5,13 @@ const { generateToken } = require('../config/jwt');
 class UserController {
   static async createUser(req, res) {
     try {
-      const { firstName, lastName, phone, email, password } = req.body;
+      const { firstName, lastName, email, password, nameStore } = req.body;
 
       // Validar campos requeridos
-      if (!firstName || !lastName || !email || !password) {
+      if (!firstName || !lastName || !email || !password || !nameStore) {
         return res.status(400).json({
           success: false,
-          message: 'Nombre, email y contraseña son requeridos'
+          message: 'Nombre, email, contraseña y nombre de empresa son requeridos'
         });
       }
 
@@ -23,9 +23,9 @@ class UserController {
       const newUser = await User.create({
         firstName: firstName,
         lastName: lastName,
-        phone: phone,
         email: email,
         password: hashedPassword,
+        nameStore: nameStore,
         is_active: true,
       });
 
@@ -36,7 +36,8 @@ class UserController {
         email: newUser.email,
         firstName: newUser.firstName,
         lastName: newUser.lastName,
-        is_active: newUser.is_active
+        is_active: newUser.is_active,
+        empresa_id: newUser.empresa_id
       };
 
       const token = generateToken(tokenPayload);
@@ -132,6 +133,7 @@ class UserController {
         firstName: user.firstName,
         lastName: user.lastName,
         is_active: user.is_active,
+        empresa_id: user.empresa_id
       };
 
       const token = generateToken(tokenPayload);
@@ -193,7 +195,9 @@ class UserController {
             is_active: user.is_active,
             plan_id: user.plan_id,
             plan: user.plan,
-            modules: user.modules
+            modules: user.modules,
+            empresa_id: user.empresa_id,
+            empresa: user.empresa
           }
         }
       });

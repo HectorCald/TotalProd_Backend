@@ -5,13 +5,20 @@ class movimientosAcopioController {
   // Crear un movimiento
   static async create(req, res) {
     try {
-      const { product_id, type, observations, proveedor_id, cliente_id, quantity, restar_materia_prima } = req.body;
+      const { product_id, type, observations, proveedor_id, cliente_id, quantity, restar_materia_prima, sucu_id } = req.body;
       const userId = req.user?.id;
 
       if (!userId) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!sucu_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la sucursal es requerido'
         });
       }
 
@@ -22,14 +29,15 @@ class movimientosAcopioController {
         observations,
         proveedor_id,
         cliente_id,
-        quantity
+        quantity,
+        sucu_id
       }, userId);
 
       // Procesar ingredientes si es entrada y tiene receta
       if (type === 'entrada' && restar_materia_prima) {
         try {
           // Obtener producto con receta e ingredientes
-          const producto = await productsAcopio.getById(product_id, userId);
+          const producto = await productsAcopio.getById(product_id, req.user.empresa_id);
           
           if (producto && producto.recetas_acopio && producto.recetas_acopio.length > 0) {
             const receta = producto.recetas_acopio[0];
@@ -40,7 +48,7 @@ class movimientosAcopioController {
                 producto, 
                 parseFloat(quantity), 
                 receta.recetas_acopio_detalle,
-                userId
+                req.user.empresa_id
               );
             }
           }
@@ -68,16 +76,16 @@ class movimientosAcopioController {
   static async getByProduct(req, res) {
     try {
       const { productId } = req.params;
-      const userId = req.user?.id;
+      const { sucu_id } = req.query;
 
-      if (!userId) {
-        return res.status(401).json({
+      if (!sucu_id) {
+        return res.status(400).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'ID de la sucursal es requerido'
         });
       }
 
-      const movimientos = await movimientosAcopio.getByProduct(productId, userId);
+      const movimientos = await movimientosAcopio.getByProduct(productId, sucu_id);
 
       res.json({
         success: true,
@@ -96,16 +104,16 @@ class movimientosAcopioController {
   static async getByCliente(req, res) {
     try {
       const { clienteId } = req.params;
-      const userId = req.user?.id;
+      const { sucu_id } = req.query;
 
-      if (!userId) {
-        return res.status(401).json({
+      if (!sucu_id) {
+        return res.status(400).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'ID de la sucursal es requerido'
         });
       }
 
-      const movimientos = await movimientosAcopio.getByCliente(clienteId, userId);
+      const movimientos = await movimientosAcopio.getByCliente(clienteId, sucu_id);
 
       res.json({
         success: true,
@@ -124,16 +132,16 @@ class movimientosAcopioController {
   static async getByProveedor(req, res) {
     try {
       const { proveedorId } = req.params;
-      const userId = req.user?.id;
+      const { sucu_id } = req.query;
 
-      if (!userId) {
-        return res.status(401).json({
+      if (!sucu_id) {
+        return res.status(400).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'ID de la sucursal es requerido'
         });
       }
 
-      const movimientos = await movimientosAcopio.getByProveedor(proveedorId, userId);
+      const movimientos = await movimientosAcopio.getByProveedor(proveedorId, sucu_id);
 
       res.json({
         success: true,
@@ -151,17 +159,16 @@ class movimientosAcopioController {
   // Obtener todos los movimientos
   static async getAll(req, res) {
     try {
-      const { page = 1, limit = 20, tipo, ordenamiento = 'fecha_desc' } = req.query;
-      const userId = req.user?.id;
+      const { page = 1, limit = 20, tipo, ordenamiento = 'fecha_desc', sucu_id } = req.query;
 
-      if (!userId) {
-        return res.status(401).json({
+      if (!sucu_id) {
+        return res.status(400).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'ID de la sucursal es requerido'
         });
       }
 
-      const result = await movimientosAcopio.getAll(userId, parseInt(page), parseInt(limit), tipo, ordenamiento);
+      const result = await movimientosAcopio.getAll(sucu_id, parseInt(page), parseInt(limit), tipo, ordenamiento);
 
       res.json({
         success: true,
@@ -186,16 +193,8 @@ class movimientosAcopioController {
   static async anular(req, res) {
     try {
       const { id } = req.params;
-      const userId = req.user?.id;
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      const result = await movimientosAcopio.anular(id, userId);
+      const result = await movimientosAcopio.anular(id);
 
       if (!result.success) {
         return res.status(400).json({
@@ -222,16 +221,8 @@ class movimientosAcopioController {
   static async eliminar(req, res) {
     try {
       const { id } = req.params;
-      const userId = req.user?.id;
 
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      const result = await movimientosAcopio.eliminar(id, userId);
+      const result = await movimientosAcopio.eliminar(id);
 
       if (!result.success) {
         return res.status(400).json({

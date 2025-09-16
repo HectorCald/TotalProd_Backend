@@ -9,17 +9,17 @@ class categoryAlmacen {
     this.created_at = data.created_at;
   }
 
-  // Método para obtener todas las categorías de un usuario
-  static async getAll(userId) {
+  // Método para obtener todas las categorías de una empresa
+  static async getAll(empresaId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       const { data, error } = await supabase
         .from('category_almacen')
         .select('*')
-        .eq('user_id', userId)
+        .eq('empresa_id', empresaId)
         .order('name', { ascending: true });
 
       if (error) {
@@ -42,15 +42,15 @@ class categoryAlmacen {
   }
 
   // Crear una categoría
-  static async create(categoryData, userId) {
+  static async create(categoryData, empresaId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       const dbData = {
         name: categoryData.name,
-        user_id: userId
+        empresa_id: empresaId
       };
 
       const { data, error } = await supabase
@@ -75,20 +75,16 @@ class categoryAlmacen {
   }
 
   // Actualizar una categoría
-  static async update(id, categoryData, userId) {
+  static async update(id, categoryData) {
     try {
       if (!id) {
         throw new Error('ID de la categoría es requerido');
-      }
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const { data, error } = await supabase
         .from('category_almacen')
         .update(categoryData)
         .eq('id', id)
-        .eq('user_id', userId)
         .select();
 
       if (error) {
@@ -108,13 +104,10 @@ class categoryAlmacen {
   }
 
   // Eliminar una categoría
-  static async delete(id, userId) {
+  static async delete(id) {
     try {
       if (!id) {
         throw new Error('ID de la categoría es requerido');
-      }
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       // Primero verificar si la categoría tiene productos asignados
@@ -122,7 +115,6 @@ class categoryAlmacen {
         .from('products_almacen')
         .select('id')
         .eq('category_id', id)
-        .eq('user_id', userId)
         .limit(1);
 
       if (productsError) {
@@ -138,8 +130,7 @@ class categoryAlmacen {
       const { error } = await supabase
         .from('category_almacen')
         .delete()
-        .eq('id', id)
-        .eq('user_id', userId);
+        .eq('id', id);
 
       if (error) {
         console.error('Error de Supabase:', error);

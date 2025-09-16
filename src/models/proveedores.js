@@ -11,20 +11,20 @@ class proveedores {
     this.description = data.description;
     this.total_orders = data.total_orders;
     this.created_at = data.created_at;
-    this.user_id = data.user_id;
+    this.sucu_id = data.sucu_id;
   }
 
-  // Método para obtener todos los clientes
-  static async getAll(userId) {
+  // Método para obtener todos los proveedores de una sucursal
+  static async getAll(sucuId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
       }
 
       const { data, error } = await supabase
         .from('proveedores')
         .select('*')
-        .eq('user_id', userId);
+        .eq('sucu_id', sucuId);
 
       if (error) {
         throw new Error('No se pudo obtener los proveedores');
@@ -38,16 +38,16 @@ class proveedores {
   }
 
   // Nuevo método para paginación con búsqueda
-  static async getAllPaginated(userId, { page, limit, offset, search }) {
+  static async getAllPaginated(sucuId, { page, limit, offset, search }) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
       }
 
       let query = supabase
         .from('proveedores')
         .select('*', { count: 'exact' })
-        .eq('user_id', userId);
+        .eq('sucu_id', sucuId);
 
       // Aplicar filtro de búsqueda si existe
       if (search && search.trim()) {
@@ -76,8 +76,8 @@ class proveedores {
     }
   }
 
-  // Crear un cliente
-  static async create(proveedorData, userId) {
+  // Crear un proveedor
+  static async create(proveedorData, sucuId) {
     try {
       
       // Preparar datos para la base de datos
@@ -86,7 +86,7 @@ class proveedores {
         phone: proveedorData.phone || null,
         description: proveedorData.description || null,
         total_orders: 0,
-        user_id: userId,
+        sucu_id: sucuId,
       };
 
       // Si hay location, usarla directamente
@@ -115,22 +115,17 @@ class proveedores {
     }
   }
 
-  // Eliminar un cliente
-  static async delete(id, userId) {
+  // Eliminar un proveedor
+  static async delete(id) {
     try {
       if (!id) {
         throw new Error('ID del proveedor es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const { error } = await supabase
         .from('proveedores')
         .delete()
         .eq('id', id)
-        .eq('user_id', userId);
 
       if (error) {
         console.error('Error de Supabase:', error);
@@ -144,15 +139,11 @@ class proveedores {
     }
   }
 
-  // Actualizar un cliente
-  static async update(id, proveedorData, userId) {
+  // Actualizar un proveedor
+  static async update(id, proveedorData) {
     try {
       if (!id) {
         throw new Error('ID del proveedor es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       // Preparar datos para la base de datos
@@ -171,7 +162,6 @@ class proveedores {
           .from('proveedores')
         .update(dbData)
         .eq('id', id)
-        .eq('user_id', userId)
         .select();
 
       if (error) {

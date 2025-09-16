@@ -2,16 +2,16 @@ const client = require('../models/clients');
 
 class clientsController {
 
-  // Obtener todos los clientes
+  // Obtener todos los clientes de una sucursal
   static async getAll(req, res) {
     try {
-      // Obtener el userId del usuario autenticado
-      const userId = req.user?.id;
+      // Obtener el sucu_id de la sucursal seleccionada
+      const sucuId = req.query.sucu_id;
       
-      if (!userId) {
-        return res.status(401).json({
+      if (!sucuId) {
+        return res.status(400).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'ID de la sucursal es requerido'
         });
       }
 
@@ -21,7 +21,7 @@ class clientsController {
       const search = req.query.search || '';
       const offset = (page - 1) * limit;
 
-      const result = await client.getAllPaginated(userId, { page, limit, offset, search });
+      const result = await client.getAll(sucuId, { page, limit, offset, search });
       
       res.status(200).json({
         success: true,
@@ -47,13 +47,20 @@ class clientsController {
   // Crear un cliente
   static async create(req, res) {
     try {
-      const { name, phone, direccion, description, location } = req.body;
+      const { name, phone, direccion, description, location, sucu_id } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
         return res.status(400).json({
           success: false,
           message: 'El nombre es obligatorio'
+        });
+      }
+
+      if (!sucu_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la sucursal es requerido'
         });
       }
 
@@ -64,7 +71,7 @@ class clientsController {
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
         location: location || null
-      }, req.user.id);
+      }, sucu_id);
 
       res.status(201).json({
         success: true,
@@ -93,7 +100,7 @@ class clientsController {
       }
 
       // Eliminar el cliente
-      await client.delete(id, req.user.id);
+      await client.delete(id);
 
       res.status(200).json({
         success: true,
@@ -128,6 +135,7 @@ class clientsController {
         });
       }
 
+
       // Actualizar el cliente
       const updatedClient = await client.update(id, {
         name: name.trim(),
@@ -135,7 +143,7 @@ class clientsController {
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
         location: location || null
-      }, req.user.id);
+      });
 
       res.status(200).json({
         success: true,

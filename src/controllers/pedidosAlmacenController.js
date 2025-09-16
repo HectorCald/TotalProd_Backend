@@ -44,7 +44,7 @@ class pedidosAlmacenController {
         observaciones
       };
 
-      const result = await pedidosAlmacen.create(pedidoData, userId);
+      const result = await pedidosAlmacen.create(pedidoData, userId, req.body.empresa_id);
 
       if (result.success) {
         return res.status(201).json(result);
@@ -61,21 +61,21 @@ class pedidosAlmacenController {
     }
   }
 
-  // Obtener todos los pedidos del usuario
+  // Obtener todos los pedidos de la empresa
   static async getAll(req, res) {
     try {
-      const userId = req.user?.id;
+      const { empresa_id } = req.query;
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 20;
 
-      if (!userId) {
-        return res.status(401).json({
+      if (!empresa_id) {
+        return res.status(400).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'ID de la empresa es requerido'
         });
       }
 
-      const result = await pedidosAlmacen.getAll(userId, page, limit);
+      const result = await pedidosAlmacen.getAll(empresa_id, page, limit);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -112,7 +112,7 @@ class pedidosAlmacenController {
         });
       }
 
-      const result = await pedidosAlmacen.getById(id, userId);
+      const result = await pedidosAlmacen.getById(id);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -166,7 +166,7 @@ class pedidosAlmacenController {
         });
       }
 
-      const result = await pedidosAlmacen.updateEstado(id, estado, userId);
+      const result = await pedidosAlmacen.updateEstado(id, estado);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -213,6 +213,43 @@ class pedidosAlmacenController {
 
     } catch (error) {
       console.error('Error en pedidosAlmacenController.verificarProductoEnPedidos:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Eliminar pedido
+  static async eliminar(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del pedido es requerido'
+        });
+      }
+
+      const result = await pedidosAlmacen.eliminar(id);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(404).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacenController.eliminar:', error);
       return res.status(500).json({
         success: false,
         message: 'Error interno del servidor'

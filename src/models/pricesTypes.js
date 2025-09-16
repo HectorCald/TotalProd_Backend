@@ -10,17 +10,17 @@ class pricesTypes {
     this.created_at = data.created_at;
   }
 
-  // Método para obtener todos los tipos de precios de un usuario
-  static async getAll(userId) {
+  // Método para obtener todos los tipos de precios de una empresa
+  static async getAll(empresaId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       const { data, error } = await supabase
         .from('prices_types')
         .select('*')
-        .eq('user_id', userId)
+        .eq('empresa_id', empresaId)
         .order('name', { ascending: true });
 
       if (error) {
@@ -36,16 +36,16 @@ class pricesTypes {
   }
 
   // Crear un tipo de precio
-  static async create(priceTypeData, userId) {
+  static async create(priceTypeData, empresaId) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       const dbData = {
         name: priceTypeData.name,
         description: priceTypeData.description || null,
-        user_id: userId
+        empresa_id: empresaId
       };
 
       const { data, error } = await supabase
@@ -70,20 +70,16 @@ class pricesTypes {
   }
 
   // Actualizar un tipo de precio
-  static async update(id, priceTypeData, userId) {
+  static async update(id, priceTypeData) {
     try {
       if (!id) {
         throw new Error('ID del tipo de precio es requerido');
-      }
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const { data, error } = await supabase
         .from('prices_types')
         .update(priceTypeData)
         .eq('id', id)
-        .eq('user_id', userId)
         .select();
 
       if (error) {
@@ -103,20 +99,22 @@ class pricesTypes {
   }
 
   // Eliminar un tipo de precio
-  static async delete(id, userId) {
+  static async delete(id) {
     try {
       if (!id) {
         throw new Error('ID del tipo de precio es requerido');
       }
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
-      }
 
-      // Primero verificar cuántos tipos de precio tiene el usuario
+      // Primero verificar cuántos tipos de precio tiene la empresa
       const { data: allPrices, error: countError } = await supabase
         .from('prices_types')
         .select('id')
-        .eq('user_id', userId);
+        .eq('empresa_id', (await supabase
+          .from('prices_types')
+          .select('empresa_id')
+          .eq('id', id)
+          .single()
+        ).data.empresa_id);
 
       if (countError) {
         console.error('Error al contar tipos de precio:', countError);
@@ -147,8 +145,7 @@ class pricesTypes {
       const { error } = await supabase
         .from('prices_types')
         .delete()
-        .eq('id', id)
-        .eq('user_id', userId);
+        .eq('id', id);
 
       if (error) {
         console.error('Error de Supabase:', error);

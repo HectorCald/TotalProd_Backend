@@ -15,6 +15,8 @@ class User {
     this.plan_id = data.plan_id || null; // Ahora viene de user_plans
     this.plan = data.plan || null; // Ahora viene de user_plans
     this.modules = data.plan?.modules || [];
+    this.empresa_id = data.empresa_id || null;
+    this.empresa = data.empresa || null;
   }
 
   // Método estático para crear un usuario
@@ -37,7 +39,7 @@ class User {
         first_name: userData.firstName,
         last_name: userData.lastName,
         email: userData.email,
-        phone: userData.phone,
+        phone: null, // Siempre null según nueva estructura
         password: userData.password,
         is_active: true
       };
@@ -72,7 +74,42 @@ class User {
         // No lanzar error aquí, solo log
       }
 
-      // 5. Retornar instancia del modelo User
+      // 5. Crear empresa para el usuario
+      const empresaData = {
+        name: userData.nameStore || 'Mi Empresa',
+        description: null, // Siempre null según nueva estructura
+        propietario_id: insertedUser.id
+      };
+
+      const { data: insertedEmpresa, error: empresaError } = await supabase
+        .from('empresas')
+        .insert([empresaData])
+        .select()
+        .single();
+
+      if (empresaError) {
+        console.error('❌ Error al crear empresa:', empresaError);
+        // No lanzar error aquí, solo log
+      }
+
+      // 6. Crear sucursal "Casa Matriz" para la empresa
+      if (insertedEmpresa) {
+        const sucursalData = {
+          empresa_id: insertedEmpresa.id,
+          name: 'Casa Matriz'
+        };
+
+        const { error: sucursalError } = await supabase
+          .from('sucursales')
+          .insert([sucursalData]);
+
+        if (sucursalError) {
+          console.error('❌ Error al crear sucursal:', sucursalError);
+          // No lanzar error aquí, solo log
+        }
+      }
+
+      // 7. Retornar instancia del modelo User
       return new User(insertedUser);
 
     } catch (error) {
@@ -153,10 +190,17 @@ class User {
   // Método estático para obtener usuario por ID
   static async getById(id) {
     try {
-      // 1. Obtener el usuario básico
+      // 1. Obtener el usuario básico con su empresa
       const { data: user, error } = await supabase
         .from('users')
-        .select('*')
+        .select(`
+          *,
+          empresas!empresas_propietario_id_fkey (
+            id,
+            name,
+            description
+          )
+        `)
         .eq('id', id)
         .single();
 
@@ -212,6 +256,16 @@ class User {
       } else {
         user.plan = null;
         user.plan_id = null;
+      }
+
+      // 4. Procesar datos de la empresa
+      if (user.empresas && user.empresas.length > 0) {
+        user.empresa = user.empresas[0]; // El usuario es propietario de una empresa
+        user.empresa_id = user.empresas[0].id;
+        delete user.empresas; // Limpiar datos innecesarios
+      } else {
+        user.empresa = null;
+        user.empresa_id = null;
       }
       
       const userInstance = new User(user);

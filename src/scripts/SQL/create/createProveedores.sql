@@ -5,6 +5,7 @@ CREATE TABLE proveedores (
     location POINT, -- coordenadas lat/lon
     description TEXT,
     total_orders INT DEFAULT 0, -- contador de pedidos
-    user_id UUID REFERENCES users(id),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    sucu_id UUID REFERENCES sucursales(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT proveedores_sucu_id_fkey FOREIGN KEY (sucu_id) REFERENCES sucursales (id)
 );

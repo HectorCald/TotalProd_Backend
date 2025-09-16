@@ -5,7 +5,16 @@ class categoryAcopioController {
   // Obtener todas las categorías
   static async getAll(req, res) {
     try {
-      const categories = await categoryAcopio.getAll(req.user.id);
+      const empresaId = req.query.empresa_id;
+      
+      if (!empresaId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
+      const categories = await categoryAcopio.getAll(empresaId);
       
       res.status(200).json({
         success: true,
@@ -24,7 +33,7 @@ class categoryAcopioController {
   // Crear una categoría
   static async create(req, res) {
     try {
-      const { name } = req.body;
+      const { name, empresa_id } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -34,10 +43,17 @@ class categoryAcopioController {
         });
       }
 
+      if (!empresa_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
       // Crear la categoría
       const newCategory = await categoryAcopio.create({
         name: name.trim()
-      }, req.user.id);
+      }, empresa_id);
 
       res.status(201).json({
         success: true,
@@ -76,7 +92,7 @@ class categoryAcopioController {
       // Actualizar la categoría
       const updatedCategory = await categoryAcopio.update(id, {
         name: name.trim()
-      }, req.user.id);
+      });
 
       res.status(200).json({
         success: true,
@@ -105,7 +121,7 @@ class categoryAcopioController {
       }
 
       // Eliminar la categoría
-      await categoryAcopio.delete(id, req.user.id);
+      await categoryAcopio.delete(id);
 
       res.status(200).json({
         success: true,

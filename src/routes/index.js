@@ -14,8 +14,10 @@ const movimientosAcopioRoutes = require('./movimientosAcopioRoutes');
 const movimientosAlmacenRoutes = require('./movimientosAlmacenRoutes');
 const pedidosAcopioRoutes = require('./pedidosAcopioRoutes');
 const pedidosAlmacenRoutes = require('./pedidosAlmacenRoutes');
+const modulesRoutes = require('./modulesRoutes');
 const planRoutes = require('./planRoutes');
 const codigoPromocionalRoutes = require('./codigoPromocionalRoutes');
+const sucursalesRoutes = require('./sucursalesRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -75,10 +77,16 @@ router.use('/pedidos-acopio', pedidosAcopioRoutes);
 // Rutas de pedidos de almacén
 router.use('/pedidos-almacen', pedidosAlmacenRoutes);
 
+// Rutas de módulos
+router.use('/modules', modulesRoutes);
+
 // Rutas de planes
 router.use('/plans', planRoutes);
 
 // Rutas de códigos promocionales
 router.use('/codigo-promocional', codigoPromocionalRoutes);
+
+// Rutas de sucursales
+router.use('/sucursales', sucursalesRoutes);
 
 module.exports = router;

@@ -1,7 +1,7 @@
 CREATE TABLE category_almacen (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
+    empresa_id UUID NOT NULL,
     name VARCHAR NOT NULL,
-    CONSTRAINT category_almacen_user_id_fkey 
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    CONSTRAINT category_almacen_empresa_id_fkey 
+        FOREIGN KEY (empresa_id) REFERENCES empresas (id)
 );

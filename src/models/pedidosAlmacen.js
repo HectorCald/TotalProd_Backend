@@ -2,7 +2,7 @@ const { supabase } = require('../config/supabase');
 
 class pedidosAlmacen {
   // Crear un pedido
-  static async create(pedidoData, userId) {
+  static async create(pedidoData, userId, empresaId) {
     try {
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
         throw new Error('La lista de productos es requerida');
@@ -12,9 +12,14 @@ class pedidosAlmacen {
         throw new Error('ID del usuario es requerido');
       }
 
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
+      }
+
       // Crear el pedido principal
       const pedidoPrincipal = {
         user_id: userId,
+        empresa_id: empresaId,
         observaciones: pedidoData.observaciones || null,
         estado: 'Pendiente'
       };
@@ -87,11 +92,11 @@ class pedidosAlmacen {
     }
   }
 
-  // Obtener todos los pedidos del usuario
-  static async getAll(userId, page = 1, limit = 20) {
+  // Obtener todos los pedidos de la empresa
+  static async getAll(empresaId, page = 1, limit = 20) {
     try {
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
       }
 
       const offset = (page - 1) * limit;
@@ -109,7 +114,7 @@ class pedidosAlmacen {
             )
           )
         `)
-        .eq('user_id', userId)
+        .eq('empresa_id', empresaId)
         .order('fecha', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -121,7 +126,7 @@ class pedidosAlmacen {
       const { count, error: countError } = await supabase
         .from('pedidos_almacen')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
+        .eq('empresa_id', empresaId);
 
       if (countError) {
         throw new Error(`Error al contar pedidos: ${countError.message}`);
@@ -149,14 +154,10 @@ class pedidosAlmacen {
   }
 
   // Obtener un pedido por ID
-  static async getById(pedidoId, userId) {
+  static async getById(pedidoId) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
-      }
-
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
       }
 
       const { data: pedido, error } = await supabase
@@ -173,7 +174,6 @@ class pedidosAlmacen {
           )
         `)
         .eq('id', pedidoId)
-        .eq('user_id', userId)
         .single();
 
       if (error) {
@@ -199,7 +199,7 @@ class pedidosAlmacen {
   }
 
   // Actualizar estado del pedido
-  static async updateEstado(pedidoId, nuevoEstado, userId) {
+  static async updateEstado(pedidoId, nuevoEstado) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
@@ -209,15 +209,10 @@ class pedidosAlmacen {
         throw new Error('Nuevo estado es requerido');
       }
 
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
-      }
-
       const { data, error } = await supabase
         .from('pedidos_almacen')
         .update({ estado: nuevoEstado })
         .eq('id', pedidoId)
-        .eq('user_id', userId)
         .select()
         .single();
 
@@ -273,6 +268,50 @@ class pedidosAlmacen {
 
     } catch (error) {
       console.error('Error en pedidosAlmacen.verificarProductoEnPedidos:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Eliminar pedido (elimina primero los detalles, luego el pedido)
+  static async eliminar(pedidoId) {
+    try {
+      if (!pedidoId) {
+        throw new Error('ID del pedido es requerido');
+      }
+
+      // Primero eliminar los detalles del pedido
+      const { error: detallesError } = await supabase
+        .from('pedido_almacen_detalle')
+        .delete()
+        .eq('pedido_almacen_id', pedidoId);
+
+      if (detallesError) {
+        throw new Error(`Error al eliminar los detalles del pedido: ${detallesError.message}`);
+      }
+
+      // Luego eliminar el pedido principal
+      const { error: pedidoError } = await supabase
+        .from('pedidos_almacen')
+        .delete()
+        .eq('id', pedidoId);
+
+      if (pedidoError) {
+        if (pedidoError.code === 'PGRST116') {
+          throw new Error('Pedido no encontrado');
+        }
+        throw new Error(`Error al eliminar el pedido: ${pedidoError.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Pedido eliminado exitosamente'
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacen.eliminar:', error);
       return {
         success: false,
         message: error.message

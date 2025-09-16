@@ -2,16 +2,16 @@ const proveedor = require('../models/proveedores');
 
 class proveedoresController {
 
-  // Obtener todos los clientes
+  // Obtener todos los proveedores de una sucursal
   static async getAll(req, res) {
     try {
-      // Obtener el userId del usuario autenticado
-      const userId = req.user?.id;
+      // Obtener el sucu_id de la query
+      const sucuId = req.query.sucu_id;
       
-      if (!userId) {
-        return res.status(401).json({
+      if (!sucuId) {
+        return res.status(400).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'ID de la sucursal es requerido'
         });
       }
 
@@ -21,7 +21,7 @@ class proveedoresController {
       const search = req.query.search || '';
       const offset = (page - 1) * limit;
 
-      const result = await proveedor.getAllPaginated(userId, { page, limit, offset, search });
+      const result = await proveedor.getAllPaginated(sucuId, { page, limit, offset, search });
       
       res.status(200).json({
         success: true,
@@ -47,13 +47,20 @@ class proveedoresController {
   // Crear un proveedor
   static async create(req, res) {
     try {
-      const { name, phone, direccion, description, location } = req.body;
+      const { name, phone, direccion, description, location, sucu_id } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
         return res.status(400).json({
           success: false,
           message: 'El nombre es obligatorio'
+        });
+      }
+
+      if (!sucu_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la sucursal es requerido'
         });
       }
 
@@ -64,7 +71,7 @@ class proveedoresController {
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
         location: location || null
-      }, req.user.id);
+      }, sucu_id);
 
       res.status(201).json({
         success: true,
@@ -80,7 +87,7 @@ class proveedoresController {
     }
   }
 
-  // Eliminar un cliente
+  // Eliminar un proveedor
   static async delete(req, res) {
     try {
       const { id } = req.params;
@@ -92,8 +99,9 @@ class proveedoresController {
         });
       }
 
-      // Eliminar el cliente
-      await proveedor.delete(id, req.user.id);
+
+      // Eliminar el proveedor
+      await proveedor.delete(id);
 
       res.status(200).json({
         success: true,
@@ -121,6 +129,7 @@ class proveedoresController {
         });
       }
 
+
       if (!name || !name.trim()) {
         return res.status(400).json({
           success: false,
@@ -135,7 +144,7 @@ class proveedoresController {
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
         location: location || null
-      }, req.user.id);
+      });
 
       res.status(200).json({
         success: true,
