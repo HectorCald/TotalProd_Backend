@@ -276,6 +276,83 @@ class User {
     }
   }
 
+  // Método estático para obtener el plan del propietario de la empresa
+  static async getPlanByEmpresaId(empresaId) {
+    try {
+      // 1. Obtener la empresa con su propietario
+      const { data: empresa, error: empresaError } = await supabase
+        .from('empresas')
+        .select(`
+          id,
+          name,
+          propietario_id
+        `)
+        .eq('id', empresaId)
+        .single();
+
+      if (empresaError) {
+        if (empresaError.code === 'PGRST116') {
+          return null; // Empresa no encontrada
+        }
+        console.error('Error al obtener empresa:', empresaError);
+        throw new Error('No se pudo obtener la empresa');
+      }
+
+      if (!empresa || !empresa.propietario_id) {
+        return null; // Empresa sin propietario
+      }
+
+      // 2. Obtener el plan del propietario
+      const { data: activeUserPlan, error: userPlanError } = await supabase
+        .from('user_plans')
+        .select(`
+          *,
+          plans (
+            id,
+            name,
+            price,
+            duration,
+            plan_modules (
+              modules (
+                id,
+                name,
+                description
+              )
+            )
+          )
+        `)
+        .eq('user_id', empresa.propietario_id)
+        .order('start_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (userPlanError && userPlanError.code !== 'PGRST116') {
+        console.error('Error al obtener plan del propietario:', userPlanError);
+        // No lanzar error, continuar sin plan
+      }
+      
+      // 3. Procesar los datos del plan
+      if (activeUserPlan && activeUserPlan.plans) {
+        const plan = activeUserPlan.plans;
+        plan.is_active = activeUserPlan.is_active;
+        plan.end_date = activeUserPlan.end_date;
+        
+        // Procesar los módulos del plan
+        if (activeUserPlan.plans.plan_modules) {
+          plan.modules = activeUserPlan.plans.plan_modules.map(pm => pm.modules);
+          delete plan.plan_modules; // Limpiar datos innecesarios
+        }
+        
+        return plan;
+      }
+
+      return null; // No hay plan activo
+    } catch (error) {
+      console.error('Error al obtener plan por empresa ID:', error);
+      throw new Error('No se pudo obtener el plan de la empresa');
+    }
+  }
+
   // Método estático para verificar contraseña actual
   static async verifyPassword(userId, currentPassword) {
     try {

@@ -2,9 +2,12 @@ const express = require('express');
 const router = express.Router();
 const pricesTypesController = require('../controllers/pricesTypesController');
 const { requireAuth } = require('../middleware/auth');
+const { requireModuleAccess } = require('../middleware/moduleAuth');
 
 // Aplicar middleware de autenticación a todas las rutas
 router.use(requireAuth);
+
+router.use(requireModuleAccess('Precios'));
 
 // GET /api/prices-types - Obtener todos los tipos de precios
 router.get('/', pricesTypesController.getAll);
