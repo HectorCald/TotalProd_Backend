@@ -21,7 +21,7 @@ class clientsController {
       const search = req.query.search || '';
       const offset = (page - 1) * limit;
 
-      const result = await client.getAll(sucuId, { page, limit, offset, search });
+      const result = await client.getAllPaginated(sucuId, { page, limit, offset, search });
       
       res.status(200).json({
         success: true,

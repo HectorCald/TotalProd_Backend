@@ -4,7 +4,6 @@ const { supabase } = require('../config/supabase');
 // Middleware para verificar acceso a módulos según el plan del propietario de la empresa
 const requireModuleAccess = (moduleName) => {
     return async (req, res, next) => {
-        console.log('🚀 moduleAuth.js - MIDDLEWARE EJECUTÁNDOSE para módulo:', moduleName);
         try {
       // Obtener el empresa_id del localStorage (enviado desde el frontend)
       let empresaId = req.body.empresa_id || req.query.empresa_id || req.params.empresaId;
@@ -14,21 +13,17 @@ const requireModuleAccess = (moduleName) => {
         const match = req.url.match(/\/empresa\/([^\/\?]+)/);
         if (match) {
           empresaId = match[1];
-          console.log('🔍 moduleAuth - empresaId extraído de URL:', empresaId);
         }
       }
       
-      console.log('🔍 moduleAuth - empresaId inicial:', empresaId);
-      console.log('🔍 moduleAuth - req.params.empresaId:', req.params.empresaId);
-      console.log('🔍 moduleAuth - req.url:', req.url);
-      
       // Si no hay empresa_id pero hay sucu_id, obtener empresa_id de la sucursal
-      if (!empresaId && req.query.sucu_id) {
+      if (!empresaId && (req.query.sucu_id || req.body.sucu_id)) {
+        const sucuId = req.query.sucu_id || req.body.sucu_id;
         try {
           const { data: sucursal, error } = await supabase
             .from('sucursales')
             .select('empresa_id')
-            .eq('id', req.query.sucu_id)
+            .eq('id', sucuId)
             .single();
           
           if (!error && sucursal) {
@@ -42,7 +37,6 @@ const requireModuleAccess = (moduleName) => {
             
             // Para operaciones de eliminación y actualización, no requerir empresa_id
             if (!empresaId && (req.method === 'DELETE' || req.method === 'PUT' || req.method === 'PATCH')) {
-                console.log('✅ moduleAuth - Operación de escritura sin empresa_id, continuando...');
                 next();
                 return;
             }
