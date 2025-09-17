@@ -671,6 +671,85 @@ class movimientosAlmacen {
             return { success: false, message: 'Error interno del servidor' };
         }
     }
+
+    // Obtener movimientos por producto
+    static async getByProduct(productId, sucuId) {
+        try {
+            if (!productId) {
+                throw new Error('ID del producto es requerido');
+            }
+
+            if (!sucuId) {
+                throw new Error('ID de la sucursal es requerido');
+            }
+
+            // Obtener movimientos que contengan el producto específico
+            const { data: movimientos, error } = await supabase
+                .from('movimientos_almacen')
+                .select(`
+                    *,
+                    cliente:clients(id, name),
+                    proveedor:proveedores(id, name)
+                `)
+                .eq('sucu_id', sucuId)
+                .order('fecha', { ascending: false });
+
+            if (error) {
+                console.error('Error obteniendo movimientos:', error);
+                return { success: false, message: 'Error al obtener movimientos', error };
+            }
+
+            // Filtrar movimientos que contengan el producto específico
+            const movimientosConProducto = [];
+            
+            for (const movimiento of movimientos) {
+                const { data: productos } = await supabase
+                    .from('movimiento_almacen_producto')
+                    .select(`
+                        *,
+                        producto:producto_almacen_id(
+                            id, 
+                            name, 
+                            description
+                        )
+                    `)
+                    .eq('movimiento_almacen_id', movimiento.id)
+                    .eq('producto_almacen_id', productId);
+
+                if (productos && productos.length > 0) {
+                    // Obtener el stock actualizado del producto en la sucursal
+                    const { data: stockActual } = await supabase
+                        .from('productos_sucursal')
+                        .select('stock')
+                        .eq('producto_id', productId)
+                        .eq('sucursal_id', sucuId)
+                        .single();
+
+                    const productosConStock = productos.map(productoMovimiento => ({
+                        ...productoMovimiento,
+                        producto: {
+                            ...productoMovimiento.producto,
+                            stock: stockActual ? stockActual.stock : 0
+                        }
+                    }));
+
+                    movimientosConProducto.push({
+                        ...movimiento,
+                        productos: productosConStock
+                    });
+                }
+            }
+
+            return {
+                success: true,
+                data: movimientosConProducto
+            };
+
+        } catch (error) {
+            console.error('Error en getByProduct:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
 }
 
 module.exports = movimientosAlmacen;

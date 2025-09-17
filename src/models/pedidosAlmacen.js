@@ -85,10 +85,46 @@ class pedidosAlmacen {
         throw new Error(`Error al obtener el pedido creado: ${fetchError.message}`);
       }
 
+      // Obtener nombres de usuario y personal
+      let user = null;
+      let personal = null;
+
+      // Si tiene user_id, obtener el usuario
+      if (pedidoCompleto.user_id) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .eq('id', pedidoCompleto.user_id)
+          .single();
+        user = {
+          id: userData.id,
+          name: `${userData.first_name} ${userData.last_name}`.trim()
+        };
+      }
+
+      // Si tiene personal_id, obtener el personal
+      if (pedidoCompleto.personal_id) {
+        const { data: personalData } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .eq('id', pedidoCompleto.personal_id)
+          .single();
+        personal = {
+          id: personalData.id,
+          name: `${personalData.first_name} ${personalData.last_name}`.trim()
+        };
+      }
+
+      const pedidoConNombres = {
+        ...pedidoCompleto,
+        user,
+        personal
+      };
+
       return {
         success: true,
         message: 'Pedido creado exitosamente',
-        data: pedidoCompleto
+        data: pedidoConNombres
       };
 
     } catch (error) {
@@ -130,6 +166,52 @@ class pedidosAlmacen {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
       }
 
+      // Obtener nombres de usuarios y personal para cada pedido
+      const pedidosConNombres = await Promise.all(
+        pedidos.map(async (pedido) => {
+          let user = null;
+          let personal = null;
+
+          // Si tiene user_id, obtener el usuario
+          if (pedido.user_id) {
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('id, first_name, last_name')
+              .eq('id', pedido.user_id)
+              .single();
+            
+            if (!userError && userData) {
+              user = {
+                id: userData.id,
+                name: `${userData.first_name} ${userData.last_name}`.trim()
+              };
+            }
+          }
+
+          // Si tiene personal_id, obtener el personal
+          if (pedido.personal_id) {
+            const { data: personalData, error: personalError } = await supabase
+              .from('personal')
+              .select('id, first_name, last_name')
+              .eq('id', pedido.personal_id)
+              .single();
+            
+            if (!personalError && personalData) {
+              personal = {
+                id: personalData.id,
+                name: `${personalData.first_name} ${personalData.last_name}`.trim()
+              };
+            }
+          }
+
+          return {
+            ...pedido,
+            user,
+            personal
+          };
+        })
+      );
+
       // Obtener el total de pedidos para la paginación
       const { count, error: countError } = await supabase
         .from('pedidos_almacen')
@@ -143,7 +225,7 @@ class pedidosAlmacen {
       return {
         success: true,
         message: 'Pedidos obtenidos exitosamente',
-        data: pedidos,
+        data: pedidosConNombres,
         pagination: {
           currentPage: page,
           totalPages: Math.ceil(count / limit),
@@ -191,14 +273,188 @@ class pedidosAlmacen {
         throw new Error(`Error al obtener el pedido: ${error.message}`);
       }
 
+      // Obtener nombres de usuario y personal
+      let user = null;
+      let personal = null;
+
+      // Si tiene user_id, obtener el usuario
+      if (pedido.user_id) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .eq('id', pedido.user_id)
+          .single();
+        user = {
+          id: userData.id,
+          name: `${userData.first_name} ${userData.last_name}`.trim()
+        };
+      }
+
+      // Si tiene personal_id, obtener el personal
+      if (pedido.personal_id) {
+        const { data: personalData } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .eq('id', pedido.personal_id)
+          .single();
+        personal = {
+          id: personalData.id,
+          name: `${personalData.first_name} ${personalData.last_name}`.trim()
+        };
+      }
+
+      const pedidoConNombres = {
+        ...pedido,
+        user,
+        personal
+      };
+
       return {
         success: true,
         message: 'Pedido obtenido exitosamente',
-        data: pedido
+        data: pedidoConNombres
       };
 
     } catch (error) {
       console.error('Error en pedidosAlmacen.getById:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Actualizar pedido completo
+  static async update(pedidoId, pedidoData, userId, empresaId, personalId = null) {
+    try {
+      if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
+        throw new Error('La lista de productos es requerida');
+      }
+
+      if (!userId && !personalId) {
+        throw new Error('ID del usuario o personal es requerido');
+      }
+
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
+      }
+
+      // Verificar que el pedido existe
+      const { data: pedidoExistente, error: fetchError } = await supabase
+        .from('pedidos_almacen')
+        .select('id')
+        .eq('id', pedidoId)
+        .single();
+
+      if (fetchError || !pedidoExistente) {
+        throw new Error('Pedido no encontrado');
+      }
+
+      // Actualizar el pedido principal
+      const pedidoPrincipal = {
+        observaciones: pedidoData.observaciones || null
+      };
+
+      const { error: pedidoError } = await supabase
+        .from('pedidos_almacen')
+        .update(pedidoPrincipal)
+        .eq('id', pedidoId);
+
+      if (pedidoError) {
+        throw new Error(`Error al actualizar el pedido: ${pedidoError.message}`);
+      }
+
+      // Eliminar los detalles existentes
+      const { error: deleteDetallesError } = await supabase
+        .from('pedido_almacen_detalle')
+        .delete()
+        .eq('pedido_almacen_id', pedidoId);
+
+      if (deleteDetallesError) {
+        throw new Error(`Error al eliminar detalles existentes: ${deleteDetallesError.message}`);
+      }
+
+      // Crear los nuevos detalles del pedido
+      const detalles = pedidoData.productos.map(producto => ({
+        pedido_almacen_id: pedidoId,
+        producto_almacen_id: producto.id,
+        cantidad: producto.cantidad,
+        precio: producto.precio || 0
+      }));
+
+      const { error: detallesError } = await supabase
+        .from('pedido_almacen_detalle')
+        .insert(detalles);
+
+      if (detallesError) {
+        throw new Error(`Error al crear los nuevos detalles del pedido: ${detallesError.message}`);
+      }
+
+      // Obtener el pedido completo actualizado con detalles
+      const { data: pedidoCompleto, error: fetchCompletoError } = await supabase
+        .from('pedidos_almacen')
+        .select(`
+          *,
+          pedido_almacen_detalle (
+            *,
+            producto_almacen:producto_almacen_id (
+              id,
+              name,
+              description
+            )
+          )
+        `)
+        .eq('id', pedidoId)
+        .single();
+
+      if (fetchCompletoError) {
+        throw new Error(`Error al obtener el pedido actualizado: ${fetchCompletoError.message}`);
+      }
+
+      // Obtener nombres de usuario y personal
+      let user = null;
+      let personal = null;
+
+      // Si tiene user_id, obtener el usuario
+      if (pedidoCompleto.user_id) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .eq('id', pedidoCompleto.user_id)
+          .single();
+        user = {
+          id: userData.id,
+          name: `${userData.first_name} ${userData.last_name}`.trim()
+        };
+      }
+
+      // Si tiene personal_id, obtener el personal
+      if (pedidoCompleto.personal_id) {
+        const { data: personalData } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .eq('id', pedidoCompleto.personal_id)
+          .single();
+        personal = {
+          id: personalData.id,
+          name: `${personalData.first_name} ${personalData.last_name}`.trim()
+        };
+      }
+
+      const pedidoConNombres = {
+        ...pedidoCompleto,
+        user,
+        personal
+      };
+
+      return {
+        success: true,
+        message: 'Pedido actualizado exitosamente',
+        data: pedidoConNombres
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacen.update:', error);
       return {
         success: false,
         message: error.message

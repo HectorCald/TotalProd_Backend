@@ -15,6 +15,9 @@ router.get('/', movimientosAlmacenController.getAll);
 // Obtener movimientos por tipo (entrada/salida)
 router.get('/tipo/:tipo', movimientosAlmacenController.getByType);
 
+// Obtener movimientos por producto
+router.get('/product/:productId', movimientosAlmacenController.getByProduct);
+
 // Obtener un movimiento específico por ID
 router.get('/:id', movimientosAlmacenController.getById);
 

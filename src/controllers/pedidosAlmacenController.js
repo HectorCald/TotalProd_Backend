@@ -134,6 +134,79 @@ class pedidosAlmacenController {
     }
   }
 
+  // Actualizar pedido completo
+  static async update(req, res) {
+    try {
+      const { id } = req.params;
+      const { productos, observaciones, personal_id } = req.body;
+      const userId = req.user?.id;
+      const userType = req.user?.type;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del pedido es requerido'
+        });
+      }
+
+      // Validaciones básicas
+      if (!productos || !Array.isArray(productos) || productos.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'La lista de productos es requerida'
+        });
+      }
+
+      // Validar cada producto
+      for (const producto of productos) {
+        if (!producto.id) {
+          return res.status(400).json({
+            success: false,
+            message: 'ID del producto es requerido'
+          });
+        }
+
+        if (!producto.cantidad || producto.cantidad <= 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'La cantidad debe ser mayor a 0'
+          });
+        }
+      }
+
+      // Si es empleado, usar personal_id, si es usuario normal, usar userId
+      const finalUserId = userType === 'employee' ? null : userId;
+      const finalPersonalId = userType === 'employee' ? personal_id : null;
+
+      const pedidoData = {
+        productos,
+        observaciones
+      };
+
+      const result = await pedidosAlmacen.update(id, pedidoData, finalUserId, req.body.empresa_id, finalPersonalId);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacenController.update:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
   // Actualizar estado del pedido
   static async updateEstado(req, res) {
     try {

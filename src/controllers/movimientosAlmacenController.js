@@ -328,6 +328,47 @@ class movimientosAlmacenController {
             });
         }
     }
+
+    // Obtener movimientos por producto
+    static async getByProduct(req, res) {
+        try {
+            const { productId } = req.params;
+            const sucu_id = req.query.sucu_id;
+
+            if (!sucu_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
+
+            if (!productId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID del producto es requerido'
+                });
+            }
+
+            const result = await movimientosAlmacen.getByProduct(productId, sucu_id);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json({
+                success: true,
+                data: result.data
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.getByProduct:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
 }
 
 module.exports = movimientosAlmacenController;
