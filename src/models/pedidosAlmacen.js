@@ -2,7 +2,7 @@ const { supabase } = require('../config/supabase');
 
 class pedidosAlmacen {
   // Crear un pedido
-  static async create(pedidoData, userId, empresaId, personalId = null) {
+  static async create(pedidoData, userId, empresaId, personalId = null, sucuId = null) {
     try {
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
         throw new Error('La lista de productos es requerida');
@@ -16,9 +16,14 @@ class pedidosAlmacen {
         throw new Error('ID de la empresa es requerido');
       }
 
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
+      }
+
       // Crear el pedido principal
       const pedidoPrincipal = {
         empresa_id: empresaId,
+        sucu_id: sucuId,
         observaciones: pedidoData.observaciones || null,
         estado: 'Pendiente'
       };
@@ -156,6 +161,10 @@ class pedidosAlmacen {
               name,
               description
             )
+          ),
+          sucursal:sucu_id (
+            id,
+            name
           )
         `)
         .eq('empresa_id', empresaId)
@@ -352,6 +361,7 @@ class pedidosAlmacen {
 
       // Actualizar el pedido principal
       const pedidoPrincipal = {
+        sucu_id: sucuId,
         observaciones: pedidoData.observaciones || null
       };
 

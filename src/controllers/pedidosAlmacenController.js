@@ -49,7 +49,7 @@ class pedidosAlmacenController {
         observaciones
       };
 
-      const result = await pedidosAlmacen.create(pedidoData, finalUserId, req.body.empresa_id, finalPersonalId);
+      const result = await pedidosAlmacen.create(pedidoData, finalUserId, req.body.empresa_id, finalPersonalId, req.body.sucu_id);
 
       if (result.success) {
         return res.status(201).json(result);

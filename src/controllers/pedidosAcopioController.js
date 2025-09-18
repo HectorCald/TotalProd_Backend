@@ -34,7 +34,7 @@ class pedidosAcopioController {
       }
 
       const pedidoData = { productos, observaciones };
-      const result = await pedidosAcopio.create(pedidoData, finalUserId, req.body.empresa_id, finalPersonalId);
+      const result = await pedidosAcopio.create(pedidoData, finalUserId, req.body.empresa_id, finalPersonalId, req.body.sucu_id);
 
       if (result.success) {
         return res.status(201).json(result);

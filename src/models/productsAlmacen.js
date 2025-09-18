@@ -81,11 +81,13 @@ class productsAlmacen {
   }
 
   // Método para obtener todos los productos de una empresa con stock de sucursal
-  static async getAll(empresaId, sucuId = null) {
+  static async getAll(empresaId, sucuId = null, page = 1, limit = 20, search = '', categoria = null, ordenamiento = 'nombre_asc') {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
       }
+
+      const offset = (page - 1) * limit;
 
       let query = supabase
         .from('products_almacen')
@@ -122,11 +124,57 @@ class productsAlmacen {
             stock,
             sucursal_id
           )
-        `)
-        .eq('empresa_id', empresaId)
-        .order('name', { ascending: true });
+        `, { count: 'exact' })
+        .eq('empresa_id', empresaId);
 
-      const { data, error } = await query;
+      // Aplicar búsqueda si existe
+      if (search && search.trim() !== '') {
+        query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%,codigo_barras.ilike.%${search}%`);
+      }
+
+      // Aplicar filtro de categoría
+      if (categoria !== null) {
+        if (categoria === '') {
+          // Productos sin categoría
+          query = query.is('category_id', null);
+        } else {
+          // Productos con categoría específica
+          query = query.eq('category_id', categoria);
+        }
+      }
+
+      // Aplicar ordenamiento
+      let orderColumn = 'name';
+      let ascending = true;
+      
+      switch (ordenamiento) {
+        case 'nombre_asc':
+          orderColumn = 'name';
+          ascending = true;
+          break;
+        case 'nombre_desc':
+          orderColumn = 'name';
+          ascending = false;
+          break;
+        case 'stock_asc':
+          // Para stock, necesitamos ordenar por productos_sucursal
+          orderColumn = 'name'; // Temporal, se manejará después
+          ascending = true;
+          break;
+        case 'stock_desc':
+          orderColumn = 'name'; // Temporal, se manejará después
+          ascending = false;
+          break;
+        default:
+          orderColumn = 'name';
+          ascending = true;
+      }
+
+      query = query
+        .order(orderColumn, { ascending })
+        .range(offset, offset + limit - 1);
+
+      const { data, error, count } = await query;
 
       if (error) {
         console.error('Error de Supabase:', error);
@@ -139,9 +187,32 @@ class productsAlmacen {
           const stockSucursal = producto.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
           producto.stock = stockSucursal ? stockSucursal.stock : 0;
         });
+
+        // Aplicar ordenamiento por stock si es necesario (después de agregar stock)
+        if (ordenamiento === 'stock_asc' || ordenamiento === 'stock_desc') {
+          data.sort((a, b) => {
+            const stockA = a.stock || 0;
+            const stockB = b.stock || 0;
+            return ordenamiento === 'stock_asc' ? stockA - stockB : stockB - stockA;
+          });
+        }
       }
 
-      return data || [];
+      const totalPages = Math.ceil(count / limit);
+      const hasNextPage = page < totalPages;
+      const hasPrevPage = page > 1;
+
+      return {
+        products: data || [],
+        pagination: {
+          currentPage: page,
+          totalPages,
+          hasNextPage,
+          hasPrevPage,
+          totalItems: count,
+          itemsPerPage: limit
+        }
+      };
     } catch (error) {
       console.error('Error al obtener los productos:', error);
       throw new Error('No se pudo obtener los productos');

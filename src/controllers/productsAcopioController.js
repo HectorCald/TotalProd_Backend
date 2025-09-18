@@ -5,8 +5,14 @@ class productsAcopioController {
   // Obtener todos los productos de la empresa
   static async getAll(req, res) {
     try {
-      // Obtener el empresa_id de la empresa seleccionada
+      // Obtener parámetros de la query
       const empresaId = req.query.empresa_id;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const search = req.query.search || '';
+      const categoria = req.query.categoria || null;
+      const tipoMedida = req.query.tipoMedida || null;
+      const ordenamiento = req.query.ordenamiento || 'nombre_asc';
       
       if (!empresaId) {
         return res.status(400).json({
@@ -15,12 +21,13 @@ class productsAcopioController {
         });
       }
 
-      const products = await productsAcopio.getAll(empresaId);
+      const result = await productsAcopio.getAll(empresaId, page, limit, search, categoria, tipoMedida, ordenamiento);
       
       res.status(200).json({
         success: true,
         message: 'Productos obtenidos exitosamente',
-        data: products
+        data: result.products,
+        pagination: result.pagination
       });
     } catch (error) {
       console.error('Error en getAll:', error);

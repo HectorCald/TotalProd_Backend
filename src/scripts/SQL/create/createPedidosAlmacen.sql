@@ -7,6 +7,9 @@ CREATE TABLE pedidos_almacen (
     observaciones VARCHAR,
     fecha TIMESTAMP NOT NULL DEFAULT now(),
     estado VARCHAR NOT NULL,
+    sucu_id UUID NOT NULL,
     CONSTRAINT pedidos_almacen_empresa_id_fkey
-        FOREIGN KEY (empresa_id) REFERENCES empresas (id)
+        FOREIGN KEY (empresa_id) REFERENCES empresas (id),
+    CONSTRAINT pedidos_almacen_sucu_id_fkey
+        FOREIGN KEY (sucu_id) REFERENCES sucursales (id)
 );

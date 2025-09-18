@@ -2,7 +2,7 @@ const { supabase } = require('../config/supabase');
 
 class pedidosAcopio {
   // Crear un pedido (un registro por cada producto)
-  static async create(pedidoData, userId, empresaId, personalId = null) {
+  static async create(pedidoData, userId, empresaId, personalId = null, sucuId = null) {
     try {
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
         throw new Error('La lista de productos es requerida');
@@ -16,10 +16,15 @@ class pedidosAcopio {
         throw new Error('ID de la empresa es requerido');
       }
 
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
+      }
+
       // Crear un registro por cada producto
       const pedidos = pedidoData.productos.map(producto => {
         const pedido = {
           empresa_id: empresaId,
+          sucu_id: sucuId,
           observaciones: pedidoData.observaciones || null,
           estado: 'Pendiente',
           producto_acopio_id: producto.id,
@@ -112,6 +117,10 @@ class pedidosAcopio {
             id,
             name,
             description
+          ),
+          sucursal:sucu_id (
+            id,
+            name
           )
         `)
         .eq('empresa_id', empresaId)
