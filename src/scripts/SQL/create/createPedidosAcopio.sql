@@ -15,5 +15,5 @@ CREATE TABLE pedidos_acopio (
     CONSTRAINT pedidos_acopio_empresa_id_fkey
         FOREIGN KEY (empresa_id) REFERENCES empresas (id),
     CONSTRAINT pedidos_acopio_sucu_id_fkey
-        FOREIGN KEY (sucu_id) REFERENCES sucursales (id)
+        FOREIGN KEY (sucu_id) REFERENCES sucursales (id),
 );

@@ -4,7 +4,7 @@ class movimientosAlmacenController {
     // Crear un nuevo movimiento
     static async create(req, res) {
         try {
-            const { sucu_id, personal_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, productos, restar_ingredientes } = req.body;
+            const { sucu_id, personal_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes } = req.body;
             const user_id = req.user?.id;
             const userType = req.user?.type; // Verificar si es empleado o usuario normal
 
@@ -17,6 +17,14 @@ class movimientosAlmacenController {
                 return res.status(400).json({
                     success: false,
                     message: 'ID de la sucursal es requerido'
+                });
+            }
+
+            // Validar que se proporcione precio_id
+            if (!precio_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID del precio es requerido'
                 });
             }
 
@@ -89,6 +97,7 @@ class movimientosAlmacenController {
                 metodo_pago: tipo === 'salida' ? (metodo_pago || null) : null,
                 cliente_id: tipo === 'salida' ? (cliente_id || null) : null,
                 proveedor_id: tipo === 'entrada' ? (proveedor_id || null) : null,
+                precio_id,
                 productos
             };
 

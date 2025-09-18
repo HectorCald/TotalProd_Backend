@@ -4,7 +4,7 @@ class movimientosAlmacen {
     // Crear un nuevo movimiento de almacén
     static async create(movimientoData) {
         try {
-            const { user_id, personal_id, sucu_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, productos } = movimientoData;
+            const { user_id, personal_id, sucu_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos } = movimientoData;
 
             // Iniciar transacción
             const insertData = {
@@ -12,6 +12,7 @@ class movimientosAlmacen {
                 tipo,
                 observaciones,
                 metodo_pago,
+                precio_id,
                 cliente_id: cliente_id || null,
                 proveedor_id: proveedor_id || null
             };
@@ -211,7 +212,8 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name),
-                    proveedor:proveedores(id, name)
+                    proveedor:proveedores(id, name),
+                    precio:prices_types(id, name)
                 `)
                 .eq('id', id)
                 .single();
@@ -281,7 +283,8 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name),
-                    proveedor:proveedores(id, name)
+                    proveedor:proveedores(id, name),
+                    precio:prices_types(id, name)
                 `, { count: 'exact' })
                 .eq('sucu_id', sucuId);
 
@@ -349,7 +352,8 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name),
-                    proveedor:proveedores(id, name)
+                    proveedor:proveedores(id, name),
+                    precio:prices_types(id, name)
                 `, { count: 'exact' })
                 .eq('sucu_id', sucuId)
                 .eq('tipo', tipo)
@@ -451,6 +455,9 @@ class movimientosAlmacen {
                 .from('movimientos_almacen')
                 .select(`
                     *,
+                    cliente:clients(id, name),
+                    proveedor:proveedores(id, name),
+                    precio:prices_types(id, name),
                     productos:movimiento_almacen_producto (
                         id,
                         cantidad,
@@ -689,7 +696,8 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name),
-                    proveedor:proveedores(id, name)
+                    proveedor:proveedores(id, name),
+                    precio:prices_types(id, name)
                 `)
                 .eq('sucu_id', sucuId)
                 .order('fecha', { ascending: false });

@@ -5,15 +5,18 @@ CREATE TABLE movimientos_almacen (
     personal_id TEXT,
     fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
     observaciones VARCHAR,
-    metodo_pago VARCHAR,
+    metodo_pago TEXT,
     cliente_id UUID,
     proveedor_id UUID,
     estado VARCHAR,
     tipo VARCHAR NOT NULL,
+    precio_id UUID NOT NULL,
     CONSTRAINT movimientos_almacen_cliente_id_fkey
         FOREIGN KEY (cliente_id) REFERENCES clients (id),
     CONSTRAINT movimientos_almacen_proveedor_id_fkey
         FOREIGN KEY (proveedor_id) REFERENCES proveedores (id),
     CONSTRAINT movimientos_almacen_sucu_id_fkey
-        FOREIGN KEY (sucu_id) REFERENCES sucursales (id)
+        FOREIGN KEY (sucu_id) REFERENCES sucursales (id),
+    CONSTRAINT movimientos_almacen_precio_id_fkey
+        FOREIGN KEY (precio_id) REFERENCES prices_types (id)
 );

@@ -20,10 +20,15 @@ class pedidosAlmacen {
         throw new Error('ID de la sucursal es requerido');
       }
 
+      if (!pedidoData.precio_id) {
+        throw new Error('ID del precio es requerido');
+      }
+
       // Crear el pedido principal
       const pedidoPrincipal = {
         empresa_id: empresaId,
         sucu_id: sucuId,
+        precio_id: pedidoData.precio_id,
         observaciones: pedidoData.observaciones || null,
         estado: 'Pendiente'
       };
@@ -163,6 +168,10 @@ class pedidosAlmacen {
             )
           ),
           sucursal:sucu_id (
+            id,
+            name
+          ),
+          precio:prices_types (
             id,
             name
           )
@@ -359,10 +368,10 @@ class pedidosAlmacen {
         throw new Error('Pedido no encontrado');
       }
 
-      // Actualizar el pedido principal
+      // Actualizar el pedido principal (solo observaciones y precio_id, NO sucursal/empresa)
       const pedidoPrincipal = {
-        sucu_id: sucuId,
-        observaciones: pedidoData.observaciones || null
+        observaciones: pedidoData.observaciones || null,
+        precio_id: pedidoData.precio_id || null
       };
 
       const { error: pedidoError } = await supabase
@@ -412,6 +421,14 @@ class pedidosAlmacen {
               name,
               description
             )
+          ),
+          sucursal:sucu_id (
+            id,
+            name
+          ),
+          precio:prices_types (
+            id,
+            name
           )
         `)
         .eq('id', pedidoId)

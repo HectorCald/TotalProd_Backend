@@ -27,6 +27,13 @@ class pedidosAlmacenController {
         });
       }
 
+      if (!req.body.precio_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del precio es requerido'
+        });
+      }
+
       // Validar cada producto
       for (const producto of productos) {
         if (!producto.id) {
@@ -46,7 +53,8 @@ class pedidosAlmacenController {
 
       const pedidoData = {
         productos,
-        observaciones
+        observaciones,
+        precio_id: req.body.precio_id
       };
 
       const result = await pedidosAlmacen.create(pedidoData, finalUserId, req.body.empresa_id, finalPersonalId, req.body.sucu_id);
@@ -187,7 +195,8 @@ class pedidosAlmacenController {
 
       const pedidoData = {
         productos,
-        observaciones
+        observaciones,
+        precio_id: req.body.precio_id
       };
 
       const result = await pedidosAlmacen.update(id, pedidoData, finalUserId, req.body.empresa_id, finalPersonalId);
