@@ -175,7 +175,53 @@ class movimientosAcopio {
         throw new Error('No se pudo obtener los movimientos');
       }
 
-      return data || [];
+      // Obtener nombres de usuarios y personal para cada movimiento
+      const movimientosConNombres = await Promise.all(
+        (data || []).map(async (movimiento) => {
+          let user = null;
+          let personal = null;
+
+          // Si tiene user_id, obtener el usuario
+          if (movimiento.user_id) {
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('id, first_name, last_name')
+              .eq('id', movimiento.user_id)
+              .single();
+            
+            if (!userError && userData) {
+              user = {
+                id: userData.id,
+                name: `${userData.first_name} ${userData.last_name}`.trim()
+              };
+            }
+          }
+
+          // Si tiene personal_id, obtener el personal
+          if (movimiento.personal_id) {
+            const { data: personalData, error: personalError } = await supabase
+              .from('personal')
+              .select('id, first_name, last_name')
+              .eq('id', movimiento.personal_id)
+              .single();
+            
+            if (!personalError && personalData) {
+              personal = {
+                id: personalData.id,
+                name: `${personalData.first_name} ${personalData.last_name}`.trim()
+              };
+            }
+          }
+
+          return {
+            ...movimiento,
+            user,
+            personal
+          };
+        })
+      );
+
+      return movimientosConNombres;
     } catch (error) {
       console.error('Error al obtener movimientos por producto:', error);
       throw error;
@@ -183,7 +229,7 @@ class movimientosAcopio {
   }
 
   // Obtener todos los movimientos
-  static async getAll(sucuId, page = 1, limit = 20, tipo = null, ordenamiento = 'fecha_desc') {
+  static async getAll(sucuId, page = 1, limit = 10, tipo = null, ordenamiento = 'fecha_desc') {
     try {
       if (!sucuId) {
         throw new Error('ID de la sucursal es requerido');
@@ -258,9 +304,62 @@ class movimientosAcopio {
         throw new Error('No se pudo obtener los movimientos');
       }
 
+      // Obtener nombres de usuarios y personal para cada movimiento
+      const movimientosConNombres = await Promise.all(
+        (data || []).map(async (movimiento) => {
+          let user = null;
+          let personal = null;
+
+          // Si tiene user_id, obtener el usuario
+          if (movimiento.user_id) {
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('id, first_name, last_name')
+              .eq('id', movimiento.user_id)
+              .single();
+            
+            if (!userError && userData) {
+              user = {
+                id: userData.id,
+                name: `${userData.first_name} ${userData.last_name}`.trim()
+              };
+            }
+          }
+
+          // Si tiene personal_id, obtener el personal
+          if (movimiento.personal_id) {
+            const { data: personalData, error: personalError } = await supabase
+              .from('personal')
+              .select('id, first_name, last_name')
+              .eq('id', movimiento.personal_id)
+              .single();
+            
+            if (!personalError && personalData) {
+              personal = {
+                id: personalData.id,
+                name: `${personalData.first_name} ${personalData.last_name}`.trim()
+              };
+            }
+          }
+
+          return {
+            ...movimiento,
+            user,
+            personal
+          };
+        })
+      );
+
       return {
-        movimientos: data || [],
-        total: count || 0
+        success: true,
+        message: 'Movimientos obtenidos exitosamente',
+        data: movimientosConNombres,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(count / limit),
+          totalItems: count,
+          hasNextPage: page < Math.ceil(count / limit)
+        }
       };
     } catch (error) {
       console.error('Error al obtener los movimientos:', error);

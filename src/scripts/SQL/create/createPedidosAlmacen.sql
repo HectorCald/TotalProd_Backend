@@ -9,6 +9,7 @@ CREATE TABLE pedidos_almacen (
     estado VARCHAR NOT NULL,
     sucu_id UUID NOT NULL,
     precio_id UUID NOT NULL,
+    entregado_por UUID,
     CONSTRAINT pedidos_almacen_empresa_id_fkey
         FOREIGN KEY (empresa_id) REFERENCES empresas (id),
     CONSTRAINT pedidos_almacen_sucu_id_fkey

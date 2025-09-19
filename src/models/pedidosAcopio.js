@@ -138,6 +138,52 @@ class pedidosAcopio {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
       }
 
+      // Obtener nombres de usuarios y personal para cada pedido
+      const pedidosConNombres = await Promise.all(
+        pedidos.map(async (pedido) => {
+          let user = null;
+          let personal = null;
+
+          // Si tiene user_id, obtener el usuario
+          if (pedido.user_id) {
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('id, first_name, last_name')
+              .eq('id', pedido.user_id)
+              .single();
+            
+            if (!userError && userData) {
+              user = {
+                id: userData.id,
+                name: `${userData.first_name} ${userData.last_name}`.trim()
+              };
+            }
+          }
+
+          // Si tiene personal_id, obtener el personal
+          if (pedido.personal_id) {
+            const { data: personalData, error: personalError } = await supabase
+              .from('personal')
+              .select('id, first_name, last_name')
+              .eq('id', pedido.personal_id)
+              .single();
+            
+            if (!personalError && personalData) {
+              personal = {
+                id: personalData.id,
+                name: `${personalData.first_name} ${personalData.last_name}`.trim()
+              };
+            }
+          }
+
+          return {
+            ...pedido,
+            user,
+            personal
+          };
+        })
+      );
+
       const { count, error: countError } = await supabase
         .from('pedidos_acopio')
         .select('*', { count: 'exact', head: true })
@@ -150,7 +196,7 @@ class pedidosAcopio {
       return {
         success: true,
         message: 'Pedidos obtenidos exitosamente',
-        data: pedidos,
+        data: pedidosConNombres,
         pagination: {
           currentPage: page,
           totalPages: Math.ceil(count / limit),
@@ -195,10 +241,52 @@ class pedidosAcopio {
         throw new Error(`Error al obtener el pedido: ${error.message}`);
       }
 
+      // Obtener nombres de usuario y personal
+      let user = null;
+      let personal = null;
+
+      // Si tiene user_id, obtener el usuario
+      if (pedido.user_id) {
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .eq('id', pedido.user_id)
+          .single();
+        
+        if (!userError && userData) {
+          user = {
+            id: userData.id,
+            name: `${userData.first_name} ${userData.last_name}`.trim()
+          };
+        }
+      }
+
+      // Si tiene personal_id, obtener el personal
+      if (pedido.personal_id) {
+        const { data: personalData, error: personalError } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .eq('id', pedido.personal_id)
+          .single();
+        
+        if (!personalError && personalData) {
+          personal = {
+            id: personalData.id,
+            name: `${personalData.first_name} ${personalData.last_name}`.trim()
+          };
+        }
+      }
+
+      const pedidoConNombres = {
+        ...pedido,
+        user,
+        personal
+      };
+
       return {
         success: true,
         message: 'Pedido obtenido exitosamente',
-        data: pedido
+        data: pedidoConNombres
       };
 
     } catch (error) {

@@ -164,7 +164,7 @@ class movimientosAcopioController {
   // Obtener todos los movimientos
   static async getAll(req, res) {
     try {
-      const { page = 1, limit = 20, tipo, ordenamiento = 'fecha_desc', sucu_id } = req.query;
+      const { page = 1, limit = 10, tipo, ordenamiento = 'fecha_desc', sucu_id } = req.query;
 
       if (!sucu_id) {
         return res.status(400).json({
@@ -175,16 +175,14 @@ class movimientosAcopioController {
 
       const result = await movimientosAcopio.getAll(sucu_id, parseInt(page), parseInt(limit), tipo, ordenamiento);
 
-      res.json({
-        success: true,
-        data: result.movimientos,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(result.total / parseInt(limit)),
-          totalItems: result.total,
-          itemsPerPage: parseInt(limit)
-        }
-      });
+      if (!result.success) {
+        return res.status(500).json({
+          success: false,
+          message: result.message || 'Error interno del servidor'
+        });
+      }
+      
+      res.json(result);
     } catch (error) {
       console.error('Error en getAll:', error);
       res.status(500).json({

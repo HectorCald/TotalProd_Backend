@@ -303,9 +303,10 @@ class movimientosAlmacen {
                 return { success: false, message: 'Error al obtener movimientos', error };
             }
 
-            // Obtener productos para cada movimiento
+            // Obtener productos y información de usuario para cada movimiento
             const movimientosConProductos = await Promise.all(
                 movimientos.map(async (movimiento) => {
+                    // Obtener productos del movimiento
                     const { data: productos } = await supabase
                         .from('movimiento_almacen_producto')
                         .select(`
@@ -318,9 +319,47 @@ class movimientosAlmacen {
                         `)
                         .eq('movimiento_almacen_id', movimiento.id);
 
+                    // Obtener información del usuario
+                    let user = null;
+                    let personal = null;
+
+                    // Si tiene user_id, obtener el usuario
+                    if (movimiento.user_id) {
+                        const { data: userData, error: userError } = await supabase
+                            .from('users')
+                            .select('id, first_name, last_name')
+                            .eq('id', movimiento.user_id)
+                            .single();
+                        
+                        if (!userError && userData) {
+                            user = {
+                                id: userData.id,
+                                name: `${userData.first_name} ${userData.last_name}`.trim()
+                            };
+                        }
+                    }
+
+                    // Si tiene personal_id, obtener el personal
+                    if (movimiento.personal_id) {
+                        const { data: personalData, error: personalError } = await supabase
+                            .from('personal')
+                            .select('id, first_name, last_name')
+                            .eq('id', movimiento.personal_id)
+                            .single();
+                        
+                        if (!personalError && personalData) {
+                            personal = {
+                                id: personalData.id,
+                                name: `${personalData.first_name} ${personalData.last_name}`.trim()
+                            };
+                        }
+                    }
+
                     return {
                         ...movimiento,
-                        productos: productos || []
+                        productos: productos || [],
+                        user,
+                        personal
                     };
                 })
             );
