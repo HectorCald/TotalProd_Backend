@@ -9,8 +9,9 @@ CREATE TABLE movimientos_almacen (
     cliente_id UUID,
     proveedor_id UUID,
     estado VARCHAR,
-    tipo VARCHAR NOT NULL,
+    type VARCHAR NOT NULL,
     precio_id UUID NOT NULL,
+    restar_ingredientes BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT movimientos_almacen_cliente_id_fkey
         FOREIGN KEY (cliente_id) REFERENCES clients (id),
     CONSTRAINT movimientos_almacen_proveedor_id_fkey

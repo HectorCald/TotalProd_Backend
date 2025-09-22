@@ -6,7 +6,7 @@ class movimientosAcopioController {
   // Crear un movimiento
   static async create(req, res) {
     try {
-      const { product_id, type, observations, proveedor_id, cliente_id, quantity, restar_materia_prima, sucu_id, personal_id } = req.body;
+      const { product_id, type, observations, proveedor_id, cliente_id, quantity, costo, restar_materia_prima, restar_ingredientes, sucu_id, personal_id } = req.body;
       const userId = req.user?.id;
       const userType = req.user?.type;
 
@@ -36,6 +36,8 @@ class movimientosAcopioController {
         proveedor_id,
         cliente_id,
         quantity,
+        costo,
+        restar_ingredientes: restar_ingredientes || false,
         sucu_id
       }, finalUserId, finalPersonalId);
 
@@ -270,6 +272,34 @@ class movimientosAcopioController {
     } catch (error) {
       console.error('Error en eliminar:', error);
       res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener un movimiento por ID
+  static async getById(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del movimiento es requerido'
+        });
+      }
+
+      const movimiento = await movimientosAcopio.getById(id);
+
+      return res.status(200).json({
+        success: true,
+        data: movimiento
+      });
+
+    } catch (error) {
+      console.error('Error en getById:', error);
+      return res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'
       });

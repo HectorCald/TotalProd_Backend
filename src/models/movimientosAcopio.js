@@ -33,6 +33,8 @@ class movimientosAcopio {
         proveedor_id: movimientoData.proveedor_id || null,
         cliente_id: movimientoData.cliente_id || null,
         quantity: movimientoData.quantity,
+        costo: movimientoData.costo || null,
+        restar_ingredientes: movimientoData.restar_ingredientes || false,
         date: new Date().toISOString() // Usar timestamp completo con hora
       };
 
@@ -224,6 +226,102 @@ class movimientosAcopio {
       return movimientosConNombres;
     } catch (error) {
       console.error('Error al obtener movimientos por producto:', error);
+      throw error;
+    }
+  }
+
+  // Método estático para obtener un movimiento por ID
+  static async getById(movimientoId) {
+    try {
+      if (!movimientoId) {
+        throw new Error('ID del movimiento es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('movimientos_acopio')
+        .select(`
+          *,
+          product:product_id (
+            id,
+            name,
+            description,
+            quantity,
+            type_measure:type_measure_id (
+              id,
+              name,
+              code
+            )
+          ),
+          proveedor:proveedor_id (
+            id,
+            name
+          ),
+          cliente:cliente_id (
+            id,
+            name
+          )
+        `)
+        .eq('id', movimientoId)
+        .single();
+
+      if (error) {
+        console.error('Error en Supabase query:', error);
+        if (error.code === 'PGRST116') {
+          throw new Error('Movimiento no encontrado');
+        }
+        throw new Error(`No se pudo obtener el movimiento: ${error.message}`);
+      }
+
+      if (!data) {
+        throw new Error('Movimiento no encontrado');
+      }
+
+      // Obtener información del usuario o personal
+      let user = null;
+      let personal = null;
+
+      // Si tiene user_id, obtener el usuario
+      if (data.user_id) {
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .eq('id', data.user_id)
+          .single();
+        
+        if (!userError && userData) {
+          user = {
+            id: userData.id,
+            name: `${userData.first_name} ${userData.last_name}`.trim()
+          };
+        }
+      }
+
+      // Si tiene personal_id, obtener el personal
+      if (data.personal_id) {
+        const { data: personalData, error: personalError } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .eq('id', data.personal_id)
+          .single();
+        
+        if (!personalError && personalData) {
+          personal = {
+            id: personalData.id,
+            name: `${personalData.first_name} ${personalData.last_name}`.trim()
+          };
+        }
+      }
+
+      // Agregar la información del usuario/personal al movimiento
+      const movimientoCompleto = {
+        ...data,
+        user,
+        personal
+      };
+
+      return movimientoCompleto;
+    } catch (error) {
+      console.error('Error al obtener movimiento por ID:', error);
       throw error;
     }
   }
@@ -495,40 +593,113 @@ class movimientosAcopio {
   // Método para restar ingredientes del stock cuando se hace una entrada con receta
   static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, empresaId) {
     try {
-      for (const ingrediente of ingredientes) {
-        // Verificar estructura del ingrediente
-        if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
+      // Preparar datos de ingredientes válidos
+      const ingredientesValidos = ingredientes.filter(ingrediente => 
+        ingrediente.products_acopio && ingrediente.products_acopio.id
+      );
+
+      if (ingredientesValidos.length === 0) {
+        return { success: true, message: 'No hay ingredientes válidos para procesar' };
+      }
+
+      // Obtener IDs de ingredientes para consulta bulk
+      const ingredienteIds = ingredientesValidos.map(ingrediente => ingrediente.products_acopio.id);
+
+      // Consulta bulk para obtener stocks actuales
+      const { data: productosActuales, error: fetchError } = await supabase
+        .from('products_acopio')
+        .select('id, quantity')
+        .in('id', ingredienteIds);
+
+      if (fetchError) {
+        console.error('Error obteniendo stocks de ingredientes:', fetchError);
+        throw new Error('Error al obtener stocks de ingredientes');
+      }
+
+      // Crear mapa de stocks actuales para acceso rápido
+      const stocksActuales = {};
+      productosActuales.forEach(producto => {
+        stocksActuales[producto.id] = producto.quantity;
+      });
+
+      // Preparar actualizaciones batch
+      const actualizaciones = [];
+      const ingredientesConStockInsuficiente = [];
+
+      for (const ingrediente of ingredientesValidos) {
+        const cantidadARestar = ingrediente.cantidad * cantidadEntrada;
+        const cantidadActual = stocksActuales[ingrediente.products_acopio.id] || 0;
+        const nuevaCantidad = cantidadActual - cantidadARestar;
+        
+        // Verificar stock suficiente
+        if (nuevaCantidad < 0) {
+          ingredientesConStockInsuficiente.push({
+            nombre: ingrediente.products_acopio.name,
+            stockActual: cantidadActual,
+            requerido: cantidadARestar
+          });
           continue;
         }
 
-        // Calcular cantidad a restar
-        const cantidadARestar = ingrediente.cantidad * cantidadEntrada;
+        actualizaciones.push({
+          id: ingrediente.products_acopio.id,
+          quantity: nuevaCantidad
+        });
+      }
 
-        // Obtener cantidad actual del ingrediente
-        const cantidadActual = ingrediente.products_acopio.quantity;
+      // Log de ingredientes con stock insuficiente
+      if (ingredientesConStockInsuficiente.length > 0) {
+        console.warn('Ingredientes con stock insuficiente:', ingredientesConStockInsuficiente);
+      }
 
-        // Calcular nueva cantidad
-        const nuevaCantidad = cantidadActual - cantidadARestar;
+      // Ejecutar actualizaciones batch si hay ingredientes válidos
+      if (actualizaciones.length > 0) {
+        // Usar Promise.all para actualizaciones paralelas (más rápido que secuencial)
+        const updatePromises = actualizaciones.map(actualizacion =>
+          supabase
+            .from('products_acopio')
+            .update({ quantity: actualizacion.quantity })
+            .eq('id', actualizacion.id)
+        );
 
-        // Verificar que hay suficiente stock
-        if (nuevaCantidad < 0) {
-          console.warn(`Stock insuficiente para ingrediente ${ingrediente.products_acopio.name}. Stock actual: ${cantidadActual}, Requerido: ${cantidadARestar}`);
-          continue; // Saltar este ingrediente si no hay suficiente stock
-        }
+        const updateResults = await Promise.all(updatePromises);
 
-        // Actualizar el stock del ingrediente (SIN crear movimiento)
-        const { error: updateError } = await supabase
-          .from('products_acopio')
-          .update({ quantity: nuevaCantidad })
-          .eq('id', ingrediente.products_acopio.id);
+        // Verificar errores en las actualizaciones
+        const errores = updateResults
+          .map((result, index) => ({ result, index }))
+          .filter(({ result }) => result.error);
 
-        if (updateError) {
-          console.error(`Error actualizando stock del ingrediente ${ingrediente.products_acopio.name}:`, updateError);
-          continue; // Continuar con el siguiente ingrediente
+        if (errores.length > 0) {
+          console.error('Errores en actualizaciones de ingredientes:', errores);
+          
+          // Intentar rollback de las actualizaciones exitosas
+          const exitosas = updateResults
+            .map((result, index) => ({ result, index }))
+            .filter(({ result }) => !result.error);
+
+          if (exitosas.length > 0) {
+            console.log('Intentando rollback de actualizaciones exitosas...');
+            const rollbackPromises = exitosas.map(({ index }) =>
+              supabase
+                .from('products_acopio')
+                .update({ quantity: stocksActuales[actualizaciones[index].id] })
+                .eq('id', actualizaciones[index].id)
+            );
+
+            await Promise.all(rollbackPromises);
+            console.log('Rollback completado');
+          }
+
+          throw new Error('Error al actualizar algunos ingredientes');
         }
       }
 
-      return { success: true, message: 'Ingredientes restados correctamente' };
+      return { 
+        success: true, 
+        message: 'Ingredientes restados correctamente',
+        actualizados: actualizaciones.length,
+        conStockInsuficiente: ingredientesConStockInsuficiente.length
+      };
     } catch (error) {
       console.error('Error en restarIngredientes:', error);
       throw new Error('Error al restar ingredientes del stock');
@@ -618,8 +789,8 @@ class movimientosAcopio {
         return { success: false, message: 'Error al actualizar el stock' };
       }
 
-      // Si es entrada y tiene receta, devolver ingredientes consumidos
-      if (movimiento.type === 'entrada' && movimiento.product.recetas_acopio && movimiento.product.recetas_acopio.length > 0) {
+      // Si es entrada, tiene receta Y restar_ingredientes es true, devolver ingredientes consumidos
+      if (movimiento.type === 'entrada' && movimiento.restar_ingredientes && movimiento.product.recetas_acopio && movimiento.product.recetas_acopio.length > 0) {
         const receta = movimiento.product.recetas_acopio[0];
         
         if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {

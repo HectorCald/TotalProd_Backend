@@ -9,6 +9,8 @@ CREATE TABLE movimientos_acopio (
     proveedor_id UUID,
     quantity VARCHAR NOT NULL,
     estado VARCHAR,
+    costo NUMERIC,
+    restar_ingredientes BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT movimientos_acopio_product_id_fkey 
         FOREIGN KEY (product_id) REFERENCES products_acopio (id),

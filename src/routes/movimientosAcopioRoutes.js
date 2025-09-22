@@ -21,6 +21,9 @@ router.get('/proveedor/:proveedorId', movimientosAcopioController.getByProveedor
 // Ruta para obtener todos los movimientos
 router.get('/', movimientosAcopioController.getAll);
 
+// Ruta para obtener un movimiento por ID
+router.get('/:id', movimientosAcopioController.getById);
+
 // Ruta para anular un movimiento
 router.put('/:id/anular', movimientosAcopioController.anular);
 

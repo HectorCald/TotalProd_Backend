@@ -5,7 +5,7 @@ class movimientosAlmacenController {
     // Crear un nuevo movimiento
     static async create(req, res) {
         try {
-            const { sucu_id, personal_id, tipo, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes } = req.body;
+            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes } = req.body;
             const user_id = req.user?.id;
             const userType = req.user?.type; // Verificar si es empleado o usuario normal
 
@@ -30,7 +30,7 @@ class movimientosAlmacenController {
             }
 
             // Validaciones básicas
-            if (!tipo || !['entrada', 'salida'].includes(tipo)) {
+            if (!type || !['entrada', 'salida'].includes(type)) {
                 return res.status(400).json({
                     success: false,
                     message: 'El tipo de movimiento es obligatorio y debe ser "entrada" o "salida"'
@@ -67,21 +67,21 @@ class movimientosAlmacenController {
             }
 
             // Validaciones específicas por tipo
-            if (tipo === 'entrada' && proveedor_id && typeof proveedor_id !== 'string') {
+            if (type === 'entrada' && proveedor_id && typeof proveedor_id !== 'string') {
                 return res.status(400).json({
                     success: false,
                     message: 'El ID del proveedor debe ser válido'
                 });
             }
 
-            if (tipo === 'salida' && cliente_id && typeof cliente_id !== 'string') {
+            if (type === 'salida' && cliente_id && typeof cliente_id !== 'string') {
                 return res.status(400).json({
                     success: false,
                     message: 'El ID del cliente debe ser válido'
                 });
             }
 
-            if (tipo === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo', 'credito'].includes(metodo_pago)) {
+            if (type === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo', 'credito'].includes(metodo_pago)) {
                 return res.status(400).json({
                     success: false,
                     message: 'El método de pago debe ser uno de: qr, transferencia, tarjeta, efectivo, credito'
@@ -93,13 +93,14 @@ class movimientosAlmacenController {
                 user_id: finalUserId,
                 personal_id: finalPersonalId,
                 sucu_id,
-                tipo,
+                type,
                 observaciones: observaciones || null,
-                metodo_pago: tipo === 'salida' ? (metodo_pago || null) : null,
-                cliente_id: tipo === 'salida' ? (cliente_id || null) : null,
-                proveedor_id: tipo === 'entrada' ? (proveedor_id || null) : null,
+                metodo_pago: type === 'salida' ? (metodo_pago || null) : null,
+                cliente_id: type === 'salida' ? (cliente_id || null) : null,
+                proveedor_id: type === 'entrada' ? (proveedor_id || null) : null,
                 precio_id,
-                productos
+                productos,
+                restar_ingredientes: restar_ingredientes || false
             };
 
             // Crear el movimiento
@@ -110,28 +111,42 @@ class movimientosAlmacenController {
             }
 
             // Procesar ingredientes si es entrada y tiene restar_ingredientes activado
-            if (tipo === 'entrada' && restar_ingredientes) {
+            console.log('🔍 DEBUG - Procesando ingredientes:', { type, restar_ingredientes, productosLength: productos.length });
+            if (type === 'entrada' && restar_ingredientes) {
                 try {
-                    // Obtener productos con recetas
+                    // Obtener productos con recetas en una sola query (bulk)
                     const productsAlmacen = require('../models/productsAlmacen');
+                    const productIds = productos.map(p => p.id);
+                    
+                    // Query bulk para obtener todos los productos con sus recetas
+                    const productosConRecetas = await productsAlmacen.getByIds(productIds, req.user?.empresa_id || null);
+                    
+                    // Procesar ingredientes para productos que tienen recetas
+                    const ingredientesParaRestar = [];
                     
                     for (const productoData of productos) {
-                        // Obtener producto con recetas e ingredientes
-                        const producto = await productsAlmacen.getById(productoData.id, req.user.empresa_id);
+                        const producto = productosConRecetas.find(p => p.id === productoData.id);
                         
                         if (producto && producto.recetas && producto.recetas.length > 0) {
                             const receta = producto.recetas[0];
                             
                             if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
-                                // Restar ingredientes del stock (SIN crear movimientos)
-                                await movimientosAlmacen.restarIngredientes(
-                                    producto, 
-                                    parseFloat(productoData.cantidad), 
-                                    receta.recetas_detalle,
-                                    req.user.empresa_id
-                                );
+                                // Agregar ingredientes a la lista para procesamiento batch
+                                ingredientesParaRestar.push({
+                                    producto,
+                                    cantidad: parseFloat(productoData.cantidad),
+                                    ingredientes: receta.recetas_detalle
+                                });
                             }
                         }
+                    }
+                    
+                    // Procesar todos los ingredientes en batch
+                    if (ingredientesParaRestar.length > 0) {
+                        await movimientosAlmacen.restarIngredientesBatch(
+                            ingredientesParaRestar,
+                            req.user.empresa_id
+                        );
                     }
                 } catch (error) {
                     console.error('Error procesando ingredientes:', error);
@@ -142,7 +157,7 @@ class movimientosAlmacenController {
 
             res.status(201).json({
                 success: true,
-                message: `${tipo === 'entrada' ? 'Entrada' : 'Salida'} registrada correctamente`,
+                message: `${type === 'entrada' ? 'Entrada' : 'Salida'} registrada correctamente`,
                 data: result.data
             });
 
@@ -209,7 +224,7 @@ class movimientosAlmacenController {
                 });
             }
 
-            if (!['entrada', 'salida'].includes(tipo)) {
+            if (!['entrada', 'salida'].includes(type)) {
                 return res.status(400).json({
                     success: false,
                     message: 'El tipo debe ser "entrada" o "salida"'

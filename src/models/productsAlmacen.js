@@ -80,6 +80,63 @@ class productsAlmacen {
     }
   }
 
+  // Método para obtener múltiples productos por IDs con recetas (bulk query)
+  static async getByIds(ids, empresaId = null) {
+    try {
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        throw new Error('Array de IDs de productos es requerido');
+      }
+
+      let query = supabase
+        .from('products_almacen')
+        .select(`
+          *,
+          category_almacen:category_id (
+            id,
+            name
+          ),
+          price_product (
+            id,
+            valor,
+            prices_types:price_id (
+              id,
+              name,
+              description
+            )
+          ),
+          recetas (
+            id,
+            descripcion,
+            recetas_detalle (
+              id,
+              cantidad,
+              products_acopio:producto_acopio_id (
+                id,
+                name,
+                quantity
+              )
+            )
+          )
+        `)
+        .in('id', ids);
+
+      if (empresaId) {
+        query = query.eq('empresa_id', empresaId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw new Error('No se pudieron obtener los productos');
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error al obtener productos por IDs:', error);
+      throw error;
+    }
+  }
+
   // Método para obtener todos los productos de una empresa con stock de sucursal
   static async getAll(empresaId, sucuId = null) {
     try {
