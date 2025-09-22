@@ -9,11 +9,19 @@ CREATE TABLE pedidos_almacen (
     estado VARCHAR NOT NULL,
     sucu_id UUID NOT NULL,
     precio_id UUID NOT NULL,
-    entregado_por UUID,
+    pedido_sucursal_id UUID NOT NULL,
+    movimiento_id UUID,
+    movimiento_entreda_id UUID,
     CONSTRAINT pedidos_almacen_empresa_id_fkey
         FOREIGN KEY (empresa_id) REFERENCES empresas (id),
     CONSTRAINT pedidos_almacen_sucu_id_fkey
         FOREIGN KEY (sucu_id) REFERENCES sucursales (id),
     CONSTRAINT pedidos_almacen_precio_id_fkey
-        FOREIGN KEY (precio_id) REFERENCES prices_types (id)
+        FOREIGN KEY (precio_id) REFERENCES prices_types (id),
+    CONSTRAINT pedidos_almacen_pedido_sucursal_id_fkey
+        FOREIGN KEY (pedido_sucursal_id) REFERENCES sucursales (id),
+    CONSTRAINT pedidos_almacen_movimiento_id_fkey
+        FOREIGN KEY (movimiento_id) REFERENCES movimientos (id),
+    CONSTRAINT pedidos_almacen_movimiento_entreda_id_fkey
+        FOREIGN KEY (movimiento_entreda_id) REFERENCES movimientos_almacen (id)
 );

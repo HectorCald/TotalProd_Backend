@@ -1,4 +1,5 @@
 const pricesTypes = require('../models/pricesTypes');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
 
 class pricesTypesController {
 
@@ -34,6 +35,7 @@ class pricesTypesController {
   static async create(req, res) {
     try {
       const { name, description, empresa_id } = req.body;
+      const userType = req.user?.type;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -48,6 +50,19 @@ class pricesTypesController {
           success: false,
           message: 'ID de la empresa es requerido'
         });
+      }
+
+      // Verificar permisos de creación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkCreatePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para crear tipos de precios'
+          });
+        }
       }
 
       // Crear el tipo de precio
@@ -75,6 +90,7 @@ class pricesTypesController {
     try {
       const { id } = req.params;
       const { name, description } = req.body;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
@@ -88,6 +104,19 @@ class pricesTypesController {
           success: false,
           message: 'El nombre es obligatorio'
         });
+      }
+
+      // Verificar permisos de edición solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkUpdatePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para editar tipos de precios'
+          });
+        }
       }
 
       // Actualizar el tipo de precio
@@ -114,12 +143,26 @@ class pricesTypesController {
   static async delete(req, res) {
     try {
       const { id } = req.params;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
           success: false,
           message: 'ID del tipo de precio es requerido'
         });
+      }
+
+      // Verificar permisos de eliminación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkDeletePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para eliminar tipos de precios'
+          });
+        }
       }
 
       // Eliminar el tipo de precio

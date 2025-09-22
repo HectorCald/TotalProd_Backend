@@ -1,4 +1,5 @@
 const productsAlmacen = require('../models/productsAlmacen');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
 
 class productsAlmacenController {
 
@@ -8,11 +9,6 @@ class productsAlmacenController {
       // Obtener parámetros de la query
       const empresaId = req.query.empresa_id;
       const sucuId = req.query.sucu_id;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
-      const search = req.query.search || '';
-      const categoria = req.query.categoria || null;
-      const ordenamiento = req.query.ordenamiento || 'nombre_asc';
       
       if (!empresaId) {
         return res.status(400).json({
@@ -28,13 +24,12 @@ class productsAlmacenController {
         });
       }
 
-      const result = await productsAlmacen.getAll(empresaId, sucuId, page, limit, search, categoria, ordenamiento);
+      const products = await productsAlmacen.getAll(empresaId, sucuId);
       
       res.status(200).json({
         success: true,
         message: 'Productos obtenidos exitosamente',
-        data: result.products,
-        pagination: result.pagination
+        data: products
       });
     } catch (error) {
       console.error('Error en productsAlmacenController.getAll:', error);
@@ -49,6 +44,7 @@ class productsAlmacenController {
   static async create(req, res) {
     try {
       const { name, description, stock, codigo_barras, category_id, prices, receta, empresa_id, sucu_id } = req.body;
+      const userType = req.user?.type;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -77,6 +73,19 @@ class productsAlmacenController {
           success: false,
           message: 'ID de la sucursal es requerido'
         });
+      }
+
+      // Verificar permisos de creación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkCreatePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para crear productos'
+          });
+        }
       }
 
       // Crear el producto
@@ -109,6 +118,7 @@ class productsAlmacenController {
     try {
       const { id } = req.params;
       const { name, description, stock, codigo_barras, category_id, prices, receta, sucu_id } = req.body;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
@@ -136,6 +146,19 @@ class productsAlmacenController {
           success: false,
           message: 'ID de la sucursal es requerido'
         });
+      }
+
+      // Verificar permisos de edición solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkUpdatePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para editar productos'
+          });
+        }
       }
 
       // Actualizar el producto
@@ -167,6 +190,7 @@ class productsAlmacenController {
   static async delete(req, res) {
     try {
       const { id } = req.params;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
@@ -175,7 +199,18 @@ class productsAlmacenController {
         });
       }
 
+      // Verificar permisos de eliminación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
 
+        const hasPermission = await checkDeletePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para eliminar productos'
+          });
+        }
+      }
 
       // Eliminar el producto
       await productsAlmacen.delete(id);

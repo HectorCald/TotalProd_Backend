@@ -14,25 +14,12 @@ class PersonalController {
         });
       }
 
-      // Parámetros de paginación y búsqueda
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const search = req.query.search || '';
-      const offset = (page - 1) * limit;
-
-      const result = await Personal.getAllPaginated(empresaId, { page, limit, offset, search });
+      const personal = await Personal.getAll(empresaId);
       
       res.status(200).json({
         success: true,
         message: 'Personal obtenido exitosamente',
-        data: result.personal,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(result.total / limit),
-          totalItems: result.total,
-          hasNextPage: page < Math.ceil(result.total / limit),
-          hasPrevPage: page > 1
-        }
+        data: personal
       });
     } catch (error) {
       console.error('Error en getAll:', error);

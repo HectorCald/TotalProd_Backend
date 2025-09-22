@@ -1,4 +1,5 @@
 const proveedor = require('../models/proveedores');
+const { checkDeletePermission, checkUpdatePermission } = require('../utils/permissionsHelper');
 
 class proveedoresController {
 
@@ -15,25 +16,12 @@ class proveedoresController {
         });
       }
 
-      // Parámetros de paginación y búsqueda
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const search = req.query.search || '';
-      const offset = (page - 1) * limit;
-
-      const result = await proveedor.getAllPaginated(sucuId, { page, limit, offset, search });
+      const proveedores = await proveedor.getAll(sucuId);
       
       res.status(200).json({
         success: true,
         message: 'Proveedores obtenidos exitosamente',
-        data: result.proveedores,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(result.total / limit),
-          totalItems: result.total,
-          hasNextPage: page < Math.ceil(result.total / limit),
-          hasPrevPage: page > 1
-        }
+        data: proveedores
       });
     } catch (error) {
       console.error('Error en getAll:', error);
@@ -91,6 +79,7 @@ class proveedoresController {
   static async delete(req, res) {
     try {
       const { id } = req.params;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
@@ -99,6 +88,18 @@ class proveedoresController {
         });
       }
 
+      // Verificar permisos de eliminación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkDeletePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para eliminar proveedores'
+          });
+        }
+      }
 
       // Eliminar el proveedor
       await proveedor.delete(id);
@@ -121,6 +122,7 @@ class proveedoresController {
     try {
       const { id } = req.params;
       const { name, phone, direccion, description, location } = req.body;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
@@ -129,12 +131,24 @@ class proveedoresController {
         });
       }
 
-
       if (!name || !name.trim()) {
         return res.status(400).json({
           success: false,
           message: 'El nombre es obligatorio'
         });
+      }
+
+      // Verificar permisos de edición solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkUpdatePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para editar proveedores'
+          });
+        }
       }
 
       // Actualizar el proveedor

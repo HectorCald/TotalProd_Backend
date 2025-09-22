@@ -1,4 +1,5 @@
 const movimientosAlmacen = require('../models/movimientosAlmacen');
+const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
 
 class movimientosAlmacenController {
     // Crear un nuevo movimiento
@@ -80,10 +81,10 @@ class movimientosAlmacenController {
                 });
             }
 
-            if (tipo === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo'].includes(metodo_pago)) {
+            if (tipo === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo', 'credito'].includes(metodo_pago)) {
                 return res.status(400).json({
                     success: false,
-                    message: 'El método de pago debe ser uno de: qr, transferencia, tarjeta, efectivo'
+                    message: 'El método de pago debe ser uno de: qr, transferencia, tarjeta, efectivo, credito'
                 });
             }
 
@@ -283,6 +284,20 @@ class movimientosAlmacenController {
     static async anular(req, res) {
         try {
             const { id } = req.params;
+            const userType = req.user?.type;
+
+            // Verificar permisos de anulación solo si es empleado
+            if (userType === 'employee') {
+                const personal_id = req.user.id; // El personal_id viene del token
+
+                const hasPermission = await checkAnularPermission(personal_id);
+                if (!hasPermission) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'No tienes permisos para anular movimientos'
+                    });
+                }
+            }
 
             const result = await movimientosAlmacen.anular(id);
 
@@ -313,6 +328,20 @@ class movimientosAlmacenController {
     static async eliminar(req, res) {
         try {
             const { id } = req.params;
+            const userType = req.user?.type;
+
+            // Verificar permisos de eliminación solo si es empleado
+            if (userType === 'employee') {
+                const personal_id = req.user.id; // El personal_id viene del token
+
+                const hasPermission = await checkDeletePermission(personal_id);
+                if (!hasPermission) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'No tienes permisos para eliminar movimientos'
+                    });
+                }
+            }
 
             const result = await movimientosAlmacen.eliminar(id);
 

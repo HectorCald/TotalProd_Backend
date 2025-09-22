@@ -1,4 +1,5 @@
 const productsAcopio = require('../models/productsAcopio');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
 
 class productsAcopioController {
 
@@ -7,12 +8,6 @@ class productsAcopioController {
     try {
       // Obtener parámetros de la query
       const empresaId = req.query.empresa_id;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const search = req.query.search || '';
-      const categoria = req.query.categoria || null;
-      const tipoMedida = req.query.tipoMedida || null;
-      const ordenamiento = req.query.ordenamiento || 'nombre_asc';
       
       if (!empresaId) {
         return res.status(400).json({
@@ -21,13 +16,12 @@ class productsAcopioController {
         });
       }
 
-      const result = await productsAcopio.getAll(empresaId, page, limit, search, categoria, tipoMedida, ordenamiento);
+      const products = await productsAcopio.getAll(empresaId);
       
       res.status(200).json({
         success: true,
         message: 'Productos obtenidos exitosamente',
-        data: result.products,
-        pagination: result.pagination
+        data: products
       });
     } catch (error) {
       console.error('Error en getAll:', error);
@@ -42,6 +36,7 @@ class productsAcopioController {
   static async create(req, res) {
     try {
       const { name, description, quantity, type_measure_id, category_id, receta, empresa_id } = req.body;
+      const userType = req.user?.type;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -70,6 +65,19 @@ class productsAcopioController {
           success: false,
           message: 'ID de la empresa es requerido'
         });
+      }
+
+      // Verificar permisos de creación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkCreatePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para crear productos'
+          });
+        }
       }
 
       // Crear el producto
@@ -103,12 +111,26 @@ class productsAcopioController {
   static async delete(req, res) {
     try {
       const { id } = req.params;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
           success: false,
           message: 'ID del producto es requerido'
         });
+      }
+
+      // Verificar permisos de eliminación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkDeletePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para eliminar productos'
+          });
+        }
       }
 
       // Eliminar el producto
@@ -132,6 +154,7 @@ class productsAcopioController {
     try {
       const { id } = req.params;
       const { name, description, quantity, type_measure_id, category_id, receta } = req.body;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
@@ -139,6 +162,20 @@ class productsAcopioController {
           message: 'ID del producto es requerido'
         });
       }
+
+      // Verificar permisos de edición solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkUpdatePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para editar productos'
+          });
+        }
+      }
+
       // Actualizar el producto
       await productsAcopio.update(id, {
         name: name.trim(),

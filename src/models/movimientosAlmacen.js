@@ -355,11 +355,21 @@ class movimientosAlmacen {
                         }
                     }
 
+                    // Verificar si el movimiento está relacionado con algún pedido (como salida o entrada)
+                    const { data: pedidosRelacionados } = await supabase
+                        .from('pedidos_almacen')
+                        .select('id')
+                        .or(`movimiento_id.eq.${movimiento.id},movimiento_entrada_id.eq.${movimiento.id}`)
+                        .limit(1);
+
+                    const tienePedidoRelacionado = pedidosRelacionados && pedidosRelacionados.length > 0;
+
                     return {
                         ...movimiento,
                         productos: productos || [],
                         user,
-                        personal
+                        personal,
+                        tiene_pedido_relacionado: tienePedidoRelacionado
                     };
                 })
             );
@@ -538,6 +548,17 @@ class movimientosAlmacen {
                 return { success: false, message: 'El movimiento ya está anulado' };
             }
 
+            // Verificar si el movimiento está relacionado con algún pedido (como salida o entrada)
+            const { data: pedidosRelacionados } = await supabase
+                .from('pedidos_almacen')
+                .select('id')
+                .or(`movimiento_id.eq.${movimientoId},movimiento_entrada_id.eq.${movimientoId}`)
+                .limit(1);
+
+            if (pedidosRelacionados && pedidosRelacionados.length > 0) {
+                return { success: false, message: 'No se puede anular un movimiento que está relacionado con un pedido' };
+            }
+
             // Actualizar estado a anulado
             const { error: updateError } = await supabase
                 .from('movimientos_almacen')
@@ -683,6 +704,17 @@ class movimientosAlmacen {
             // Verificar que esté anulado
             if (movimiento.estado !== 'anulado') {
                 return { success: false, message: 'Solo se pueden eliminar movimientos anulados' };
+            }
+
+            // Verificar si el movimiento está relacionado con algún pedido (como salida o entrada)
+            const { data: pedidosRelacionados } = await supabase
+                .from('pedidos_almacen')
+                .select('id')
+                .or(`movimiento_id.eq.${movimientoId},movimiento_entrada_id.eq.${movimientoId}`)
+                .limit(1);
+
+            if (pedidosRelacionados && pedidosRelacionados.length > 0) {
+                return { success: false, message: 'No se puede eliminar un movimiento que está relacionado con un pedido' };
             }
 
             // Eliminar primero los productos relacionados

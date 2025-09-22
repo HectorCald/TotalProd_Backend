@@ -68,18 +68,14 @@ class productsAcopio {
     }
   }
 
-  // Método para obtener todos los productos con paginación y búsqueda
-  static async getAll(empresaId, page = 1, limit = 10, search = '', categoria = null, tipoMedida = null, ordenamiento = 'nombre_asc') {
+  // Método para obtener todos los productos
+  static async getAll(empresaId) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
       }
 
-      // Calcular offset para paginación
-      const offset = (page - 1) * limit;
-
-      // Construir query base
-      let query = supabase
+      const { data, error } = await supabase
         .from('products_acopio')
         .select(`
           *,
@@ -110,89 +106,15 @@ class productsAcopio {
               )
             )
           )
-        `, { count: 'exact' })
-        .eq('empresa_id', empresaId);
-
-      // Aplicar búsqueda si existe
-      if (search && search.trim() !== '') {
-        query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
-      }
-
-      // Aplicar filtro de categoría
-      if (categoria !== null) {
-        if (categoria === '') {
-          // Productos sin categoría
-          query = query.is('category_id', null);
-        } else {
-          // Productos con categoría específica
-          query = query.eq('category_id', categoria);
-        }
-      }
-
-      // Aplicar filtro de tipo de medida
-      if (tipoMedida !== null) {
-        if (tipoMedida === '') {
-          // Productos sin tipo de medida
-          query = query.is('type_measure_id', null);
-        } else {
-          // Productos con tipo de medida específico
-          query = query.eq('type_measure_id', tipoMedida);
-        }
-      }
-
-      // Aplicar ordenamiento
-      let orderColumn = 'name';
-      let ascending = true;
-      
-      switch (ordenamiento) {
-        case 'nombre_asc':
-          orderColumn = 'name';
-          ascending = true;
-          break;
-        case 'nombre_desc':
-          orderColumn = 'name';
-          ascending = false;
-          break;
-        case 'cantidad_asc':
-          orderColumn = 'quantity';
-          ascending = true;
-          break;
-        case 'cantidad_desc':
-          orderColumn = 'quantity';
-          ascending = false;
-          break;
-        default:
-          orderColumn = 'name';
-          ascending = true;
-      }
-
-      // Aplicar paginación y ordenamiento
-      query = query
-        .order(orderColumn, { ascending })
-        .range(offset, offset + limit - 1);
-
-      const { data, error, count } = await query;
+        `)
+        .eq('empresa_id', empresaId)
+        .order('name', { ascending: true });
 
       if (error) {
         throw new Error('No se pudo obtener los productos');
       }
 
-      // Calcular información de paginación
-      const totalPages = Math.ceil(count / limit);
-      const hasNextPage = page < totalPages;
-      const hasPrevPage = page > 1;
-
-      return {
-        products: data || [],
-        pagination: {
-          currentPage: page,
-          totalPages,
-          hasNextPage,
-          hasPrevPage,
-          totalItems: count,
-          itemsPerPage: limit
-        }
-      };
+      return data || [];
     } catch (error) {
       console.error('Error al obtener los productos:', error);
       throw new Error('No se pudo obtener los productos');

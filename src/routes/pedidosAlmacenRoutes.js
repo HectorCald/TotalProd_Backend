@@ -11,6 +11,7 @@ router.post('/', pedidosAlmacenController.create);
 router.get('/', pedidosAlmacenController.getAll);
 router.get('/:id', pedidosAlmacenController.getById);
 router.put('/:id', pedidosAlmacenController.update);
+router.put('/:id/entrega', pedidosAlmacenController.updateEntrega);
 router.patch('/:id/estado', pedidosAlmacenController.updateEstado);
 router.delete('/:id', pedidosAlmacenController.eliminar);
 router.get('/verificar-producto/:productoId', pedidosAlmacenController.verificarProductoEnPedidos);

@@ -34,6 +34,13 @@ class pedidosAlmacenController {
         });
       }
 
+      if (!req.body.pedido_sucursal_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la sucursal de destino es requerido'
+        });
+      }
+
       // Validar cada producto
       for (const producto of productos) {
         if (!producto.id) {
@@ -54,7 +61,8 @@ class pedidosAlmacenController {
       const pedidoData = {
         productos,
         observaciones,
-        precio_id: req.body.precio_id
+        precio_id: req.body.precio_id,
+        pedido_sucursal_id: req.body.pedido_sucursal_id
       };
 
       const result = await pedidosAlmacen.create(pedidoData, finalUserId, req.body.empresa_id, finalPersonalId, req.body.sucu_id);
@@ -74,21 +82,21 @@ class pedidosAlmacenController {
     }
   }
 
-  // Obtener todos los pedidos de la empresa
+  // Obtener todos los pedidos de la sucursal
   static async getAll(req, res) {
     try {
-      const { empresa_id } = req.query;
+      const { sucu_id } = req.query;
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 20;
 
-      if (!empresa_id) {
+      if (!sucu_id) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la empresa es requerido'
+          message: 'ID de la sucursal es requerido'
         });
       }
 
-      const result = await pedidosAlmacen.getAll(empresa_id, page, limit);
+      const result = await pedidosAlmacen.getAll(sucu_id, page, limit);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -196,7 +204,8 @@ class pedidosAlmacenController {
       const pedidoData = {
         productos,
         observaciones,
-        precio_id: req.body.precio_id
+        precio_id: req.body.precio_id,
+        pedido_sucursal_id: req.body.pedido_sucursal_id
       };
 
       const result = await pedidosAlmacen.update(id, pedidoData, finalUserId, req.body.empresa_id, finalPersonalId);
@@ -216,11 +225,89 @@ class pedidosAlmacenController {
     }
   }
 
+  // Actualizar entrega de pedido (solo precio, productos y cantidades)
+  static async updateEntrega(req, res) {
+    try {
+      const { id } = req.params;
+      const { productos, precio_id } = req.body;
+      const userId = req.user?.id;
+
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del pedido es requerido'
+        });
+      }
+
+      // Validaciones básicas
+      if (!productos || !Array.isArray(productos) || productos.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'La lista de productos es requerida'
+        });
+      }
+
+      // Validar movimiento_id
+      if (!req.body.movimiento_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del movimiento es requerido'
+        });
+      }
+
+      // Validar cada producto
+      for (const producto of productos) {
+        if (!producto.id) {
+          return res.status(400).json({
+            success: false,
+            message: 'ID del producto es requerido'
+          });
+        }
+
+        if (!producto.cantidad || producto.cantidad <= 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'La cantidad debe ser mayor a 0'
+          });
+        }
+      }
+
+      const pedidoData = {
+        productos,
+        precio_id: precio_id || null,
+        movimiento_id: req.body.movimiento_id
+      };
+
+      const result = await pedidosAlmacen.updateEntrega(id, pedidoData);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacenController.updateEntrega:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
   // Actualizar estado del pedido
   static async updateEstado(req, res) {
     try {
       const { id } = req.params;
-      const { estado } = req.body;
+      const { estado, movimiento_entrada_id } = req.body;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -245,15 +332,15 @@ class pedidosAlmacenController {
       }
 
       // Validar estados permitidos
-      const estadosPermitidos = ['Pendiente', 'En Proceso', 'Completado', 'Cancelado'];
+      const estadosPermitidos = ['Pendiente', 'En Proceso', 'Enviado', 'Completado', 'Cancelado'];
       if (!estadosPermitidos.includes(estado)) {
         return res.status(400).json({
           success: false,
-          message: 'Estado no válido. Estados permitidos: Pendiente, En Proceso, Completado, Cancelado'
+          message: 'Estado no válido. Estados permitidos: Pendiente, En Proceso, Enviado, Completado, Cancelado'
         });
       }
 
-      const result = await pedidosAlmacen.updateEstado(id, estado);
+      const result = await pedidosAlmacen.updateEstado(id, estado, movimiento_entrada_id);
 
       if (result.success) {
         return res.status(200).json(result);

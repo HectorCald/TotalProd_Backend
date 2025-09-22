@@ -1,4 +1,5 @@
 const client = require('../models/clients');
+const { checkDeletePermission, checkUpdatePermission } = require('../utils/permissionsHelper');
 
 class clientsController {
 
@@ -15,25 +16,12 @@ class clientsController {
         });
       }
 
-      // Parámetros de paginación y búsqueda
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const search = req.query.search || '';
-      const offset = (page - 1) * limit;
-
-      const result = await client.getAllPaginated(sucuId, { page, limit, offset, search });
+      const clients = await client.getAll(sucuId);
       
       res.status(200).json({
         success: true,
         message: 'Clientes obtenidos exitosamente',
-        data: result.clients,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(result.total / limit),
-          totalItems: result.total,
-          hasNextPage: page < Math.ceil(result.total / limit),
-          hasPrevPage: page > 1
-        }
+        data: clients
       });
     } catch (error) {
       console.error('Error en getAll:', error);
@@ -91,12 +79,26 @@ class clientsController {
   static async delete(req, res) {
     try {
       const { id } = req.params;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
           success: false,
           message: 'ID del cliente es requerido'
         });
+      }
+
+      // Verificar permisos de eliminación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkDeletePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para eliminar clientes'
+          });
+        }
       }
 
       // Eliminar el cliente
@@ -120,6 +122,7 @@ class clientsController {
     try {
       const { id } = req.params;
       const { name, phone, direccion, description, location } = req.body;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
@@ -135,6 +138,18 @@ class clientsController {
         });
       }
 
+      // Verificar permisos de edición solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkUpdatePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para editar clientes'
+          });
+        }
+      }
 
       // Actualizar el cliente
       const updatedClient = await client.update(id, {

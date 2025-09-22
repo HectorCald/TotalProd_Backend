@@ -24,11 +24,16 @@ class pedidosAlmacen {
         throw new Error('ID del precio es requerido');
       }
 
+      if (!pedidoData.pedido_sucursal_id) {
+        throw new Error('ID de la sucursal de destino es requerido');
+      }
+
       // Crear el pedido principal
       const pedidoPrincipal = {
         empresa_id: empresaId,
         sucu_id: sucuId,
         precio_id: pedidoData.precio_id,
+        pedido_sucursal_id: pedidoData.pedido_sucursal_id,
         observaciones: pedidoData.observaciones || null,
         estado: 'Pendiente'
       };
@@ -146,11 +151,11 @@ class pedidosAlmacen {
     }
   }
 
-  // Obtener todos los pedidos de la empresa
-  static async getAll(empresaId, page = 1, limit = 20) {
+  // Obtener todos los pedidos de la sucursal (pedidos que hizo o que están destinados a esta sucursal)
+  static async getAll(sucuId, page = 1, limit = 20) {
     try {
-      if (!empresaId) {
-        throw new Error('ID de la empresa es requerido');
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
       }
 
       const offset = (page - 1) * limit;
@@ -171,12 +176,16 @@ class pedidosAlmacen {
             id,
             name
           ),
+          sucursal_destino:pedido_sucursal_id (
+            id,
+            name
+          ),
           precio:prices_types (
             id,
             name
           )
         `)
-        .eq('empresa_id', empresaId)
+        .or(`sucu_id.eq.${sucuId},pedido_sucursal_id.eq.${sucuId}`)
         .order('fecha', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -234,7 +243,7 @@ class pedidosAlmacen {
       const { count, error: countError } = await supabase
         .from('pedidos_almacen')
         .select('*', { count: 'exact', head: true })
-        .eq('empresa_id', empresaId);
+        .or(`sucu_id.eq.${sucuId},pedido_sucursal_id.eq.${sucuId}`);
 
       if (countError) {
         throw new Error(`Error al contar pedidos: ${countError.message}`);
@@ -279,6 +288,18 @@ class pedidosAlmacen {
               name,
               description
             )
+          ),
+          sucursal:sucu_id (
+            id,
+            name
+          ),
+          sucursal_destino:pedido_sucursal_id (
+            id,
+            name
+          ),
+          precio:prices_types (
+            id,
+            name
           )
         `)
         .eq('id', pedidoId)
@@ -368,10 +389,11 @@ class pedidosAlmacen {
         throw new Error('Pedido no encontrado');
       }
 
-      // Actualizar el pedido principal (solo observaciones y precio_id, NO sucursal/empresa)
+      // Actualizar el pedido principal (solo observaciones, precio_id y pedido_sucursal_id, NO sucursal/empresa)
       const pedidoPrincipal = {
         observaciones: pedidoData.observaciones || null,
-        precio_id: pedidoData.precio_id || null
+        precio_id: pedidoData.precio_id || null,
+        pedido_sucursal_id: pedidoData.pedido_sucursal_id || null
       };
 
       const { error: pedidoError } = await supabase
@@ -423,6 +445,10 @@ class pedidosAlmacen {
             )
           ),
           sucursal:sucu_id (
+            id,
+            name
+          ),
+          sucursal_destino:pedido_sucursal_id (
             id,
             name
           ),
@@ -489,8 +515,160 @@ class pedidosAlmacen {
     }
   }
 
+  // Actualizar entrega de pedido (solo precio, productos y cantidades)
+  static async updateEntrega(pedidoId, pedidoData) {
+    try {
+      if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
+        throw new Error('La lista de productos es requerida');
+      }
+
+      if (!pedidoId) {
+        throw new Error('ID del pedido es requerido');
+      }
+
+      if (!pedidoData.movimiento_id) {
+        throw new Error('ID del movimiento es requerido');
+      }
+
+      // Verificar que el pedido existe
+      const { data: pedidoExistente, error: fetchError } = await supabase
+        .from('pedidos_almacen')
+        .select('id')
+        .eq('id', pedidoId)
+        .single();
+
+      if (fetchError || !pedidoExistente) {
+        throw new Error('Pedido no encontrado');
+      }
+
+      // Actualizar precio_id, estado y movimiento_id del pedido principal
+      const pedidoPrincipal = {
+        precio_id: pedidoData.precio_id || null,
+        estado: 'Enviado',
+        movimiento_id: pedidoData.movimiento_id
+      };
+
+      const { error: pedidoError } = await supabase
+        .from('pedidos_almacen')
+        .update(pedidoPrincipal)
+        .eq('id', pedidoId);
+
+      if (pedidoError) {
+        throw new Error(`Error al actualizar el pedido: ${pedidoError.message}`);
+      }
+
+      // Eliminar los detalles existentes
+      const { error: deleteDetallesError } = await supabase
+        .from('pedido_almacen_detalle')
+        .delete()
+        .eq('pedido_almacen_id', pedidoId);
+
+      if (deleteDetallesError) {
+        throw new Error(`Error al eliminar detalles existentes: ${deleteDetallesError.message}`);
+      }
+
+      // Crear los nuevos detalles del pedido
+      const detalles = pedidoData.productos.map(producto => ({
+        pedido_almacen_id: pedidoId,
+        producto_almacen_id: producto.id,
+        cantidad: producto.cantidad,
+        precio: producto.precio || 0
+      }));
+
+      const { error: detallesError } = await supabase
+        .from('pedido_almacen_detalle')
+        .insert(detalles);
+
+      if (detallesError) {
+        throw new Error(`Error al crear los nuevos detalles del pedido: ${detallesError.message}`);
+      }
+
+      // Obtener el pedido completo actualizado con detalles
+      const { data: pedidoCompleto, error: fetchCompletoError } = await supabase
+        .from('pedidos_almacen')
+        .select(`
+          *,
+          pedido_almacen_detalle (
+            *,
+            producto_almacen:producto_almacen_id (
+              id,
+              name,
+              description
+            )
+          ),
+          sucursal:sucu_id (
+            id,
+            name
+          ),
+          sucursal_destino:pedido_sucursal_id (
+            id,
+            name
+          ),
+          precio:prices_types (
+            id,
+            name
+          )
+        `)
+        .eq('id', pedidoId)
+        .single();
+
+      if (fetchCompletoError) {
+        throw new Error(`Error al obtener el pedido actualizado: ${fetchCompletoError.message}`);
+      }
+
+      // Obtener nombres de usuario y personal
+      let user = null;
+      let personal = null;
+
+      // Si tiene user_id, obtener el usuario
+      if (pedidoCompleto.user_id) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .eq('id', pedidoCompleto.user_id)
+          .single();
+        user = {
+          id: userData.id,
+          name: `${userData.first_name} ${userData.last_name}`.trim()
+        };
+      }
+
+      // Si tiene personal_id, obtener el personal
+      if (pedidoCompleto.personal_id) {
+        const { data: personalData } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .eq('id', pedidoCompleto.personal_id)
+          .single();
+        personal = {
+          id: personalData.id,
+          name: `${personalData.first_name} ${personalData.last_name}`.trim()
+        };
+      }
+
+      const pedidoConNombres = {
+        ...pedidoCompleto,
+        user,
+        personal
+      };
+
+      return {
+        success: true,
+        message: 'Pedido entregado exitosamente',
+        data: pedidoConNombres
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacen.updateEntrega:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
   // Actualizar estado del pedido
-  static async updateEstado(pedidoId, nuevoEstado) {
+  static async updateEstado(pedidoId, nuevoEstado, movimientoEntradaId = null) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
@@ -500,9 +678,22 @@ class pedidosAlmacen {
         throw new Error('Nuevo estado es requerido');
       }
 
+      // Preparar datos para actualizar
+      const updateData = { estado: nuevoEstado };
+      
+      // Si se cambia a 'Pendiente', limpiar el movimiento_id
+      if (nuevoEstado === 'Pendiente') {
+        updateData.movimiento_id = null;
+      }
+      
+      // Si se proporciona un movimiento_entrada_id, agregarlo
+      if (movimientoEntradaId) {
+        updateData.movimiento_entrada_id = movimientoEntradaId;
+      }
+
       const { data, error } = await supabase
         .from('pedidos_almacen')
-        .update({ estado: nuevoEstado })
+        .update(updateData)
         .eq('id', pedidoId)
         .select()
         .single();

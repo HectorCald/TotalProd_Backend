@@ -1,5 +1,6 @@
 const movimientosAcopio = require('../models/movimientosAcopio');
 const productsAcopio = require('../models/productsAcopio');
+const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
 
 class movimientosAcopioController {
   // Crear un movimiento
@@ -196,6 +197,20 @@ class movimientosAcopioController {
   static async anular(req, res) {
     try {
       const { id } = req.params;
+      const userType = req.user?.type;
+
+      // Verificar permisos de anulación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkAnularPermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para anular movimientos'
+          });
+        }
+      }
 
       const result = await movimientosAcopio.anular(id);
 
@@ -224,6 +239,20 @@ class movimientosAcopioController {
   static async eliminar(req, res) {
     try {
       const { id } = req.params;
+      const userType = req.user?.type;
+
+      // Verificar permisos de eliminación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkDeletePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para eliminar movimientos'
+          });
+        }
+      }
 
       const result = await movimientosAcopio.eliminar(id);
 
