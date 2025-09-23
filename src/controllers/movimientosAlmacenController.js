@@ -81,10 +81,10 @@ class movimientosAlmacenController {
                 });
             }
 
-            if (type === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo', 'credito'].includes(metodo_pago)) {
+            if (type === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo'].includes(metodo_pago)) {
                 return res.status(400).json({
                     success: false,
-                    message: 'El método de pago debe ser uno de: qr, transferencia, tarjeta, efectivo, credito'
+                    message: 'El método de pago debe ser uno de: qr, transferencia, tarjeta, efectivo'
                 });
             }
 

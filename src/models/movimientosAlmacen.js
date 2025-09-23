@@ -219,7 +219,8 @@ class movimientosAlmacen {
                     *,
                     cliente:clients(id, name),
                     proveedor:proveedores(id, name),
-                    precio:prices_types(id, name)
+                    precio:prices_types(id, name),
+                    sucursal:sucu_id(id, name)
                 `)
                 .eq('id', id)
                 .single();
@@ -328,7 +329,8 @@ class movimientosAlmacen {
                     *,
                     cliente:clients(id, name),
                     proveedor:proveedores(id, name),
-                    precio:prices_types(id, name)
+                    precio:prices_types(id, name),
+                    sucursal:sucu_id(id, name)
                 `, { count: 'exact' })
                 .eq('sucu_id', sucuId);
 

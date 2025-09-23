@@ -6,7 +6,7 @@ class movimientosAcopioController {
   // Crear un movimiento
   static async create(req, res) {
     try {
-      const { product_id, type, observations, proveedor_id, cliente_id, quantity, costo, restar_materia_prima, restar_ingredientes, sucu_id, personal_id } = req.body;
+      const { product_id, type, observations, proveedor_id, cliente_id, quantity, costo, metodo_pago, gasto_id, restar_materia_prima, restar_ingredientes, sucu_id, personal_id } = req.body;
       const userId = req.user?.id;
       const userType = req.user?.type;
 
@@ -37,6 +37,8 @@ class movimientosAcopioController {
         cliente_id,
         quantity,
         costo,
+        metodo_pago,
+        gasto_id,
         restar_ingredientes: restar_ingredientes || false,
         sucu_id
       }, finalUserId, finalPersonalId);

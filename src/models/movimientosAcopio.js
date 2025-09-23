@@ -38,6 +38,8 @@ class movimientosAcopio {
         cliente_id: movimientoData.cliente_id || null,
         quantity: movimientoData.quantity,
         costo: movimientoData.costo || null,
+        metodo_pago: movimientoData.metodo_pago || null,
+        gasto_id: movimientoData.gasto_id || null,
         restar_ingredientes: movimientoData.restar_ingredientes || false,
         date: ahoraBolivia.toISOString() // Usar timestamp en zona horaria de Bolivia
       };
@@ -263,6 +265,10 @@ class movimientosAcopio {
           cliente:cliente_id (
             id,
             name
+          ),
+          sucursal:sucu_id (
+            id,
+            name
           )
         `)
         .eq('id', movimientoId)
@@ -359,6 +365,10 @@ class movimientosAcopio {
             name
           ),
           cliente:cliente_id (
+            id,
+            name
+          ),
+          sucursal:sucu_id (
             id,
             name
           )
@@ -752,6 +762,20 @@ class movimientosAcopio {
       // Verificar que no esté ya anulado
       if (movimiento.estado === 'anulado') {
         return { success: false, message: 'El movimiento ya está anulado' };
+      }
+
+      // Si tiene gasto_id, eliminar el gasto asociado primero
+      if (movimiento.gasto_id) {
+        const { error: deleteGastoError } = await supabase
+          .from('gastos')
+          .delete()
+          .eq('id', movimiento.gasto_id);
+
+        if (deleteGastoError) {
+          console.error('Error eliminando gasto asociado:', deleteGastoError);
+          return { success: false, message: 'Error al eliminar el gasto asociado' };
+        }
+        console.log('Gasto eliminado al anular entrada:', movimiento.gasto_id);
       }
 
       // Actualizar estado a anulado

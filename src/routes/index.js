@@ -20,6 +20,7 @@ const codigoPromocionalRoutes = require('./codigoPromocionalRoutes');
 const sucursalesRoutes = require('./sucursalesRoutes');
 const personalRoutes = require('./personalRoutes');
 const comentariosRoutes = require('./comentariosRoutes');
+const gastosRoutes = require('./gastosRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -96,5 +97,8 @@ router.use('/personal', personalRoutes);
 
 // Rutas de comentarios
 router.use('/comentarios', comentariosRoutes);
+
+// Rutas de gastos
+router.use('/gastos', gastosRoutes);
 
 module.exports = router;
