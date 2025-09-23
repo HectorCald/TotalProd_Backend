@@ -84,11 +84,16 @@ class comentarios {
   // Crear un comentario
   static async create(comentarioData) {
     try {
+      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+      
       const dbData = {
         user_id: comentarioData.user_id || null,
         personal_id: comentarioData.personal_id || null,
         tipo: comentarioData.tipo,
-        mensaje: comentarioData.mensaje
+        mensaje: comentarioData.mensaje,
+        created_at: ahoraBolivia.toISOString() // Forzar timestamp en zona horaria de Bolivia
       };
 
       const { data, error } = await supabase
@@ -115,9 +120,11 @@ class comentarios {
   // Verificar si el usuario ya apoyó este comentario hoy
   static async verificarApoyoHoy(comentarioId, userId = null, personalId = null) {
     try {
-      const hoy = new Date();
-      const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-      const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+      // Usar zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000));
+      const inicioDia = new Date(ahoraBolivia.getFullYear(), ahoraBolivia.getMonth(), ahoraBolivia.getDate());
+      const finDia = new Date(ahoraBolivia.getFullYear(), ahoraBolivia.getMonth(), ahoraBolivia.getDate() + 1);
 
       let query = supabase
         .from('comentarios_apoyos')
@@ -177,9 +184,11 @@ class comentarios {
   // Contar comentarios del usuario hoy
   static async contarComentariosHoy(userId = null, personalId = null) {
     try {
-      const hoy = new Date();
-      const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-      const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+      // Usar zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000));
+      const inicioDia = new Date(ahoraBolivia.getFullYear(), ahoraBolivia.getMonth(), ahoraBolivia.getDate());
+      const finDia = new Date(ahoraBolivia.getFullYear(), ahoraBolivia.getMonth(), ahoraBolivia.getDate() + 1);
 
       let query = supabase
         .from('comentarios')
@@ -218,10 +227,15 @@ class comentarios {
         throw new Error('Se requiere user_id o personal_id');
       }
 
+      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+
       const dbData = {
         comentario_id: comentarioId,
         user_id: userId,
-        personal_id: personalId
+        personal_id: personalId,
+        created_at: ahoraBolivia.toISOString() // Forzar timestamp en zona horaria de Bolivia
       };
 
       const { data, error } = await supabase

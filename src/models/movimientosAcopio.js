@@ -25,6 +25,10 @@ class movimientosAcopio {
         throw new Error('ID de la sucursal es requerido');
       }
 
+      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+
       const dbData = {
         product_id: movimientoData.product_id,
         sucu_id: movimientoData.sucu_id,
@@ -35,7 +39,7 @@ class movimientosAcopio {
         quantity: movimientoData.quantity,
         costo: movimientoData.costo || null,
         restar_ingredientes: movimientoData.restar_ingredientes || false,
-        date: new Date().toISOString() // Usar timestamp completo con hora
+        date: ahoraBolivia.toISOString() // Usar timestamp en zona horaria de Bolivia
       };
 
       // Solo incluir user_id o personal_id si no son null

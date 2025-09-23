@@ -6,6 +6,10 @@ class movimientosAlmacen {
         try {
             const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes } = movimientoData;
 
+            // Crear timestamp en zona horaria de Bolivia (GMT-4)
+            const ahora = new Date();
+            const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+
             // Iniciar transacción
             const insertData = {
                 sucu_id,
@@ -15,7 +19,8 @@ class movimientosAlmacen {
                 precio_id,
                 cliente_id: cliente_id || null,
                 proveedor_id: proveedor_id || null,
-                restar_ingredientes: restar_ingredientes || false
+                restar_ingredientes: restar_ingredientes || false,
+                fecha: ahoraBolivia.toISOString() // Usar timestamp en zona horaria de Bolivia
             };
 
             // Solo agregar user_id o personal_id si tienen valor

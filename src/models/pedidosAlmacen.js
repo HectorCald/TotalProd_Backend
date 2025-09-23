@@ -28,6 +28,10 @@ class pedidosAlmacen {
         throw new Error('ID de la sucursal de destino es requerido');
       }
 
+      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+
       // Crear el pedido principal
       const pedidoPrincipal = {
         empresa_id: empresaId,
@@ -35,7 +39,8 @@ class pedidosAlmacen {
         precio_id: pedidoData.precio_id,
         pedido_sucursal_id: pedidoData.pedido_sucursal_id,
         observaciones: pedidoData.observaciones || null,
-        estado: 'Pendiente'
+        estado: 'Pendiente',
+        fecha: ahoraBolivia.toISOString() // Usar timestamp en zona horaria de Bolivia
       };
 
       // Solo agregar user_id o personal_id si tienen valor
