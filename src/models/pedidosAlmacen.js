@@ -275,6 +275,106 @@ class pedidosAlmacen {
     }
   }
 
+  // Obtener todos los pedidos sin límite (para reportes)
+  static async getAllSinLimite(sucuId) {
+    try {
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
+      }
+
+      const { data: pedidos, error } = await supabase
+        .from('pedidos_almacen')
+        .select(`
+          *,
+          pedido_almacen_detalle (
+            *,
+            producto_almacen:producto_almacen_id (
+              id,
+              name,
+              description
+            )
+          ),
+          sucursal:sucu_id (
+            id,
+            name
+          ),
+          sucursal_destino:pedido_sucursal_id (
+            id,
+            name
+          ),
+          precio:prices_types (
+            id,
+            name
+          )
+        `)
+        .or(`sucu_id.eq.${sucuId},pedido_sucursal_id.eq.${sucuId}`)
+        .order('fecha', { ascending: false });
+
+      if (error) {
+        throw new Error(`Error al obtener pedidos: ${error.message}`);
+      }
+
+      // Obtener nombres de usuarios y personal para cada pedido
+      const pedidosConNombres = await Promise.all(
+        pedidos.map(async (pedido) => {
+          let user = null;
+          let personal = null;
+
+          // Si tiene user_id, obtener el usuario
+          if (pedido.user_id) {
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('id, first_name, last_name')
+              .eq('id', pedido.user_id)
+              .single();
+            
+            if (!userError && userData) {
+              user = {
+                id: userData.id,
+                name: `${userData.first_name} ${userData.last_name}`.trim()
+              };
+            }
+          }
+
+          // Si tiene personal_id, obtener el personal
+          if (pedido.personal_id) {
+            const { data: personalData, error: personalError } = await supabase
+              .from('personal')
+              .select('id, first_name, last_name')
+              .eq('id', pedido.personal_id)
+              .single();
+            
+            if (!personalError && personalData) {
+              personal = {
+                id: personalData.id,
+                name: `${personalData.first_name} ${personalData.last_name}`.trim()
+              };
+            }
+          }
+
+          return {
+            ...pedido,
+            user,
+            personal
+          };
+        })
+      );
+
+      return {
+        success: true,
+        message: 'Pedidos obtenidos exitosamente',
+        data: pedidosConNombres
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacen.getAllSinLimite:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
   // Obtener un pedido por ID
   static async getById(pedidoId) {
     try {

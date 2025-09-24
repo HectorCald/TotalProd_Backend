@@ -62,6 +62,15 @@ class categoryAlmacenController {
       });
     } catch (error) {
       console.error('Error en create:', error);
+      
+      // Si es un error de validación (nombre duplicado), devolver 400
+      if (error.message === 'Ya existe una categoría con este nombre') {
+        return res.status(400).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
       res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'
@@ -101,6 +110,15 @@ class categoryAlmacenController {
       });
     } catch (error) {
       console.error('Error en update:', error);
+      
+      // Si es un error de validación (nombre duplicado), devolver 400
+      if (error.message === 'Ya existe una categoría con este nombre') {
+        return res.status(400).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
       res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'

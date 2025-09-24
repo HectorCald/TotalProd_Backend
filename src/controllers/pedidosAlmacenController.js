@@ -113,6 +113,35 @@ class pedidosAlmacenController {
     }
   }
 
+  // Obtener todos los pedidos sin límite (para reportes)
+  static async getAllSinLimite(req, res) {
+    try {
+      const { sucu_id } = req.query;
+
+      if (!sucu_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la sucursal es requerido'
+        });
+      }
+
+      const result = await pedidosAlmacen.getAllSinLimite(sucu_id);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacenController.getAllSinLimite:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
   // Obtener un pedido por ID
   static async getById(req, res) {
     try {

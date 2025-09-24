@@ -41,11 +41,49 @@ class categoryAcopio {
     }
   }
 
+  // Verificar si ya existe una categoría con el mismo nombre (case insensitive)
+  static async checkNameExists(name, empresaId, excludeId = null) {
+    try {
+      if (!name || !empresaId) {
+        return false;
+      }
+
+      let query = supabase
+        .from('category_acopio')
+        .select('id')
+        .eq('empresa_id', empresaId)
+        .ilike('name', name.trim());
+
+      // Si se está editando, excluir el ID actual
+      if (excludeId) {
+        query = query.neq('id', excludeId);
+      }
+
+      const { data, error } = await query.limit(1);
+
+      if (error) {
+        console.error('Error al verificar nombre de categoría:', error);
+        return false;
+      }
+
+      return data && data.length > 0;
+    } catch (error) {
+      console.error('Error al verificar nombre de categoría:', error);
+      return false;
+    }
+  }
+
   // Crear una categoría
   static async create(categoryData, empresaId) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
+      }
+
+      // Verificar si ya existe una categoría con el mismo nombre
+      const nameExists = await this.checkNameExists(categoryData.name, empresaId);
+      if (nameExists) {
+        throw new Error('Ya existe una categoría con este nombre');
       }
 
       const dbData = {
@@ -79,6 +117,23 @@ class categoryAcopio {
     try {
       if (!id) {
         throw new Error('ID de la categoría es requerido');
+      }
+
+      // Primero obtener la empresa_id de la categoría actual
+      const { data: currentCategory, error: fetchError } = await supabase
+        .from('category_acopio')
+        .select('empresa_id')
+        .eq('id', id)
+        .single();
+
+      if (fetchError || !currentCategory) {
+        throw new Error('Categoría no encontrada');
+      }
+
+      // Verificar si ya existe una categoría con el mismo nombre (excluyendo la actual)
+      const nameExists = await this.checkNameExists(categoryData.name, currentCategory.empresa_id, id);
+      if (nameExists) {
+        throw new Error('Ya existe una categoría con este nombre');
       }
 
       const { data, error } = await supabase

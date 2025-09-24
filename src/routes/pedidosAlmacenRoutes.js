@@ -9,6 +9,7 @@ router.use(requireAuth);
 // Rutas
 router.post('/', pedidosAlmacenController.create);
 router.get('/', pedidosAlmacenController.getAll);
+router.get('/sin-limite', pedidosAlmacenController.getAllSinLimite);
 router.get('/:id', pedidosAlmacenController.getById);
 router.put('/:id', pedidosAlmacenController.update);
 router.put('/:id/entrega', pedidosAlmacenController.updateEntrega);
