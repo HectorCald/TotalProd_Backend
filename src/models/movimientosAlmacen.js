@@ -179,30 +179,53 @@ class movimientosAlmacen {
                 }
             }
 
-            // Obtener el movimiento completo con detalles y stock actualizado
-            const movimientoCompleto = await this.getById(movimiento.id);
-            
-            // Actualizar el stock de los productos en la respuesta con el stock actual de la sucursal
-            if (movimientoCompleto.data && movimientoCompleto.data.productos) {
-                for (const productoMovimiento of movimientoCompleto.data.productos) {
-                    // Obtener el stock actual del producto en la sucursal
+            // Obtener solo los datos básicos del movimiento y stock actualizado de productos
+            const { data: movimientoBasico, error: movimientoBasicoError } = await supabase
+                .from('movimientos_almacen')
+                .select(`
+                    id,
+                    type,
+                    observaciones,
+                    fecha,
+                    metodo_pago,
+                    precio_id,
+                    cliente_id,
+                    proveedor_id,
+                    restar_ingredientes
+                `)
+                .eq('id', movimiento.id)
+                .single();
+
+            if (movimientoBasicoError) {
+                return { success: false, message: 'Error al obtener el movimiento', error: movimientoBasicoError };
+            }
+
+            // Obtener solo los productos con su stock actualizado
+            const productosConStock = await Promise.all(
+                productos.map(async (producto) => {
                     const { data: stockActual } = await supabase
                         .from('productos_sucursal')
                         .select('stock')
-                        .eq('producto_id', productoMovimiento.producto.id)
+                        .eq('producto_id', producto.id)
                         .eq('sucursal_id', sucu_id)
                         .single();
                     
-                    // Actualizar el stock en el producto
-                    if (stockActual) {
-                        productoMovimiento.producto.stock = stockActual.stock;
-                    } else {
-                        productoMovimiento.producto.stock = 0;
-                    }
+                    return {
+                        id: producto.id,
+                        cantidad: producto.cantidad,
+                        precio: producto.precio,
+                        stock: stockActual?.stock || 0
+                    };
+                })
+            );
+
+            return { 
+                success: true, 
+                data: {
+                    ...movimientoBasico,
+                    productos: productosConStock
                 }
-            }
-            
-            return { success: true, data: movimientoCompleto.data };
+            };
 
         } catch (error) {
             console.error('Error en MovimientosAlmacen.create:', error);

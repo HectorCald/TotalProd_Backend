@@ -171,14 +171,12 @@ class productsAlmacenController {
         prices: prices || {},
         receta: receta || null
       }, sucu_id);
-
       res.status(200).json({
         success: true,
         message: 'Producto actualizado exitosamente',
         data: updatedProduct
       });
     } catch (error) {
-      console.error('Error en update:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'

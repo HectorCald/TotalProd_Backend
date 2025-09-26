@@ -73,6 +73,11 @@ class productsAlmacen {
         data.stock = stockSucursal ? stockSucursal.stock : 0;
       }
 
+      // Agregar category_name
+      if (data) {
+        data.category_name = data.category_almacen?.name || 'Sin categoría';
+      }
+
       return data;
     } catch (error) {
       console.error('Error al obtener el producto:', error);
@@ -128,6 +133,13 @@ class productsAlmacen {
 
       if (error) {
         throw new Error('No se pudieron obtener los productos');
+      }
+
+      // Agregar category_name a cada producto
+      if (data) {
+        data.forEach(producto => {
+          producto.category_name = producto.category_almacen?.name || 'Sin categoría';
+        });
       }
 
       return data || [];
@@ -193,6 +205,13 @@ class productsAlmacen {
         data.forEach(producto => {
           const stockSucursal = producto.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
           producto.stock = stockSucursal ? stockSucursal.stock : 0;
+        });
+      }
+
+      // Agregar category_name a cada producto
+      if (data) {
+        data.forEach(producto => {
+          producto.category_name = producto.category_almacen?.name;
         });
       }
 
@@ -357,6 +376,11 @@ class productsAlmacen {
         completeProduct.stock = stockSucursal ? stockSucursal.stock : 0;
       }
 
+      // Agregar category_name
+      if (completeProduct) {
+        completeProduct.category_name = completeProduct.category_almacen?.name || 'Sin categoría';
+      }
+
       return completeProduct;
     } catch (error) {
       console.error('Error al crear el producto:', error);
@@ -386,7 +410,6 @@ class productsAlmacen {
         .select();
 
       if (error) {
-        console.error('Error de Supabase:', error);
         throw new Error('No se pudo actualizar el producto');
       }
 
@@ -398,86 +421,77 @@ class productsAlmacen {
 
       // Actualizar stock en productos_sucursal si se proporciona sucuId
       if (sucuId && productData.stock !== undefined) {
-        // Verificar si ya existe la relación
-        const { data: existingStock } = await supabase
+        // Usar UPSERT para optimizar (inserta si no existe, actualiza si existe)
+        const { error: stockUpsertError } = await supabase
           .from('productos_sucursal')
-          .select('id')
-          .eq('producto_id', productId)
-          .eq('sucursal_id', sucuId)
-          .single();
+          .upsert({
+            producto_id: productId,
+            sucursal_id: sucuId,
+            stock: productData.stock || 0
+          }, {
+            onConflict: 'producto_id,sucursal_id'
+          });
 
-        if (existingStock) {
-          // Actualizar stock existente
-          const { error: stockUpdateError } = await supabase
-            .from('productos_sucursal')
-            .update({ stock: productData.stock || 0 })
-            .eq('producto_id', productId)
-            .eq('sucursal_id', sucuId);
-
-          if (stockUpdateError) {
-            console.error('Error al actualizar stock en sucursal:', stockUpdateError);
-          }
-        } else {
-          // Crear nueva relación con stock
-          const { error: stockCreateError } = await supabase
-            .from('productos_sucursal')
-            .insert([{
-              producto_id: productId,
-              sucursal_id: sucuId,
-              stock: productData.stock || 0
-            }]);
-
-          if (stockCreateError) {
-            console.error('Error al crear stock en sucursal:', stockCreateError);
-          }
+        if (stockUpsertError) {
+          throw new Error('Error al actualizar el stock');
         }
       }
 
-      // Actualizar precios si se proporcionan
+      // Actualizar precios si se proporcionan (OPTIMIZADO)
       if (productData.prices && Object.keys(productData.prices).length > 0) {
-        // Eliminar precios existentes
-        await supabase
-          .from('price_product')
-          .delete()
-          .eq('producto_almacen_id', productId);
-
-        // Insertar nuevos precios
+        // Preparar array de precios para batch insert
+        const preciosArray = [];
         for (const [priceTypeId, valor] of Object.entries(productData.prices)) {
           if (valor && valor !== '') {
-            await supabase
-              .from('price_product')
-              .insert({
-                producto_almacen_id: productId,
-                price_id: priceTypeId,
-                valor: parseFloat(valor) || 0
-              });
+            preciosArray.push({
+              producto_almacen_id: productId,
+              price_id: priceTypeId,
+              valor: parseFloat(valor) || 0
+            });
+          }
+        }
+
+        // Eliminar precios existentes y insertar nuevos en una sola transacción
+        if (preciosArray.length > 0) {
+          // Eliminar precios existentes
+          await supabase
+            .from('price_product')
+            .delete()
+            .eq('producto_almacen_id', productId);
+
+          // Insertar nuevos precios
+          const { error: preciosBatchError } = await supabase
+            .from('price_product')
+            .insert(preciosArray);
+
+          if (preciosBatchError) {
+            throw new Error('Error al actualizar los precios');
           }
         }
       }
 
-      // Actualizar receta si se proporciona
+      // Actualizar receta si se proporciona (OPTIMIZADO)
       if (productData.receta) {
-        // Eliminar receta existente y sus detalles
+        // Primero obtener los IDs de recetas existentes
         const { data: existingRecetas } = await supabase
           .from('recetas')
           .select('id')
           .eq('producto_almacen_id', productId);
 
+        // Eliminar detalles de recetas existentes si hay recetas
         if (existingRecetas && existingRecetas.length > 0) {
-          const recetaId = existingRecetas[0].id;
-          
-          // Eliminar detalles de receta
+          const recetaIds = existingRecetas.map(r => r.id);
           await supabase
             .from('recetas_detalle')
             .delete()
-            .eq('receta_id', recetaId);
-
-          // Eliminar receta
-          await supabase
-            .from('recetas')
-            .delete()
-            .eq('id', recetaId);
+            .in('receta_id', recetaIds);
         }
+
+        // Eliminar la receta
+        await supabase
+          .from('recetas')
+          .delete()
+          .eq('producto_almacen_id', productId);
 
         // Crear nueva receta si tiene datos
         if (productData.receta.descripcion || (productData.receta.productos && productData.receta.productos.length > 0)) {
@@ -490,7 +504,6 @@ class productsAlmacen {
             .select();
 
           if (recetaError) {
-            console.error('Error creando receta:', recetaError);
             throw new Error('Error al actualizar la receta');
           }
 
@@ -509,72 +522,78 @@ class productsAlmacen {
               .insert(detalles);
 
             if (detallesError) {
-              console.error('Error creando detalles de receta:', detallesError);
               throw new Error('Error al actualizar los detalles de la receta');
             }
           }
         }
       }
 
-      // Devolver el producto completo con precios y recetas
-      const { data: productoCompleto, error: errorCompleto } = await supabase
-        .from('products_almacen')
-        .select(`
-          *,
-          category_almacen (
-            id,
-            name
-          ),
-          price_product (
-            id,
-            valor,
-            prices_types (
-              id,
-              name,
-              description
-            )
-          ),
-          recetas (
-            id,
-            descripcion,
-            recetas_detalle (
-              id,
-              cantidad,
-              products_acopio (
-                id,
-                name,
-                type_measure (
-                  id,
-                  name,
-                  code
-                )
-              )
-            )
-          ),
-          productos_sucursal (
-            id,
-            stock,
-            sucursal_id
-          )
-        `)
-        .eq('id', productId)
+      // Obtener nombre de la categoría
+      const { data: categoria } = await supabase
+        .from('category_almacen')
+        .select('id, name')
+        .eq('id', productData.category_id)
         .single();
 
-      if (errorCompleto) {
-        console.error('Error obteniendo producto completo:', errorCompleto);
-        // Si hay error obteniendo el producto completo, devolver al menos el básico
-        return data[0];
-      }
+      const productoActualizado = {
+        ...data[0], // Datos básicos del producto actualizado en BD
+        stock: productData.stock || 0, // Stock actualizado
+        category_name: categoria?.name || 'Sin categoría', // Nombre de la categoría
+        // Devolver precios con JOIN para obtener nombres
+        price_product: productData.prices ? await Promise.all(
+          Object.entries(productData.prices).map(async ([price_id, valor]) => {
+            // Obtener información del tipo de precio
+            const { data: priceType } = await supabase
+              .from('prices_types')
+              .select('id, name, description')
+              .eq('id', price_id)
+              .single();
 
-      // Si se especifica sucuId, agregar el stock de esa sucursal específica
-      if (sucuId && productoCompleto) {
-        const stockSucursal = productoCompleto.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
-        productoCompleto.stock = stockSucursal ? stockSucursal.stock : 0;
-      }
+            return {
+              producto_almacen_id: productId,
+              price_id: price_id,
+              valor: parseFloat(valor) || 0,
+              prices_types: priceType || { id: price_id, name: 'Precio no encontrado', description: '' }
+            };
+          })
+        ) : [],
+        // Devolver exactamente la receta que me enviaron
+        recetas: productData.receta ? [{
+          id: 'temp_id', // ID temporal ya que se creó en BD
+          producto_almacen_id: productId,
+          descripcion: productData.receta.descripcion || '',
+          recetas_detalle: productData.receta.productos ? await Promise.all(
+            productData.receta.productos.map(async (prod) => {
+              // Obtener información del producto de acopio
+              const { data: productoAcopio } = await supabase
+                .from('products_acopio')
+                .select('id, name, type_measure(id, name, code)')
+                .eq('id', prod.producto_acopio_id)
+                .single();
 
-      return productoCompleto;
+              return {
+                receta_id: 'temp_id',
+                producto_acopio_id: prod.producto_acopio_id,
+                cantidad: parseFloat(prod.cantidad) || 0,
+                products_acopio: productoAcopio || { 
+                  id: prod.producto_acopio_id, 
+                  name: 'Producto no encontrado',
+                  type_measure: { id: null, name: '', code: '' }
+                }
+              };
+            })
+          ) : []
+        }] : [],
+        // Información de sucursal
+        productos_sucursal: sucuId ? [{
+          producto_id: productId,
+          sucursal_id: sucuId,
+          stock: productData.stock || 0
+        }] : []
+      };
+
+      return productoActualizado;
     } catch (error) {
-      console.error('Error al actualizar el producto:', error);
       throw error;
     }
   }
