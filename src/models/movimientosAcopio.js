@@ -337,7 +337,7 @@ class movimientosAcopio {
   }
 
   // Obtener todos los movimientos
-  static async getAll(sucuId, page = 1, limit = 10, tipo = null, ordenamiento = 'fecha_desc') {
+  static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc') {
     try {
       if (!sucuId) {
         throw new Error('ID de la sucursal es requerido');
@@ -378,6 +378,11 @@ class movimientosAcopio {
       // Aplicar filtro de tipo si se especifica
       if (tipo) {
         query = query.eq('type', tipo);
+      }
+
+      // Aplicar filtro de estado si se proporciona
+      if (estado) {
+        query = query.eq('estado', estado);
       }
 
       // Aplicar ordenamiento

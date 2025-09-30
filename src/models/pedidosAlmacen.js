@@ -157,7 +157,7 @@ class pedidosAlmacen {
   }
 
   // Obtener todos los pedidos de la sucursal (pedidos que hizo o que están destinados a esta sucursal)
-  static async getAll(sucuId, page = 1, limit = 20) {
+  static async getAll(sucuId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc') {
     try {
       if (!sucuId) {
         throw new Error('ID de la sucursal es requerido');
@@ -165,7 +165,33 @@ class pedidosAlmacen {
 
       const offset = (page - 1) * limit;
 
-      const { data: pedidos, error } = await supabase
+      // Configurar ordenamiento
+      let orderBy = 'fecha';
+      let ascending = false;
+      
+      switch (ordenamiento) {
+        case 'fecha_asc':
+          orderBy = 'fecha';
+          ascending = true;
+          break;
+        case 'fecha_desc':
+          orderBy = 'fecha';
+          ascending = false;
+          break;
+        case 'estado_asc':
+          orderBy = 'estado';
+          ascending = true;
+          break;
+        case 'estado_desc':
+          orderBy = 'estado';
+          ascending = false;
+          break;
+        default:
+          orderBy = 'fecha';
+          ascending = false;
+      }
+
+      let query = supabase
         .from('pedidos_almacen')
         .select(`
           *,
@@ -191,12 +217,73 @@ class pedidosAlmacen {
           )
         `)
         .or(`sucu_id.eq.${sucuId},pedido_sucursal_id.eq.${sucuId}`)
-        .order('fecha', { ascending: false })
+        .order(orderBy, { ascending: ascending })
         .range(offset, offset + limit - 1);
+
+      // Si hay búsqueda, primero obtener los IDs de pedidos que contienen el producto
+      let pedidosIdsFiltrados = null;
+      if (searchQuery && searchQuery.trim() !== '') {
+        const { data: pedidosConProducto, error: detalleError } = await supabase
+          .from('pedido_almacen_detalle')
+          .select(`
+            pedido_almacen_id,
+            producto_almacen_id,
+            producto_almacen:producto_almacen_id (
+              id,
+              name
+            )
+          `)
+          .ilike('producto_almacen.name', `%${searchQuery}%`);
+
+        if (detalleError) {
+          console.error('Error al buscar productos en detalle:', detalleError);
+        } else {
+          // Filtrar solo los que tienen producto_almacen válido
+          const pedidosValidos = pedidosConProducto?.filter(detalle => 
+            detalle.producto_almacen && detalle.producto_almacen.name
+          ) || [];
+          
+          pedidosIdsFiltrados = pedidosValidos.map(detalle => detalle.pedido_almacen_id);
+        }
+      }
+
+      // Aplicar filtro de estado si se proporciona
+      if (estado && estado.trim() !== '') {
+        query = query.eq('estado', estado);
+      }
+
+      // Si hay búsqueda, filtrar solo los pedidos que contienen el producto
+      if (pedidosIdsFiltrados && pedidosIdsFiltrados.length > 0) {
+        console.log('✅ pedidosAlmacen - Aplicando filtro con IDs:', pedidosIdsFiltrados);
+        query = query.in('id', pedidosIdsFiltrados);
+      } else if (searchQuery && searchQuery.trim() !== '') {
+        console.log('❌ pedidosAlmacen - No se encontraron productos, devolviendo array vacío');
+        // Si hay búsqueda pero no se encontraron productos, devolver array vacío
+        return {
+          success: true,
+          message: 'Pedidos obtenidos exitosamente',
+          data: [],
+          pagination: {
+            currentPage: page,
+            totalPages: 0,
+            totalItems: 0,
+            hasNextPage: false
+          }
+        };
+      }
+
+      console.log('📊 pedidosAlmacen - Ejecutando consulta final...');
+      const { data: pedidos, error } = await query;
+      console.log('📊 pedidosAlmacen - Resultado consulta:', {
+        cantidad: pedidos?.length,
+        error,
+        pedidos: pedidos?.map(p => ({ id: p.id, sucursal: p.sucursal?.name }))
+      });
 
       if (error) {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
       }
+
 
       // Obtener nombres de usuarios y personal para cada pedido
       const pedidosConNombres = await Promise.all(
@@ -649,7 +736,7 @@ class pedidosAlmacen {
       // Actualizar precio_id, estado y movimiento_id del pedido principal
       const pedidoPrincipal = {
         precio_id: pedidoData.precio_id || null,
-        estado: 'Enviado',
+        estado: 'Entregado',
         movimiento_id: pedidoData.movimiento_id
       };
 

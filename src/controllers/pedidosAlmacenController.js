@@ -87,7 +87,10 @@ class pedidosAlmacenController {
     try {
       const { sucu_id } = req.query;
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const limit = parseInt(req.query.limit) || 10;
+      const searchQuery = req.query.search || null;
+      const estado = req.query.estado || null;
+      const ordenamiento = req.query.ordenamiento || 'fecha_desc';
 
       if (!sucu_id) {
         return res.status(400).json({
@@ -96,7 +99,7 @@ class pedidosAlmacenController {
         });
       }
 
-      const result = await pedidosAlmacen.getAll(sucu_id, page, limit);
+      const result = await pedidosAlmacen.getAll(sucu_id, page, limit, searchQuery, estado, ordenamiento);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -361,11 +364,11 @@ class pedidosAlmacenController {
       }
 
       // Validar estados permitidos
-      const estadosPermitidos = ['Pendiente', 'En Proceso', 'Enviado', 'Completado', 'Cancelado'];
+      const estadosPermitidos = ['Pendiente', 'Entregado', 'Completado', 'Cancelado'];
       if (!estadosPermitidos.includes(estado)) {
         return res.status(400).json({
           success: false,
-          message: 'Estado no válido. Estados permitidos: Pendiente, En Proceso, Enviado, Completado, Cancelado'
+          message: 'Estado no válido. Estados permitidos: Pendiente, Entregado, Completado, Cancelado'
         });
       }
 

@@ -207,6 +207,41 @@ class productsAcopioController {
 
 
   
+  // Obtener un producto por ID
+  static async getById(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del producto es requerido'
+        });
+      }
+
+      const product = await productsAcopio.getById(id);
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: 'Producto no encontrado'
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Producto obtenido exitosamente',
+        data: product
+      });
+    } catch (error) {
+      console.error('Error en getById:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
   // Obtener productos por categoría
   static async getByCategory(req, res) {
     try {

@@ -10,6 +10,9 @@ router.use(requireAuth);
 // Ruta para obtener todos los productos de acopio
 router.get('/', productsAcopioController.getAll);
 
+// Ruta para obtener un producto de acopio por ID
+router.get('/:id', productsAcopioController.getById);
+
 // Ruta para obtener un producto de acopio por su categoría
 router.get('/category/:categoryId', productsAcopioController.getByCategory);
 

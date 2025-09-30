@@ -178,6 +178,7 @@ class movimientosAlmacenController {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 10;
             const tipo = req.query.tipo || null;
+            const estado = req.query.estado || null;
             const ordenamiento = req.query.ordenamiento || 'fecha_desc';
 
             if (!sucu_id) {
@@ -187,7 +188,7 @@ class movimientosAlmacenController {
                 });
             }
 
-            const result = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, ordenamiento);
+            const result = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, estado, ordenamiento);
 
             if (!result.success) {
                 return res.status(400).json(result);

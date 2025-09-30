@@ -12,6 +12,7 @@ class productsAlmacen {
     this.description = data.description;
     this.created_at = data.created_at;
     this.empresa_id = data.empresa_id;
+    this.grup = data.grup;
   }
 
   // Método para obtener un producto por ID con recetas y stock de sucursal
@@ -235,7 +236,8 @@ class productsAlmacen {
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
         description: productData.description || null,
-        empresa_id: empresaId
+        empresa_id: empresaId,
+        grup: productData.grup || null
       };
 
       const { data: product, error: productError } = await supabase
@@ -399,7 +401,8 @@ class productsAlmacen {
         name: productData.name,
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
-        description: productData.description || null
+        description: productData.description || null,
+        grup: productData.grup || null
       };
 
       // Actualizar el producto principal

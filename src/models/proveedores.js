@@ -37,45 +37,6 @@ class proveedores {
     }
   }
 
-  // Nuevo método para paginación con búsqueda
-  static async getAllPaginated(sucuId, { page, limit, offset, search }) {
-    try {
-      if (!sucuId) {
-        throw new Error('ID de la sucursal es requerido');
-      }
-
-      let query = supabase
-        .from('proveedores')
-        .select('*', { count: 'exact' })
-        .eq('sucu_id', sucuId);
-
-      // Aplicar filtro de búsqueda si existe
-      if (search && search.trim()) {
-        const searchTerm = `%${search.trim()}%`;
-        query = query.or(`name.ilike.${searchTerm},phone.ilike.${searchTerm}`);
-      }
-
-      // Aplicar paginación y ordenamiento
-      query = query
-        .order('name', { ascending: true })
-        .range(offset, offset + limit - 1);
-
-      const { data, error, count } = await query;
-
-      if (error) {
-        throw new Error('No se pudo obtener los proveedores');
-      }
-      
-      return {
-        proveedores: data || [],
-        total: count || 0
-      };
-    } catch (error) {
-      console.error('Error al obtener los proveedores paginados:', error);
-      throw new Error('No se pudo obtener los proveedores');
-    }
-  }
-
   // Crear un proveedor
   static async create(proveedorData, sucuId) {
     try {

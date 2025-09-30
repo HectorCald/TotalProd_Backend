@@ -20,7 +20,8 @@ class movimientosAlmacen {
                 cliente_id: cliente_id || null,
                 proveedor_id: proveedor_id || null,
                 restar_ingredientes: restar_ingredientes || false,
-                fecha: ahoraBolivia.toISOString() // Usar timestamp en zona horaria de Bolivia
+                fecha: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
+                estado: 'finalizado' // Estado por defecto
             };
 
             // Solo agregar user_id o personal_id si tienen valor
@@ -342,7 +343,7 @@ class movimientosAlmacen {
     }
 
     // Obtener todos los movimientos de una sucursal
-    static async getAll(sucuId, page = 1, limit = 10, tipo = null, ordenamiento = 'fecha_desc') {
+    static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc') {
         try {
             const offset = (page - 1) * limit;
 
@@ -359,7 +360,12 @@ class movimientosAlmacen {
 
             // Aplicar filtro de tipo si se proporciona
             if (tipo) {
-                query = query.eq('tipo', tipo);
+                query = query.eq('type', tipo);
+            }
+
+            // Aplicar filtro de estado si se proporciona
+            if (estado) {
+                query = query.eq('estado', estado);
             }
 
             // Aplicar ordenamiento
@@ -370,6 +376,20 @@ class movimientosAlmacen {
 
             if (error) {
                 return { success: false, message: 'Error al obtener movimientos', error };
+            }
+
+            // Si no hay movimientos, retornar array vacío
+            if (!movimientos || movimientos.length === 0) {
+                return {
+                    success: true,
+                    data: [],
+                    pagination: {
+                        total: count || 0,
+                        page,
+                        limit,
+                        hasNextPage: false
+                    }
+                };
             }
 
             // Obtener productos y información de usuario para cada movimiento
@@ -474,7 +494,7 @@ class movimientosAlmacen {
                     precio:prices_types(id, name)
                 `, { count: 'exact' })
                 .eq('sucu_id', sucuId)
-                .eq('tipo', tipo)
+                .eq('type', tipo)
                 .order('fecha', { ascending: false })
                 .range(offset, offset + limit - 1);
 
@@ -775,7 +795,7 @@ class movimientosAlmacen {
                     // Revertir el estado del movimiento
                     await supabase
                         .from('movimientos_almacen')
-                        .update({ estado: 'activo' })
+                        .update({ estado: 'finalizado' })
                         .eq('id', movimientoId);
                     return { success: false, message: 'Error al obtener el stock del producto' };
                 }
@@ -804,7 +824,7 @@ class movimientosAlmacen {
                         // Revertir el estado del movimiento
                         await supabase
                             .from('movimientos_almacen')
-                            .update({ estado: 'activo' })
+                            .update({ estado: 'finalizado' })
                             .eq('id', movimientoId);
                         return { success: false, message: 'Error al actualizar el stock' };
                     }
@@ -823,7 +843,7 @@ class movimientosAlmacen {
                         // Revertir el estado del movimiento
                         await supabase
                             .from('movimientos_almacen')
-                            .update({ estado: 'activo' })
+                            .update({ estado: 'finalizado' })
                             .eq('id', movimientoId);
                         return { success: false, message: 'Error al crear el stock' };
                     }

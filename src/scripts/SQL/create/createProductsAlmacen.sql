@@ -6,6 +6,7 @@ CREATE TABLE products_almacen (
     description VARCHAR,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
     empresa_id UUID NOT NULL,
+    grup NUMERIC
     CONSTRAINT products_almacen_category_id_fkey 
         FOREIGN KEY (category_id) REFERENCES category_almacen (id) ON DELETE SET NULL,
     CONSTRAINT products_almacen_empresa_id_fkey 

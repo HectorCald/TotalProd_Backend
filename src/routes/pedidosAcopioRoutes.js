@@ -9,6 +9,8 @@ router.post('/', pedidosAcopioController.create);
 router.get('/', pedidosAcopioController.getAll);
 router.get('/:id', pedidosAcopioController.getById);
 router.patch('/:id/estado', pedidosAcopioController.updateEstado);
+router.post('/:id/entregar', pedidosAcopioController.entregar);
+router.post('/:id/anular-entrega', pedidosAcopioController.anularEntrega);
 router.delete('/:id', pedidosAcopioController.eliminar);
 router.get('/verificar-producto/:productoId', pedidosAcopioController.verificarProductoEnPedidos);
 

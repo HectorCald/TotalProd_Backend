@@ -14,7 +14,6 @@ router.post('/:id/change-password', PersonalController.changePassword); // Nueva
 router.use(requireAuth);
 
 // Rutas CRUD (solo autenticación requerida)
-router.get('/check/codigo', PersonalController.checkCodigo);
 router.get('/', PersonalController.getAll);
 router.get('/:id', PersonalController.getById);
 router.post('/', PersonalController.create);

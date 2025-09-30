@@ -75,7 +75,7 @@ class pedidosAcopio {
   }
 
   // Obtener todos los pedidos de la empresa
-  static async getAll(empresaId, page = 1, limit = 20, searchQuery = null, ordenamiento = 'fecha_desc') {
+  static async getAll(empresaId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc') {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
@@ -127,9 +127,11 @@ class pedidosAcopio {
         .order(orderBy, { ascending: ascending })
         .range(offset, offset + limit - 1);
 
-      // Aplicar búsqueda si se proporciona
-      if (searchQuery && searchQuery.trim() !== '') {
-        query = query.or(`observaciones.ilike.%${searchQuery}%,producto_acopio.name.ilike.%${searchQuery}%`);
+      // La búsqueda se aplicará post-consulta para poder filtrar por nombre del producto
+
+      // Aplicar filtro de estado si se proporciona
+      if (estado && estado.trim() !== '') {
+        query = query.eq('estado', estado);
       }
 
       const { data: pedidos, error } = await query;
@@ -138,9 +140,20 @@ class pedidosAcopio {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
       }
 
+      // Filtrar por nombre del producto si hay búsqueda
+      let pedidosFiltrados = pedidos;
+      if (searchQuery && searchQuery.trim() !== '') {
+        const searchLower = searchQuery.toLowerCase();
+        pedidosFiltrados = pedidos.filter(pedido => {
+          const productoName = pedido.producto_acopio?.name?.toLowerCase() || '';
+          const observaciones = pedido.observaciones?.toLowerCase() || '';
+          return productoName.includes(searchLower) || observaciones.includes(searchLower);
+        });
+      }
+
       // Obtener nombres de usuarios y personal para cada pedido
       const pedidosConNombres = await Promise.all(
-        pedidos.map(async (pedido) => {
+        pedidosFiltrados.map(async (pedido) => {
           let user = null;
           let personal = null;
 
@@ -299,7 +312,7 @@ class pedidosAcopio {
   }
 
   // Actualizar estado de un pedido
-  static async updateEstado(pedidoId, nuevoEstado) {
+  static async updateEstado(pedidoId, nuevoEstado, userId, movimientoEntradaId = null) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
@@ -309,9 +322,17 @@ class pedidosAcopio {
         throw new Error('Nuevo estado es requerido');
       }
 
+      // Preparar datos para actualizar
+      const updateData = { estado: nuevoEstado };
+      
+      // Si se proporciona un movimiento_entrada_id, agregarlo
+      if (movimientoEntradaId) {
+        updateData.movimiento_entrada_id = movimientoEntradaId;
+      }
+
       const { data, error } = await supabase
         .from('pedidos_acopio')
-        .update({ estado: nuevoEstado })
+        .update(updateData)
         .eq('id', pedidoId)
         .select()
         .single();
@@ -401,6 +422,223 @@ class pedidosAcopio {
 
     } catch (error) {
       console.error('Error en pedidosAcopio.eliminar:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Entregar pedido
+  static async entregar(pedidoId, entregaData, userId) {
+    try {
+      if (!pedidoId) {
+        throw new Error('ID del pedido es requerido');
+      }
+
+      if (!entregaData) {
+        throw new Error('Datos de entrega son requeridos');
+      }
+
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
+      // Obtener el pedido primero para validar que existe y obtener el nombre del producto
+      const { data: pedidoExistente, error: pedidoError } = await supabase
+        .from('pedidos_acopio')
+        .select(`
+          id, 
+          estado, 
+          producto_acopio_id, 
+          cantidad, 
+          tipo_medida,
+          producto_acopio:producto_acopio_id (
+            id,
+            name
+          )
+        `)
+        .eq('id', pedidoId)
+        .single();
+
+      if (pedidoError) {
+        if (pedidoError.code === 'PGRST116') {
+          throw new Error('Pedido no encontrado');
+        }
+        throw new Error(`Error al obtener el pedido: ${pedidoError.message}`);
+      }
+
+      if (pedidoExistente.estado === 'Entregado') {
+        throw new Error('El pedido ya ha sido entregado');
+      }
+
+      // Crear el gasto primero
+      const gastosModel = require('./gastos');
+      const nombreProducto = pedidoExistente.producto_acopio?.name || 'Producto';
+      const concepto = `${nombreProducto} - ${entregaData.cantidadEntregada} ${entregaData.unidadEntregada}`;
+      
+      const gastoData = {
+        concepto: concepto,
+        valor: entregaData.costo,
+        metodo_pago: entregaData.metodo_pago,
+        proveedor_id: entregaData.proveedor_id,
+        observaciones: entregaData.observaciones || null,
+        fecha_gasto: new Date().toISOString().split('T')[0] // Formato YYYY-MM-DD
+      };
+
+      // Obtener el sucu_id del pedido para el gasto
+      const { data: pedidoConSucursal, error: pedidoError2 } = await supabase
+        .from('pedidos_acopio')
+        .select('sucu_id')
+        .eq('id', pedidoId)
+        .single();
+
+      if (pedidoError2) {
+        throw new Error(`Error al obtener sucursal del pedido: ${pedidoError2.message}`);
+      }
+
+      const gastoResult = await gastosModel.create({
+        ...gastoData,
+        user_id: userId,
+        sucu_id: pedidoConSucursal.sucu_id
+      });
+
+      if (!gastoResult.success) {
+        throw new Error(`Error al crear el gasto: ${gastoResult.message}`);
+      }
+
+      console.log('Gasto creado:', gastoResult.data);
+      console.log('Gasto ID:', gastoResult.data.id);
+
+      // Actualizar el pedido con los datos de entrega
+      const { data: pedidoActualizado, error: updateError } = await supabase
+        .from('pedidos_acopio')
+        .update({
+          estado: 'Entregado',
+          fecha_entregado: entregaData.fecha_entregado,
+          entregado_por: entregaData.entregado_por,
+          cantidad_entregada: parseFloat(entregaData.cantidadEntregada),
+          cantidad_entregada_ud: parseInt(entregaData.cantidadUD),
+          estado_entrega: entregaData.estado_entrega,
+          observaciones_entrega: entregaData.observaciones || null,
+          gasto_id: gastoResult.data.id
+        })
+        .eq('id', pedidoId)
+        .select(`
+          *,
+          producto_acopio:producto_acopio_id (
+            id,
+            name,
+            description
+          ),
+          gasto:gasto_id (
+            id,
+            concepto,
+            valor,
+            metodo_pago,
+            fecha_gasto
+          )
+        `)
+        .single();
+
+      if (updateError) {
+        throw new Error(`Error al actualizar el pedido: ${updateError.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Pedido entregado exitosamente',
+        data: pedidoActualizado
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAcopio.entregar:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Anular entrega de pedido
+  static async anularEntrega(pedidoId, userId) {
+    try {
+      if (!pedidoId) {
+        throw new Error('ID del pedido es requerido');
+      }
+
+      if (!userId) {
+        throw new Error('ID del usuario es requerido');
+      }
+
+      // Obtener el pedido para validar que existe y tiene gasto_id
+      const { data: pedidoExistente, error: pedidoError } = await supabase
+        .from('pedidos_acopio')
+        .select('id, estado, gasto_id')
+        .eq('id', pedidoId)
+        .single();
+
+      if (pedidoError) {
+        if (pedidoError.code === 'PGRST116') {
+          throw new Error('Pedido no encontrado');
+        }
+        throw new Error(`Error al obtener el pedido: ${pedidoError.message}`);
+      }
+
+      if (pedidoExistente.estado !== 'Entregado') {
+        throw new Error('Solo se pueden anular pedidos en estado Entregado');
+      }
+
+      if (!pedidoExistente.gasto_id) {
+        throw new Error('El pedido no tiene un gasto asociado');
+      }
+
+      // Primero limpiar todos los campos de entrega del pedido (incluyendo gasto_id)
+      const { data: pedidoActualizado, error: updateError } = await supabase
+        .from('pedidos_acopio')
+        .update({
+          estado: 'Pendiente',
+          fecha_entregado: null,
+          entregado_por: null,
+          cantidad_entregada: null,
+          cantidad_entregada_ud: null,
+          estado_entrega: null,
+          observaciones_entrega: null,
+          gasto_id: null
+        })
+        .eq('id', pedidoId)
+        .select(`
+          *,
+          producto_acopio:producto_acopio_id (
+            id,
+            name,
+            description
+          )
+        `)
+        .single();
+
+      if (updateError) {
+        throw new Error(`Error al limpiar los datos de entrega: ${updateError.message}`);
+      }
+
+      // Ahora eliminar el gasto (ya no hay referencia en el pedido)
+      const gastosModel = require('./gastos');
+      const gastoResult = await gastosModel.delete(pedidoExistente.gasto_id);
+
+      if (!gastoResult.success) {
+        throw new Error(`Error al eliminar el gasto: ${gastoResult.message}`);
+      }
+
+      console.log('Gasto eliminado:', gastoResult.message);
+
+      return {
+        success: true,
+        message: 'Entrega anulada exitosamente',
+        data: pedidoActualizado
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAcopio.anularEntrega:', error);
       return {
         success: false,
         message: error.message

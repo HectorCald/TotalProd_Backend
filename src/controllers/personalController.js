@@ -203,34 +203,6 @@ class PersonalController {
     }
   }
 
-  // Verificar si un código existe
-  static async checkCodigo(req, res) {
-    try {
-      const { codigo, empresa_id, exclude_id } = req.query;
-
-      if (!codigo || !empresa_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'Código y empresa son requeridos'
-        });
-      }
-
-      const exists = await Personal.codigoExists(codigo, empresa_id, exclude_id);
-
-      res.status(200).json({
-        success: true,
-        data: {
-          exists: exists
-        }
-      });
-    } catch (error) {
-      console.error('Error en checkCodigo:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
 
     // Validar código de empleado
     static async validateEmployeeCode(req, res) {

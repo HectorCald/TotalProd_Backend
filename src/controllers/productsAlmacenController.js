@@ -43,7 +43,7 @@ class productsAlmacenController {
   // Crear un producto
   static async create(req, res) {
     try {
-      const { name, description, stock, codigo_barras, category_id, prices, receta, empresa_id, sucu_id } = req.body;
+      const { name, description, stock, codigo_barras, category_id, grup, prices, receta, empresa_id, sucu_id } = req.body;
       const userType = req.user?.type;
 
       // Validaciones básicas
@@ -95,6 +95,7 @@ class productsAlmacenController {
         stock: parseInt(stock),
         codigo_barras: codigo_barras ? codigo_barras.trim() : null,
         category_id: category_id || null,
+        grup: grup || null,
         prices: prices || {},
         receta: receta || null
       }, empresa_id, sucu_id);
@@ -117,7 +118,7 @@ class productsAlmacenController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { name, description, stock, codigo_barras, category_id, prices, receta, sucu_id } = req.body;
+      const { name, description, stock, codigo_barras, category_id, grup, prices, receta, sucu_id } = req.body;
       const userType = req.user?.type;
 
       if (!id) {
@@ -168,6 +169,7 @@ class productsAlmacenController {
         stock: parseInt(stock),
         codigo_barras: codigo_barras ? codigo_barras.trim() : null,
         category_id: category_id || null,
+        grup: grup || null,
         prices: prices || {},
         receta: receta || null
       }, sucu_id);

@@ -53,8 +53,9 @@ class pedidosAcopioController {
     try {
       const { empresa_id } = req.query;
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const limit = parseInt(req.query.limit) || 10;
       const searchQuery = req.query.search || null;
+      const estado = req.query.estado || null;
       const ordenamiento = req.query.ordenamiento || 'fecha_desc';
 
       if (!empresa_id) {
@@ -64,7 +65,7 @@ class pedidosAcopioController {
         });
       }
 
-      const result = await pedidosAcopio.getAll(empresa_id, page, limit, searchQuery, ordenamiento);
+      const result = await pedidosAcopio.getAll(empresa_id, page, limit, searchQuery, estado, ordenamiento);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -110,7 +111,7 @@ class pedidosAcopioController {
   static async updateEstado(req, res) {
     try {
       const { id } = req.params;
-      const { estado } = req.body;
+      const { estado, movimiento_entrada_id } = req.body;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -125,15 +126,15 @@ class pedidosAcopioController {
         return res.status(400).json({ success: false, message: 'Nuevo estado es requerido' });
       }
 
-      const estadosPermitidos = ['Pendiente', 'En Proceso', 'Completado', 'Cancelado'];
+      const estadosPermitidos = ['Pendiente', 'Entregado', 'Completado'];
       if (!estadosPermitidos.includes(estado)) {
         return res.status(400).json({ 
           success: false, 
-          message: 'Estado no válido. Estados permitidos: Pendiente, En Proceso, Completado, Cancelado' 
+          message: 'Estado no válido. Estados permitidos: Pendiente, Entregado, Completado, Cancelado' 
         });
       }
 
-      const result = await pedidosAcopio.updateEstado(id, estado, userId);
+      const result = await pedidosAcopio.updateEstado(id, estado, userId, movimiento_entrada_id);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -199,6 +200,125 @@ class pedidosAcopioController {
 
     } catch (error) {
       console.error('Error en pedidosAcopioController.eliminar:', error);
+      return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+    }
+  }
+
+  // Entregar pedido
+  static async entregar(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+      const userType = req.user?.type;
+      console.log('Usuario completo:', req.user);
+      const userName = req.user?.name || 
+                      (req.user?.first_name && req.user?.last_name ? 
+                        `${req.user.first_name} ${req.user.last_name}` : 
+                        req.user?.first_name || 
+                        req.user?.email || 
+                        'Usuario');
+      console.log('Nombre de usuario extraído:', userName);
+      
+      const { 
+        cantidadEntregada, 
+        unidadEntregada, 
+        cantidadUD, 
+        unidadUD, 
+        proveedor_id, 
+        costo, 
+        metodo_pago, 
+        estado_entrega, 
+        observaciones,
+        entregado_por 
+      } = req.body;
+      
+      console.log('entregado_por desde frontend:', entregado_por);
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Usuario no autenticado' });
+      }
+
+      if (!id) {
+        return res.status(400).json({ success: false, message: 'ID del pedido es requerido' });
+      }
+
+      // Validaciones de campos requeridos
+      if (!cantidadEntregada || cantidadEntregada <= 0) {
+        return res.status(400).json({ success: false, message: 'La cantidad entregada es requerida y debe ser mayor a 0' });
+      }
+
+      if (!cantidadUD || cantidadUD <= 0) {
+        return res.status(400).json({ success: false, message: 'La cantidad en unidades es requerida y debe ser mayor a 0' });
+      }
+
+      if (!proveedor_id) {
+        return res.status(400).json({ success: false, message: 'El proveedor es requerido' });
+      }
+
+      if (!costo || costo <= 0) {
+        return res.status(400).json({ success: false, message: 'El costo es requerido y debe ser mayor a 0' });
+      }
+
+      if (!metodo_pago) {
+        return res.status(400).json({ success: false, message: 'El método de pago es requerido' });
+      }
+
+      if (!estado_entrega) {
+        return res.status(400).json({ success: false, message: 'El estado de entrega es requerido' });
+      }
+
+      const entregaData = {
+        cantidadEntregada: parseFloat(cantidadEntregada),
+        unidadEntregada,
+        cantidadUD: parseInt(cantidadUD),
+        unidadUD,
+        proveedor_id,
+        costo: parseFloat(costo),
+        metodo_pago,
+        estado_entrega,
+        observaciones: observaciones || null,
+        entregado_por: entregado_por || userName,
+        fecha_entregado: new Date().toISOString().split('T')[0] // Formato YYYY-MM-DD
+      };
+
+      const result = await pedidosAcopio.entregar(id, entregaData, userId);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAcopioController.entregar:', error);
+      return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+    }
+  }
+
+  // Anular entrega de pedido
+  static async anularEntrega(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Usuario no autenticado' });
+      }
+
+      if (!id) {
+        return res.status(400).json({ success: false, message: 'ID del pedido es requerido' });
+      }
+
+      const result = await pedidosAcopio.anularEntrega(id, userId);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAcopioController.anularEntrega:', error);
       return res.status(500).json({ success: false, message: 'Error interno del servidor' });
     }
   }
