@@ -81,7 +81,7 @@ class movimientosAlmacenController {
                 });
             }
 
-            if (type === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo'].includes(metodo_pago)) {
+            if (type === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo','credito'].includes(metodo_pago)) {
                 return res.status(400).json({
                     success: false,
                     message: 'El método de pago debe ser uno de: qr, transferencia, tarjeta, efectivo'
@@ -420,6 +420,36 @@ class movimientosAlmacenController {
                 success: false,
                 message: 'Error interno del servidor',
                 error: error.message
+            });
+        }
+    }
+
+    // Actualizar un movimiento
+    static async update(req, res) {
+        try {
+            const { id } = req.params;
+            const updateData = req.body;
+
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID del movimiento es requerido'
+                });
+            }
+
+            const result = await movimientosAlmacen.update(id, updateData);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json(result);
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.update:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
             });
         }
     }

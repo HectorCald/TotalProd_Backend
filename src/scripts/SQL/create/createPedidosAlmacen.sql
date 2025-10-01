@@ -7,21 +7,24 @@ CREATE TABLE pedidos_almacen (
     observaciones VARCHAR,
     fecha TIMESTAMP NOT NULL DEFAULT now(),
     estado VARCHAR NOT NULL,
-    sucu_id UUID NOT NULL,
+    sucursal_id UUID NOT NULL,
     precio_id UUID NOT NULL,
-    pedido_sucursal_id UUID NOT NULL,
-    movimiento_id UUID,
-    movimiento_entreda_id UUID,
+    sucursal_destino_id UUID NOT NULL,
+    movimiento_salida_id UUID,
+    movimiento_entrada_id UUID,
+    deuda_id UUID,
     CONSTRAINT pedidos_almacen_empresa_id_fkey
         FOREIGN KEY (empresa_id) REFERENCES empresas (id),
-    CONSTRAINT pedidos_almacen_sucu_id_fkey
-        FOREIGN KEY (sucu_id) REFERENCES sucursales (id),
+    CONSTRAINT pedidos_almacen_sucursal_id_fkey
+        FOREIGN KEY (sucursal_id) REFERENCES sucursales (id),
     CONSTRAINT pedidos_almacen_precio_id_fkey
         FOREIGN KEY (precio_id) REFERENCES prices_types (id),
-    CONSTRAINT pedidos_almacen_pedido_sucursal_id_fkey
-        FOREIGN KEY (pedido_sucursal_id) REFERENCES sucursales (id),
+    CONSTRAINT pedidos_almacen_sucursal_destino_id_fkey
+        FOREIGN KEY (sucursal_destino_id) REFERENCES sucursales (id),
     CONSTRAINT pedidos_almacen_movimiento_id_fkey
-        FOREIGN KEY (movimiento_id) REFERENCES movimientos (id),
-    CONSTRAINT pedidos_almacen_movimiento_entreda_id_fkey
-        FOREIGN KEY (movimiento_entreda_id) REFERENCES movimientos_almacen (id)
+        FOREIGN KEY (movimiento_entrada_id) REFERENCES movimientos_almacen (id),
+    CONSTRAINT pedidos_almacen_movimiento_salida_id_fkey
+        FOREIGN KEY (movimiento_salida_id) REFERENCES movimientos_almacen (id),
+    CONSTRAINT pedidos_almacen_deuda_id_fkey
+        FOREIGN KEY (deuda_id) REFERENCES deudas (id)
 );

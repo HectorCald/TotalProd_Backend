@@ -24,7 +24,7 @@ class pedidosAlmacen {
         throw new Error('ID del precio es requerido');
       }
 
-      if (!pedidoData.pedido_sucursal_id) {
+      if (!pedidoData.sucursal_destino_id) {
         throw new Error('ID de la sucursal de destino es requerido');
       }
 
@@ -35,9 +35,9 @@ class pedidosAlmacen {
       // Crear el pedido principal
       const pedidoPrincipal = {
         empresa_id: empresaId,
-        sucu_id: sucuId,
+        sucursal_id: sucuId,
         precio_id: pedidoData.precio_id,
-        pedido_sucursal_id: pedidoData.pedido_sucursal_id,
+        sucursal_destino_id: pedidoData.sucursal_destino_id,
         observaciones: pedidoData.observaciones || null,
         estado: 'Pendiente',
         fecha: ahoraBolivia.toISOString() // Usar timestamp en zona horaria de Bolivia
@@ -203,11 +203,11 @@ class pedidosAlmacen {
               description
             )
           ),
-          sucursal:sucu_id (
+          sucursal:sucursal_id (
             id,
             name
           ),
-          sucursal_destino:pedido_sucursal_id (
+          sucursal_destino:sucursal_destino_id (
             id,
             name
           ),
@@ -216,7 +216,7 @@ class pedidosAlmacen {
             name
           )
         `)
-        .or(`sucu_id.eq.${sucuId},pedido_sucursal_id.eq.${sucuId}`)
+        .or(`sucursal_id.eq.${sucuId},sucursal_destino_id.eq.${sucuId}`)
         .order(orderBy, { ascending: ascending })
         .range(offset, offset + limit - 1);
 
@@ -335,7 +335,7 @@ class pedidosAlmacen {
       const { count, error: countError } = await supabase
         .from('pedidos_almacen')
         .select('*', { count: 'exact', head: true })
-        .or(`sucu_id.eq.${sucuId},pedido_sucursal_id.eq.${sucuId}`);
+        .or(`sucursal_id.eq.${sucuId},sucursal_destino_id.eq.${sucuId}`);
 
       if (countError) {
         throw new Error(`Error al contar pedidos: ${countError.message}`);
@@ -381,11 +381,11 @@ class pedidosAlmacen {
               description
             )
           ),
-          sucursal:sucu_id (
+          sucursal:sucursal_id (
             id,
             name
           ),
-          sucursal_destino:pedido_sucursal_id (
+          sucursal_destino:sucursal_destino_id (
             id,
             name
           ),
@@ -394,7 +394,7 @@ class pedidosAlmacen {
             name
           )
         `)
-        .or(`sucu_id.eq.${sucuId},pedido_sucursal_id.eq.${sucuId}`)
+        .or(`sucursal_id.eq.${sucuId},sucursal_destino_id.eq.${sucuId}`)
         .order('fecha', { ascending: false });
 
       if (error) {
@@ -481,11 +481,11 @@ class pedidosAlmacen {
               description
             )
           ),
-          sucursal:sucu_id (
+          sucursal:sucursal_id (
             id,
             name
           ),
-          sucursal_destino:pedido_sucursal_id (
+          sucursal_destino:sucursal_destino_id (
             id,
             name
           ),
@@ -581,11 +581,10 @@ class pedidosAlmacen {
         throw new Error('Pedido no encontrado');
       }
 
-      // Actualizar el pedido principal (solo observaciones, precio_id y pedido_sucursal_id, NO sucursal/empresa)
+      // Actualizar el pedido principal (solo observaciones y precio_id, NO sucursal/empresa)
       const pedidoPrincipal = {
         observaciones: pedidoData.observaciones || null,
-        precio_id: pedidoData.precio_id || null,
-        pedido_sucursal_id: pedidoData.pedido_sucursal_id || null
+        precio_id: pedidoData.precio_id || null
       };
 
       const { error: pedidoError } = await supabase
@@ -636,11 +635,11 @@ class pedidosAlmacen {
               description
             )
           ),
-          sucursal:sucu_id (
+          sucursal:sucursal_id (
             id,
             name
           ),
-          sucursal_destino:pedido_sucursal_id (
+          sucursal_destino:sucursal_destino_id (
             id,
             name
           ),
@@ -707,7 +706,8 @@ class pedidosAlmacen {
     }
   }
 
-  // Actualizar entrega de pedido (solo precio, productos y cantidades)
+  // Actualizar entrega de pedido (solo precio, productos y cantidades) - DEPRECATED
+  // Esta función ya no se usa, la lógica está en el controlador entregarPedido
   static async updateEntrega(pedidoId, pedidoData) {
     try {
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
@@ -788,11 +788,11 @@ class pedidosAlmacen {
               description
             )
           ),
-          sucursal:sucu_id (
+          sucursal:sucursal_id (
             id,
             name
           ),
-          sucursal_destino:pedido_sucursal_id (
+          sucursal_destino:sucursal_destino_id (
             id,
             name
           ),
@@ -860,7 +860,7 @@ class pedidosAlmacen {
   }
 
   // Actualizar estado del pedido
-  static async updateEstado(pedidoId, nuevoEstado, movimientoEntradaId = null) {
+  static async updateEstado(pedidoId, nuevoEstado, movimientoSalidaId = null, deudaId = null) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
@@ -870,17 +870,30 @@ class pedidosAlmacen {
         throw new Error('Nuevo estado es requerido');
       }
 
-      // Preparar datos para actualizar
       const updateData = { estado: nuevoEstado };
       
-      // Si se cambia a 'Pendiente', limpiar el movimiento_id
-      if (nuevoEstado === 'Pendiente') {
-        updateData.movimiento_id = null;
+      // Si se proporciona un movimiento_salida_id, agregarlo
+      if (movimientoSalidaId) {
+        updateData.movimiento_salida_id = movimientoSalidaId;
       }
       
-      // Si se proporciona un movimiento_entrada_id, agregarlo
-      if (movimientoEntradaId) {
-        updateData.movimiento_entrada_id = movimientoEntradaId;
+      // Si se proporciona un deuda_id, agregarlo
+      if (deudaId) {
+        updateData.deuda_id = deudaId;
+      }
+      
+      // Si se pasa null explícitamente, limpiar los campos
+      if (movimientoSalidaId === null) {
+        updateData.movimiento_salida_id = null;
+      }
+      if (deudaId === null) {
+        updateData.deuda_id = null;
+      }
+      
+      // Si el estado es 'Pendiente', limpiar movimiento_salida_id y deuda_id
+      if (nuevoEstado === 'Pendiente') {
+        updateData.movimiento_salida_id = null;
+        updateData.deuda_id = null;
       }
 
       const { data, error } = await supabase

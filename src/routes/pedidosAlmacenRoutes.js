@@ -12,7 +12,8 @@ router.get('/', pedidosAlmacenController.getAll);
 router.get('/sin-limite', pedidosAlmacenController.getAllSinLimite);
 router.get('/:id', pedidosAlmacenController.getById);
 router.put('/:id', pedidosAlmacenController.update);
-router.put('/:id/entrega', pedidosAlmacenController.updateEntrega);
+// router.put('/:id/entrega', pedidosAlmacenController.updateEntrega); // DEPRECATED - no se usa
+// router.post('/:id/entregar', pedidosAlmacenController.entregarPedido); // DEPRECATED - no se usa
 router.patch('/:id/estado', pedidosAlmacenController.updateEstado);
 router.delete('/:id', pedidosAlmacenController.eliminar);
 router.get('/verificar-producto/:productoId', pedidosAlmacenController.verificarProductoEnPedidos);

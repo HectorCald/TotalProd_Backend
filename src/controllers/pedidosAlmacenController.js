@@ -1,4 +1,6 @@
 const pedidosAlmacen = require('../models/pedidosAlmacen');
+const movimientosAlmacenController = require('./movimientosAlmacenController');
+const deudasController = require('./deudasController');
 
 class pedidosAlmacenController {
   // Crear un pedido
@@ -34,7 +36,7 @@ class pedidosAlmacenController {
         });
       }
 
-      if (!req.body.pedido_sucursal_id) {
+      if (!req.body.sucursal_destino_id) {
         return res.status(400).json({
           success: false,
           message: 'ID de la sucursal de destino es requerido'
@@ -62,7 +64,7 @@ class pedidosAlmacenController {
         productos,
         observaciones,
         precio_id: req.body.precio_id,
-        pedido_sucursal_id: req.body.pedido_sucursal_id
+        sucursal_destino_id: req.body.sucursal_destino_id
       };
 
       const result = await pedidosAlmacen.create(pedidoData, finalUserId, req.body.empresa_id, finalPersonalId, req.body.sucu_id);
@@ -80,6 +82,15 @@ class pedidosAlmacenController {
         message: 'Error interno del servidor'
       });
     }
+  }
+
+  // DEPRECATED - Entregar pedido (flujo de negocio orquestado) - YA NO SE USA
+  // La lógica ahora está en el frontend usando servicios individuales
+  static async entregarPedido(req, res) {
+    return res.status(410).json({ 
+      success: false, 
+      message: 'Este endpoint está deprecado. Use los servicios individuales desde el frontend.' 
+    });
   }
 
   // Obtener todos los pedidos de la sucursal
@@ -236,8 +247,7 @@ class pedidosAlmacenController {
       const pedidoData = {
         productos,
         observaciones,
-        precio_id: req.body.precio_id,
-        pedido_sucursal_id: req.body.pedido_sucursal_id
+        precio_id: req.body.precio_id
       };
 
       const result = await pedidosAlmacen.update(id, pedidoData, finalUserId, req.body.empresa_id, finalPersonalId);
@@ -257,89 +267,20 @@ class pedidosAlmacenController {
     }
   }
 
-  // Actualizar entrega de pedido (solo precio, productos y cantidades)
+  // DEPRECATED - Actualizar entrega de pedido - YA NO SE USA
+  // La lógica ahora está en el frontend usando servicios individuales
   static async updateEntrega(req, res) {
-    try {
-      const { id } = req.params;
-      const { productos, precio_id } = req.body;
-      const userId = req.user?.id;
-
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del pedido es requerido'
-        });
-      }
-
-      // Validaciones básicas
-      if (!productos || !Array.isArray(productos) || productos.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'La lista de productos es requerida'
-        });
-      }
-
-      // Validar movimiento_id
-      if (!req.body.movimiento_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del movimiento es requerido'
-        });
-      }
-
-      // Validar cada producto
-      for (const producto of productos) {
-        if (!producto.id) {
-          return res.status(400).json({
-            success: false,
-            message: 'ID del producto es requerido'
-          });
-        }
-
-        if (!producto.cantidad || producto.cantidad <= 0) {
-          return res.status(400).json({
-            success: false,
-            message: 'La cantidad debe ser mayor a 0'
-          });
-        }
-      }
-
-      const pedidoData = {
-        productos,
-        precio_id: precio_id || null,
-        movimiento_id: req.body.movimiento_id
-      };
-
-      const result = await pedidosAlmacen.updateEntrega(id, pedidoData);
-
-      if (result.success) {
-        return res.status(200).json(result);
-      } else {
-        return res.status(400).json(result);
-      }
-
-    } catch (error) {
-      console.error('Error en pedidosAlmacenController.updateEntrega:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
-    }
+    return res.status(410).json({ 
+      success: false, 
+      message: 'Este endpoint está deprecado. Use los servicios individuales desde el frontend.' 
+    });
   }
 
   // Actualizar estado del pedido
   static async updateEstado(req, res) {
     try {
       const { id } = req.params;
-      const { estado, movimiento_entrada_id } = req.body;
+      const { estado, movimiento_salida_id, deuda_id } = req.body;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -372,7 +313,7 @@ class pedidosAlmacenController {
         });
       }
 
-      const result = await pedidosAlmacen.updateEstado(id, estado, movimiento_entrada_id);
+      const result = await pedidosAlmacen.updateEstado(id, estado, movimiento_salida_id, deuda_id);
 
       if (result.success) {
         return res.status(200).json(result);

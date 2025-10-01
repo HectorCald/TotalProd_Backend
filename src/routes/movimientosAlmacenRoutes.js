@@ -21,6 +21,9 @@ router.get('/product/:productId', movimientosAlmacenController.getByProduct);
 // Obtener un movimiento específico por ID
 router.get('/:id', movimientosAlmacenController.getById);
 
+// Actualizar un movimiento
+router.put('/:id', movimientosAlmacenController.update);
+
 // Ruta para anular un movimiento
 router.put('/:id/anular', movimientosAlmacenController.anular);
 
