@@ -28,7 +28,45 @@ class movimientosAcopioController {
         });
       }
 
-      // Crear el movimiento principal
+      // VALIDAR INGREDIENTES ANTES de crear el movimiento si es entrada con restar_materia_prima
+      console.log('🔍 DEBUG - Validando ingredientes acopio:', { type, restar_materia_prima, product_id });
+      if (type === 'entrada' && restar_materia_prima) {
+        try {
+          // Obtener producto con receta e ingredientes
+          const producto = await productsAcopio.getById(product_id, req.user.empresa_id);
+          
+          if (producto && producto.recetas_acopio && producto.recetas_acopio.length > 0) {
+            const receta = producto.recetas_acopio[0];
+            
+            if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
+              // VALIDAR stock de ingredientes ANTES de crear el movimiento
+              const validacionIngredientes = await movimientosAcopio.restarIngredientes(
+                producto, 
+                parseFloat(quantity), 
+                receta.recetas_acopio_detalle,
+                req.user.empresa_id
+              );
+              
+              // Si la validación falla, retornar error sin crear el movimiento
+              if (!validacionIngredientes.success) {
+                return res.status(400).json({
+                  success: false,
+                  message: validacionIngredientes.message,
+                  ingredientesConStockInsuficiente: validacionIngredientes.ingredientesConStockInsuficiente
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error validando ingredientes acopio:', error);
+          return res.status(400).json({
+            success: false,
+            message: 'Error al validar el stock de ingredientes: ' + error.message
+          });
+        }
+      }
+
+      // Crear el movimiento principal (solo si la validación de ingredientes pasó)
       const newMovimiento = await movimientosAcopio.create({
         product_id,
         type,
@@ -42,31 +80,6 @@ class movimientosAcopioController {
         restar_ingredientes: restar_ingredientes || false,
         sucu_id
       }, finalUserId, finalPersonalId);
-
-      // Procesar ingredientes si es entrada y tiene receta
-      if (type === 'entrada' && restar_materia_prima) {
-        try {
-          // Obtener producto con receta e ingredientes
-          const producto = await productsAcopio.getById(product_id, req.user.empresa_id);
-          
-          if (producto && producto.recetas_acopio && producto.recetas_acopio.length > 0) {
-            const receta = producto.recetas_acopio[0];
-            
-            if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
-              // Restar ingredientes del stock (SIN crear movimientos)
-              await movimientosAcopio.restarIngredientes(
-                producto, 
-                parseFloat(quantity), 
-                receta.recetas_acopio_detalle,
-                req.user.empresa_id
-              );
-            }
-          }
-        } catch (error) {
-          console.error('Error procesando ingredientes:', error);
-          // No fallar el movimiento principal si hay error con ingredientes
-        }
-      }
 
       res.status(201).json({
         success: true,

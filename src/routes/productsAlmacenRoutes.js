@@ -9,6 +9,9 @@ router.use(requireAuth);
 // GET /api/products-almacen - Obtener todos los productos
 router.get('/', productsAlmacenController.getAll);
 
+// GET /api/products-almacen/:id - Obtener un producto por ID
+router.get('/:id', productsAlmacenController.getById);
+
 // POST /api/products-almacen - Crear un producto
 router.post('/', productsAlmacenController.create);
 

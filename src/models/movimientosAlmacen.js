@@ -4,7 +4,7 @@ class movimientosAlmacen {
     // Crear un nuevo movimiento de almacén
     static async create(movimientoData) {
         try {
-            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes } = movimientoData;
+            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id } = movimientoData;
 
             // Crear timestamp en zona horaria de Bolivia (GMT-4)
             const ahora = new Date();
@@ -16,13 +16,18 @@ class movimientosAlmacen {
                 type,
                 observaciones,
                 metodo_pago,
-                precio_id,
                 cliente_id: cliente_id || null,
                 proveedor_id: proveedor_id || null,
                 restar_ingredientes: restar_ingredientes || false,
+                produccion_damabrava_id: produccion_damabrava_id || null,
                 fecha: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
                 estado: 'finalizado' // Estado por defecto
             };
+
+            // Solo agregar precio_id si no es null (para ingresos de producción puede ser null)
+            if (precio_id !== null && precio_id !== undefined) {
+                insertData.precio_id = precio_id;
+            }
 
             // Solo agregar user_id o personal_id si tienen valor
             // IMPORTANTE: No enviar campos null para evitar problemas de foreign key
@@ -192,7 +197,8 @@ class movimientosAlmacen {
                     precio_id,
                     cliente_id,
                     proveedor_id,
-                    restar_ingredientes
+                    restar_ingredientes,
+                    produccion_damabrava_id
                 `)
                 .eq('id', movimiento.id)
                 .single();
@@ -609,9 +615,20 @@ class movimientosAlmacen {
                 });
             }
 
-            // Log de ingredientes con stock insuficiente
+            // Si hay ingredientes con stock insuficiente, retornar error
             if (ingredientesConStockInsuficiente.length > 0) {
                 console.warn('Ingredientes con stock insuficiente:', ingredientesConStockInsuficiente);
+                
+                // Crear mensaje detallado de error
+                const mensajeError = ingredientesConStockInsuficiente.map(ing => 
+                    `${ing.nombre}: Stock actual ${ing.stockActual}, requerido ${ing.requerido}`
+                ).join('; ');
+                
+                return { 
+                    success: false, 
+                    message: `Stock insuficiente de ingredientes: ${mensajeError}`,
+                    ingredientesConStockInsuficiente: ingredientesConStockInsuficiente
+                };
             }
 
             // Ejecutar actualizaciones batch si hay ingredientes válidos
@@ -764,6 +781,53 @@ class movimientosAlmacen {
             // Verificar que no esté ya anulado
             if (movimiento.estado === 'anulado') {
                 return { success: false, message: 'El movimiento ya está anulado' };
+            }
+
+            // Si el movimiento tiene produccion_damabrava_id, manejar la anulación especial
+            if (movimiento.produccion_damabrava_id) {
+                // Obtener el registro de producción de Damabrava
+                const { data: registroProduccion, error: registroError } = await supabase
+                    .from('registros_produccion_damabrava')
+                    .select('id, estado, cantidad_ingresada, cantidad_verificada')
+                    .eq('id', movimiento.produccion_damabrava_id)
+                    .single();
+
+                if (registroError) {
+                    console.error('Error obteniendo registro de producción:', registroError);
+                    return { success: false, message: 'Error al obtener el registro de producción relacionado' };
+                }
+
+                if (registroProduccion) {
+                    // Calcular la cantidad total del movimiento (suma de todos los productos)
+                    const cantidadTotalMovimiento = movimiento.productos.reduce((total, producto) => {
+                        return total + parseFloat(producto.cantidad);
+                    }, 0);
+
+                    // Calcular la nueva cantidad ingresada
+                    const nuevaCantidadIngresada = Math.max(0, (registroProduccion.cantidad_ingresada || 0) - cantidadTotalMovimiento);
+                    
+                    // Determinar el nuevo estado del registro
+                    let nuevoEstado = registroProduccion.estado;
+                    if (registroProduccion.estado === 'Ingresado' && nuevaCantidadIngresada < registroProduccion.cantidad_verificada) {
+                        nuevoEstado = 'verificado';
+                    }
+
+                    // Actualizar el registro de producción
+                    const { error: updateRegistroError } = await supabase
+                        .from('registros_produccion_damabrava')
+                        .update({
+                            cantidad_ingresada: nuevaCantidadIngresada,
+                            estado: nuevoEstado
+                        })
+                        .eq('id', movimiento.produccion_damabrava_id);
+
+                    if (updateRegistroError) {
+                        console.error('Error actualizando registro de producción:', updateRegistroError);
+                        return { success: false, message: 'Error al actualizar el registro de producción' };
+                    }
+
+                    console.log(`Registro de producción ${movimiento.produccion_damabrava_id} actualizado: cantidad_ingresada=${nuevaCantidadIngresada}, estado=${nuevoEstado}`);
+                }
             }
 
             // Nota: Se removió la validación que impedía anular movimientos relacionados con pedidos

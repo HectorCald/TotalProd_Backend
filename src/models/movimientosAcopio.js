@@ -666,9 +666,20 @@ class movimientosAcopio {
         });
       }
 
-      // Log de ingredientes con stock insuficiente
+      // Si hay ingredientes con stock insuficiente, retornar error
       if (ingredientesConStockInsuficiente.length > 0) {
         console.warn('Ingredientes con stock insuficiente:', ingredientesConStockInsuficiente);
+        
+        // Crear mensaje detallado de error
+        const mensajeError = ingredientesConStockInsuficiente.map(ing => 
+          `${ing.nombre}: Stock actual ${ing.stockActual}, requerido ${ing.requerido}`
+        ).join('; ');
+        
+        return { 
+          success: false, 
+          message: `Stock insuficiente de ingredientes: ${mensajeError}`,
+          ingredientesConStockInsuficiente: ingredientesConStockInsuficiente
+        };
       }
 
       // Ejecutar actualizaciones batch si hay ingredientes válidos

@@ -5,7 +5,7 @@ class movimientosAlmacenController {
     // Crear un nuevo movimiento
     static async create(req, res) {
         try {
-            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes } = req.body;
+            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id } = req.body;
             const user_id = req.user?.id;
             const userType = req.user?.type; // Verificar si es empleado o usuario normal
 
@@ -20,15 +20,7 @@ class movimientosAlmacenController {
                     message: 'ID de la sucursal es requerido'
                 });
             }
-
-            // Validar que se proporcione precio_id
-            if (!precio_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del precio es requerido'
-                });
-            }
-
+            
             // Validaciones básicas
             if (!type || !['entrada', 'salida'].includes(type)) {
                 return res.status(400).json({
@@ -88,6 +80,14 @@ class movimientosAlmacenController {
                 });
             }
 
+            // Si es un ingreso de producción y no se especifica precio_id, usar un precio por defecto
+            let finalPrecioId = precio_id;
+            if (!precio_id && produccion_damabrava_id) {
+                // Para ingresos de producción, podemos usar null o buscar un precio por defecto
+                // Por ahora usaremos null y el backend debe manejarlo
+                finalPrecioId = null;
+            }
+
             // Preparar datos del movimiento
             const movimientoData = {
                 user_id: finalUserId,
@@ -98,20 +98,14 @@ class movimientosAlmacenController {
                 metodo_pago: type === 'salida' ? (metodo_pago || null) : null,
                 cliente_id: type === 'salida' ? (cliente_id || null) : null,
                 proveedor_id: type === 'entrada' ? (proveedor_id || null) : null,
-                precio_id,
+                precio_id: finalPrecioId,
                 productos,
-                restar_ingredientes: restar_ingredientes || false
+                restar_ingredientes: restar_ingredientes || false,
+                produccion_damabrava_id: produccion_damabrava_id || null
             };
 
-            // Crear el movimiento
-            const result = await movimientosAlmacen.create(movimientoData);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            // Procesar ingredientes si es entrada y tiene restar_ingredientes activado
-            console.log('🔍 DEBUG - Procesando ingredientes:', { type, restar_ingredientes, productosLength: productos.length });
+            // VALIDAR INGREDIENTES ANTES de crear el movimiento si es entrada con restar_ingredientes
+            console.log('🔍 DEBUG - Validando ingredientes:', { type, restar_ingredientes, productosLength: productos.length });
             if (type === 'entrada' && restar_ingredientes) {
                 try {
                     // Obtener productos con recetas en una sola query (bulk)
@@ -131,7 +125,7 @@ class movimientosAlmacenController {
                             const receta = producto.recetas[0];
                             
                             if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
-                                // Agregar ingredientes a la lista para procesamiento batch
+                                // Agregar ingredientes a la lista para validación
                                 ingredientesParaRestar.push({
                                     producto,
                                     cantidad: parseFloat(productoData.cantidad),
@@ -141,17 +135,36 @@ class movimientosAlmacenController {
                         }
                     }
                     
-                    // Procesar todos los ingredientes en batch
+                    // VALIDAR stock de ingredientes ANTES de crear el movimiento
                     if (ingredientesParaRestar.length > 0) {
-                        await movimientosAlmacen.restarIngredientesBatch(
+                        const validacionIngredientes = await movimientosAlmacen.restarIngredientesBatch(
                             ingredientesParaRestar,
                             req.user.empresa_id
                         );
+                        
+                        // Si la validación falla, retornar error sin crear el movimiento
+                        if (!validacionIngredientes.success) {
+                            return res.status(400).json({
+                                success: false,
+                                message: validacionIngredientes.message,
+                                ingredientesConStockInsuficiente: validacionIngredientes.ingredientesConStockInsuficiente
+                            });
+                        }
                     }
                 } catch (error) {
-                    console.error('Error procesando ingredientes:', error);
-                    // No fallar el movimiento principal si hay error con ingredientes
+                    console.error('Error validando ingredientes:', error);
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Error al validar el stock de ingredientes: ' + error.message
+                    });
                 }
+            }
+
+            // Crear el movimiento (solo si la validación de ingredientes pasó)
+            const result = await movimientosAlmacen.create(movimientoData);
+
+            if (!result.success) {
+                return res.status(400).json(result);
             }
 
 

@@ -40,6 +40,49 @@ class productsAlmacenController {
     }
   }
 
+  // Obtener un producto por ID
+  static async getById(req, res) {
+    try {
+      const { id } = req.params;
+      const sucuId = req.query.sucu_id;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del producto es requerido'
+        });
+      }
+
+      if (!sucuId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la sucursal es requerido'
+        });
+      }
+
+      const product = await productsAlmacen.getById(id, sucuId);
+      
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: 'Producto no encontrado'
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Producto obtenido exitosamente',
+        data: product
+      });
+    } catch (error) {
+      console.error('Error en productsAlmacenController.getById:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
   // Crear un producto
   static async create(req, res) {
     try {
