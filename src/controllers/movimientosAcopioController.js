@@ -221,6 +221,7 @@ class movimientosAcopioController {
         const personal_id = req.user.id; // El personal_id viene del token
 
         const hasPermission = await checkAnularPermission(personal_id);
+        
         if (!hasPermission) {
           return res.status(403).json({
             success: false,

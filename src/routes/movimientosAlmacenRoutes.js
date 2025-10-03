@@ -15,6 +15,9 @@ router.get('/', movimientosAlmacenController.getAll);
 // Obtener movimientos por tipo (entrada/salida)
 router.get('/tipo/:tipo', movimientosAlmacenController.getByType);
 
+// Verificar si un producto tiene movimientos (ULTRA OPTIMIZADO)
+router.get('/product/:productId/has-movements', movimientosAlmacenController.hasMovements);
+
 // Obtener movimientos por producto
 router.get('/product/:productId', movimientosAlmacenController.getByProduct);
 

@@ -4,6 +4,7 @@ class pedidosAlmacen {
   // Crear un pedido
   static async create(pedidoData, userId, empresaId, personalId = null, sucuId = null) {
     try {
+      
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
         throw new Error('La lista de productos es requerida');
       }
@@ -62,7 +63,7 @@ class pedidosAlmacen {
         throw new Error(`Error al crear el pedido: ${pedidoError.message}`);
       }
 
-      // Crear los detalles del pedido
+      // Crear los detalles del pedido (INSERTs paralelos)
       const detalles = pedidoData.productos.map(producto => ({
         pedido_almacen_id: pedido.id,
         producto_almacen_id: producto.id,
@@ -70,6 +71,7 @@ class pedidosAlmacen {
         precio: producto.precio || 0
       }));
 
+      // INSERT en lote optimizado (mejor que paralelos para evitar saturación)
       const { error: detallesError } = await supabase
         .from('pedido_almacen_detalle')
         .insert(detalles);
@@ -84,62 +86,81 @@ class pedidosAlmacen {
         throw new Error(`Error al crear los detalles del pedido: ${detallesError.message}`);
       }
 
-      // Obtener el pedido completo con detalles
-      const { data: pedidoCompleto, error: fetchError } = await supabase
-        .from('pedidos_almacen')
-        .select(`
-          *,
-          pedido_almacen_detalle (
-            *,
-            producto_almacen:producto_almacen_id (
-              id,
-              name,
-              description
-            )
-          )
-        `)
-        .eq('id', pedido.id)
-        .single();
-
-      if (fetchError) {
-        throw new Error(`Error al obtener el pedido creado: ${fetchError.message}`);
-      }
-
-      // Obtener nombres de usuario y personal
+      // Obtener nombres de usuario y personal (CONSULTAS PARALELAS)
       let user = null;
       let personal = null;
 
-      // Si tiene user_id, obtener el usuario
-      if (pedidoCompleto.user_id) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('id, first_name, last_name')
-          .eq('id', pedidoCompleto.user_id)
-          .single();
-        user = {
-          id: userData.id,
-          name: `${userData.first_name} ${userData.last_name}`.trim()
-        };
+      // Consultas paralelas para user y personal
+      const consultasPromises = [];
+      
+      if (userId && userId !== null) {
+        consultasPromises.push(
+          supabase
+            .from('users')
+            .select('id, first_name, last_name')
+            .eq('id', userId)
+            .single()
+            .then(result => ({ tipo: 'user', data: result.data, error: result.error }))
+        );
+      } else {
+        consultasPromises.push(Promise.resolve({ tipo: 'user', data: null, error: null }));
       }
 
-      // Si tiene personal_id, obtener el personal
-      if (pedidoCompleto.personal_id) {
-        const { data: personalData } = await supabase
-          .from('personal')
-          .select('id, first_name, last_name')
-          .eq('id', pedidoCompleto.personal_id)
-          .single();
-        personal = {
-          id: personalData.id,
-          name: `${personalData.first_name} ${personalData.last_name}`.trim()
-        };
+      if (personalId && personalId !== null) {
+        consultasPromises.push(
+          supabase
+            .from('personal')
+            .select('id, first_name, last_name')
+            .eq('id', personalId)
+            .single()
+            .then(result => ({ tipo: 'personal', data: result.data, error: result.error }))
+        );
+      } else {
+        consultasPromises.push(Promise.resolve({ tipo: 'personal', data: null, error: null }));
       }
 
+      // Ejecutar consultas en paralelo
+      const resultadosNombres = await Promise.all(consultasPromises);
+      
+      // Procesar resultados
+      resultadosNombres.forEach(resultado => {
+        if (resultado.tipo === 'user' && resultado.data) {
+          user = {
+            id: resultado.data.id,
+            name: `${resultado.data.first_name} ${resultado.data.last_name}`.trim()
+          };
+        } else if (resultado.tipo === 'personal' && resultado.data) {
+          personal = {
+            id: resultado.data.id,
+            name: `${resultado.data.first_name} ${resultado.data.last_name}`.trim()
+          };
+        }
+      });
+
+      // Construir respuesta con datos básicos (sin consulta adicional)
       const pedidoConNombres = {
-        ...pedidoCompleto,
+        id: pedido.id,
+        empresa_id: empresaId,
+        sucursal_id: sucuId,
+        precio_id: pedidoData.precio_id,
+        sucursal_destino_id: pedidoData.sucursal_destino_id,
+        observaciones: pedidoData.observaciones || null,
+        estado: 'Pendiente',
+        fecha: pedidoPrincipal.fecha,
+        user_id: userId,
+        personal_id: personalId,
         user,
-        personal
+        personal,
+        pedido_almacen_detalle: detalles.map(detalle => ({
+          ...detalle,
+          producto_almacen: {
+            id: pedidoData.productos.find(p => p.id === detalle.producto_almacen_id)?.id,
+            name: pedidoData.productos.find(p => p.id === detalle.producto_almacen_id)?.name,
+            description: pedidoData.productos.find(p => p.id === detalle.producto_almacen_id)?.description
+          }
+        }))
       };
+
 
       return {
         success: true,
@@ -159,6 +180,9 @@ class pedidosAlmacen {
   // Obtener todos los pedidos de la sucursal (pedidos que hizo o que están destinados a esta sucursal)
   static async getAll(sucuId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc') {
     try {
+      const tStart = Date.now();
+      console.log('[PedidosAlmacenModel.getAll] Iniciando obtención de pedidos');
+      
       if (!sucuId) {
         throw new Error('ID de la sucursal es requerido');
       }
@@ -223,6 +247,7 @@ class pedidosAlmacen {
       // Si hay búsqueda, primero obtener los IDs de pedidos que contienen el producto
       let pedidosIdsFiltrados = null;
       if (searchQuery && searchQuery.trim() !== '') {
+        const tSearchStart = Date.now();
         const { data: pedidosConProducto, error: detalleError } = await supabase
           .from('pedido_almacen_detalle')
           .select(`
@@ -234,6 +259,8 @@ class pedidosAlmacen {
             )
           `)
           .ilike('producto_almacen.name', `%${searchQuery}%`);
+        const tSearchMs = Date.now() - tSearchStart;
+        console.log('[PedidosAlmacenModel.getAll] Búsqueda de productos ms=', tSearchMs);
 
         if (detalleError) {
           console.error('Error al buscar productos en detalle:', detalleError);
@@ -273,7 +300,10 @@ class pedidosAlmacen {
       }
 
       console.log('📊 pedidosAlmacen - Ejecutando consulta final...');
+      const tQueryStart = Date.now();
       const { data: pedidos, error } = await query;
+      const tQueryMs = Date.now() - tQueryStart;
+      console.log('[PedidosAlmacenModel.getAll] Consulta principal ms=', tQueryMs);
       console.log('📊 pedidosAlmacen - Resultado consulta:', {
         cantidad: pedidos?.length,
         error,
@@ -285,51 +315,58 @@ class pedidosAlmacen {
       }
 
 
-      // Obtener nombres de usuarios y personal para cada pedido
-      const pedidosConNombres = await Promise.all(
-        pedidos.map(async (pedido) => {
-          let user = null;
-          let personal = null;
+      // Obtener nombres de usuarios y personal para cada pedido (BATCH LOADING)
+      const tNombresStart = Date.now();
+      
+      // Obtener IDs únicos de usuarios y personal
+      const userIds = Array.from(new Set(pedidos.map(p => p.user_id).filter(Boolean)));
+      const personalIds = Array.from(new Set(pedidos.map(p => p.personal_id).filter(Boolean)));
 
-          // Si tiene user_id, obtener el usuario
-          if (pedido.user_id) {
-            const { data: userData, error: userError } = await supabase
-              .from('users')
-              .select('id, first_name, last_name')
-              .eq('id', pedido.user_id)
-              .single();
-            
-            if (!userError && userData) {
-              user = {
-                id: userData.id,
-                name: `${userData.first_name} ${userData.last_name}`.trim()
-              };
-            }
-          }
+      // 1) Usuarios en lote
+      let tUsersBatchMs = 0;
+      const userMap = new Map();
+      if (userIds.length > 0) {
+        const tUsersStart = Date.now();
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .in('id', userIds);
+        tUsersBatchMs = Date.now() - tUsersStart;
+        (usersData || []).forEach(u => {
+          userMap.set(u.id, {
+            id: u.id,
+            name: `${u.first_name} ${u.last_name}`.trim()
+          });
+        });
+      }
 
-          // Si tiene personal_id, obtener el personal
-          if (pedido.personal_id) {
-            const { data: personalData, error: personalError } = await supabase
-              .from('personal')
-              .select('id, first_name, last_name')
-              .eq('id', pedido.personal_id)
-              .single();
-            
-            if (!personalError && personalData) {
-              personal = {
-                id: personalData.id,
-                name: `${personalData.first_name} ${personalData.last_name}`.trim()
-              };
-            }
-          }
+      // 2) Personal en lote
+      let tPersonalBatchMs = 0;
+      const personalMap = new Map();
+      if (personalIds.length > 0) {
+        const tPersonalStart = Date.now();
+        const { data: personalData } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .in('id', personalIds);
+        tPersonalBatchMs = Date.now() - tPersonalStart;
+        (personalData || []).forEach(p => {
+          personalMap.set(p.id, {
+            id: p.id,
+            name: `${p.first_name} ${p.last_name}`.trim()
+          });
+        });
+      }
 
-          return {
-            ...pedido,
-            user,
-            personal
-          };
-        })
-      );
+      // Mapear user/personal a los pedidos
+      const pedidosConNombres = pedidos.map((pedido) => {
+        const user = pedido.user_id ? (userMap.get(pedido.user_id) || null) : null;
+        const personal = pedido.personal_id ? (personalMap.get(pedido.personal_id) || null) : null;
+        return { ...pedido, user, personal };
+      });
+      
+      const tNombresMs = Date.now() - tNombresStart;
+      console.log('[PedidosAlmacenModel.getAll] Obtener nombres ms=', tNombresMs, 'users batch ms=', tUsersBatchMs, 'personal batch ms=', tPersonalBatchMs);
 
       // Obtener el total de pedidos para la paginación
       const { count, error: countError } = await supabase
@@ -340,6 +377,9 @@ class pedidosAlmacen {
       if (countError) {
         throw new Error(`Error al contar pedidos: ${countError.message}`);
       }
+
+      const tTotalMs = Date.now() - tStart;
+      console.log('[PedidosAlmacenModel.getAll] TOTAL ms=', tTotalMs);
 
       return {
         success: true,
@@ -401,51 +441,58 @@ class pedidosAlmacen {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
       }
 
-      // Obtener nombres de usuarios y personal para cada pedido
-      const pedidosConNombres = await Promise.all(
-        pedidos.map(async (pedido) => {
-          let user = null;
-          let personal = null;
+      // Obtener nombres de usuarios y personal para cada pedido (BATCH LOADING)
+      const tNombresStart = Date.now();
+      
+      // Obtener IDs únicos de usuarios y personal
+      const userIds = Array.from(new Set(pedidos.map(p => p.user_id).filter(Boolean)));
+      const personalIds = Array.from(new Set(pedidos.map(p => p.personal_id).filter(Boolean)));
 
-          // Si tiene user_id, obtener el usuario
-          if (pedido.user_id) {
-            const { data: userData, error: userError } = await supabase
-              .from('users')
-              .select('id, first_name, last_name')
-              .eq('id', pedido.user_id)
-              .single();
-            
-            if (!userError && userData) {
-              user = {
-                id: userData.id,
-                name: `${userData.first_name} ${userData.last_name}`.trim()
-              };
-            }
-          }
+      // 1) Usuarios en lote
+      let tUsersBatchMs = 0;
+      const userMap = new Map();
+      if (userIds.length > 0) {
+        const tUsersStart = Date.now();
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .in('id', userIds);
+        tUsersBatchMs = Date.now() - tUsersStart;
+        (usersData || []).forEach(u => {
+          userMap.set(u.id, {
+            id: u.id,
+            name: `${u.first_name} ${u.last_name}`.trim()
+          });
+        });
+      }
 
-          // Si tiene personal_id, obtener el personal
-          if (pedido.personal_id) {
-            const { data: personalData, error: personalError } = await supabase
-              .from('personal')
-              .select('id, first_name, last_name')
-              .eq('id', pedido.personal_id)
-              .single();
-            
-            if (!personalError && personalData) {
-              personal = {
-                id: personalData.id,
-                name: `${personalData.first_name} ${personalData.last_name}`.trim()
-              };
-            }
-          }
+      // 2) Personal en lote
+      let tPersonalBatchMs = 0;
+      const personalMap = new Map();
+      if (personalIds.length > 0) {
+        const tPersonalStart = Date.now();
+        const { data: personalData } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .in('id', personalIds);
+        tPersonalBatchMs = Date.now() - tPersonalStart;
+        (personalData || []).forEach(p => {
+          personalMap.set(p.id, {
+            id: p.id,
+            name: `${p.first_name} ${p.last_name}`.trim()
+          });
+        });
+      }
 
-          return {
-            ...pedido,
-            user,
-            personal
-          };
-        })
-      );
+      // Mapear user/personal a los pedidos
+      const pedidosConNombres = pedidos.map((pedido) => {
+        const user = pedido.user_id ? (userMap.get(pedido.user_id) || null) : null;
+        const personal = pedido.personal_id ? (personalMap.get(pedido.personal_id) || null) : null;
+        return { ...pedido, user, personal };
+      });
+      
+      const tNombresMs = Date.now() - tNombresStart;
+      console.log('[PedidosAlmacenModel.getAllSinLimite] Obtener nombres ms=', tNombresMs, 'users batch ms=', tUsersBatchMs, 'personal batch ms=', tPersonalBatchMs);
 
       return {
         success: true,
@@ -558,6 +605,7 @@ class pedidosAlmacen {
   // Actualizar pedido completo
   static async update(pedidoId, pedidoData, userId, empresaId, personalId = null) {
     try {
+      
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
         throw new Error('La lista de productos es requerida');
       }
@@ -570,16 +618,9 @@ class pedidosAlmacen {
         throw new Error('ID de la empresa es requerido');
       }
 
-      // Verificar que el pedido existe
-      const { data: pedidoExistente, error: fetchError } = await supabase
-        .from('pedidos_almacen')
-        .select('id')
-        .eq('id', pedidoId)
-        .single();
-
-      if (fetchError || !pedidoExistente) {
-        throw new Error('Pedido no encontrado');
-      }
+      // Verificar que el pedido existe (OPTIMIZADO: solo si es necesario)
+      // Comentado: la verificación se hace implícitamente en el UPDATE
+      // Si el pedido no existe, el UPDATE no afectará ninguna fila
 
       // Actualizar el pedido principal (solo observaciones y precio_id, NO sucursal/empresa)
       const pedidoPrincipal = {
@@ -587,13 +628,19 @@ class pedidosAlmacen {
         precio_id: pedidoData.precio_id || null
       };
 
-      const { error: pedidoError } = await supabase
+      const { data: updateResult, error: pedidoError } = await supabase
         .from('pedidos_almacen')
         .update(pedidoPrincipal)
-        .eq('id', pedidoId);
+        .eq('id', pedidoId)
+        .select('id');
 
       if (pedidoError) {
         throw new Error(`Error al actualizar el pedido: ${pedidoError.message}`);
+      }
+
+      // Verificar que el pedido existe (si no se actualizó ninguna fila)
+      if (!updateResult || updateResult.length === 0) {
+        throw new Error('Pedido no encontrado');
       }
 
       // Eliminar los detalles existentes
@@ -655,41 +702,63 @@ class pedidosAlmacen {
         throw new Error(`Error al obtener el pedido actualizado: ${fetchCompletoError.message}`);
       }
 
-      // Obtener nombres de usuario y personal
+      // Obtener nombres de usuario y personal (OPTIMIZADO: consultas paralelas)
       let user = null;
       let personal = null;
 
-      // Si tiene user_id, obtener el usuario
+      // Consultas paralelas para user y personal
+      const consultasPromises = [];
+      
       if (pedidoCompleto.user_id) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('id, first_name, last_name')
-          .eq('id', pedidoCompleto.user_id)
-          .single();
-        user = {
-          id: userData.id,
-          name: `${userData.first_name} ${userData.last_name}`.trim()
-        };
+        consultasPromises.push(
+          supabase
+            .from('users')
+            .select('id, first_name, last_name')
+            .eq('id', pedidoCompleto.user_id)
+            .single()
+            .then(result => ({ tipo: 'user', data: result.data, error: result.error }))
+        );
+      } else {
+        consultasPromises.push(Promise.resolve({ tipo: 'user', data: null, error: null }));
       }
 
-      // Si tiene personal_id, obtener el personal
       if (pedidoCompleto.personal_id) {
-        const { data: personalData } = await supabase
-          .from('personal')
-          .select('id, first_name, last_name')
-          .eq('id', pedidoCompleto.personal_id)
-          .single();
-        personal = {
-          id: personalData.id,
-          name: `${personalData.first_name} ${personalData.last_name}`.trim()
-        };
+        consultasPromises.push(
+          supabase
+            .from('personal')
+            .select('id, first_name, last_name')
+            .eq('id', pedidoCompleto.personal_id)
+            .single()
+            .then(result => ({ tipo: 'personal', data: result.data, error: result.error }))
+        );
+      } else {
+        consultasPromises.push(Promise.resolve({ tipo: 'personal', data: null, error: null }));
       }
+
+      // Ejecutar consultas en paralelo
+      const resultadosNombres = await Promise.all(consultasPromises);
+      
+      // Procesar resultados
+      resultadosNombres.forEach(resultado => {
+        if (resultado.tipo === 'user' && resultado.data) {
+          user = {
+            id: resultado.data.id,
+            name: `${resultado.data.first_name} ${resultado.data.last_name}`.trim()
+          };
+        } else if (resultado.tipo === 'personal' && resultado.data) {
+          personal = {
+            id: resultado.data.id,
+            name: `${resultado.data.first_name} ${resultado.data.last_name}`.trim()
+          };
+        }
+      });
 
       const pedidoConNombres = {
         ...pedidoCompleto,
         user,
         personal
       };
+
 
       return {
         success: true,
@@ -710,6 +779,9 @@ class pedidosAlmacen {
   // Esta función ya no se usa, la lógica está en el controlador entregarPedido
   static async updateEntrega(pedidoId, pedidoData) {
     try {
+      const tStart = Date.now();
+      console.log('[PedidosAlmacenModel.updateEntrega] Iniciando actualización de entrega');
+      
       if (!pedidoData.productos || !Array.isArray(pedidoData.productos) || pedidoData.productos.length === 0) {
         throw new Error('La lista de productos es requerida');
       }
@@ -722,16 +794,7 @@ class pedidosAlmacen {
         throw new Error('ID del movimiento es requerido');
       }
 
-      // Verificar que el pedido existe
-      const { data: pedidoExistente, error: fetchError } = await supabase
-        .from('pedidos_almacen')
-        .select('id')
-        .eq('id', pedidoId)
-        .single();
-
-      if (fetchError || !pedidoExistente) {
-        throw new Error('Pedido no encontrado');
-      }
+      // Verificar que el pedido existe (OPTIMIZADO: verificación implícita en UPDATE)
 
       // Actualizar precio_id, estado y movimiento_id del pedido principal
       const pedidoPrincipal = {
@@ -740,13 +803,19 @@ class pedidosAlmacen {
         movimiento_id: pedidoData.movimiento_id
       };
 
-      const { error: pedidoError } = await supabase
+      const { data: updateResult, error: pedidoError } = await supabase
         .from('pedidos_almacen')
         .update(pedidoPrincipal)
-        .eq('id', pedidoId);
+        .eq('id', pedidoId)
+        .select('id');
 
       if (pedidoError) {
         throw new Error(`Error al actualizar el pedido: ${pedidoError.message}`);
+      }
+
+      // Verificar que el pedido existe (si no se actualizó ninguna fila)
+      if (!updateResult || updateResult.length === 0) {
+        throw new Error('Pedido no encontrado');
       }
 
       // Eliminar los detalles existentes
@@ -808,41 +877,63 @@ class pedidosAlmacen {
         throw new Error(`Error al obtener el pedido actualizado: ${fetchCompletoError.message}`);
       }
 
-      // Obtener nombres de usuario y personal
+      // Obtener nombres de usuario y personal (OPTIMIZADO: consultas paralelas)
       let user = null;
       let personal = null;
 
-      // Si tiene user_id, obtener el usuario
+      // Consultas paralelas para user y personal
+      const consultasPromises = [];
+      
       if (pedidoCompleto.user_id) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('id, first_name, last_name')
-          .eq('id', pedidoCompleto.user_id)
-          .single();
-        user = {
-          id: userData.id,
-          name: `${userData.first_name} ${userData.last_name}`.trim()
-        };
+        consultasPromises.push(
+          supabase
+            .from('users')
+            .select('id, first_name, last_name')
+            .eq('id', pedidoCompleto.user_id)
+            .single()
+            .then(result => ({ tipo: 'user', data: result.data, error: result.error }))
+        );
+      } else {
+        consultasPromises.push(Promise.resolve({ tipo: 'user', data: null, error: null }));
       }
 
-      // Si tiene personal_id, obtener el personal
       if (pedidoCompleto.personal_id) {
-        const { data: personalData } = await supabase
-          .from('personal')
-          .select('id, first_name, last_name')
-          .eq('id', pedidoCompleto.personal_id)
-          .single();
-        personal = {
-          id: personalData.id,
-          name: `${personalData.first_name} ${personalData.last_name}`.trim()
-        };
+        consultasPromises.push(
+          supabase
+            .from('personal')
+            .select('id, first_name, last_name')
+            .eq('id', pedidoCompleto.personal_id)
+            .single()
+            .then(result => ({ tipo: 'personal', data: result.data, error: result.error }))
+        );
+      } else {
+        consultasPromises.push(Promise.resolve({ tipo: 'personal', data: null, error: null }));
       }
+
+      // Ejecutar consultas en paralelo
+      const resultadosNombres = await Promise.all(consultasPromises);
+      
+      // Procesar resultados
+      resultadosNombres.forEach(resultado => {
+        if (resultado.tipo === 'user' && resultado.data) {
+          user = {
+            id: resultado.data.id,
+            name: `${resultado.data.first_name} ${resultado.data.last_name}`.trim()
+          };
+        } else if (resultado.tipo === 'personal' && resultado.data) {
+          personal = {
+            id: resultado.data.id,
+            name: `${resultado.data.first_name} ${resultado.data.last_name}`.trim()
+          };
+        }
+      });
 
       const pedidoConNombres = {
         ...pedidoCompleto,
         user,
         personal
       };
+
 
       return {
         success: true,

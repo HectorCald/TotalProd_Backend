@@ -111,18 +111,7 @@ class pedidosAcopio {
 
       let query = supabase
         .from('pedidos_acopio')
-        .select(`
-          *,
-          producto_acopio:producto_acopio_id (
-            id,
-            name,
-            description
-          ),
-          sucursal:sucu_id (
-            id,
-            name
-          )
-        `)
+        .select('*')
         .eq('empresa_id', empresaId)
         .order(orderBy, { ascending: ascending })
         .range(offset, offset + limit - 1);
@@ -151,51 +140,82 @@ class pedidosAcopio {
         });
       }
 
-      // Obtener nombres de usuarios y personal para cada pedido
-      const pedidosConNombres = await Promise.all(
-        pedidosFiltrados.map(async (pedido) => {
-          let user = null;
-          let personal = null;
+      // BATCH LOADING: Obtener datos relacionados en lotes
+      // Obtener IDs únicos para batch loading
+      const userIds = Array.from(new Set(pedidosFiltrados.map(p => p.user_id).filter(Boolean)));
+      const personalIds = Array.from(new Set(pedidosFiltrados.map(p => p.personal_id).filter(Boolean)));
+      const productoIds = Array.from(new Set(pedidosFiltrados.map(p => p.producto_acopio_id).filter(Boolean)));
+      const sucursalIds = Array.from(new Set(pedidosFiltrados.map(p => p.sucu_id).filter(Boolean)));
 
-          // Si tiene user_id, obtener el usuario
-          if (pedido.user_id) {
-            const { data: userData, error: userError } = await supabase
-              .from('users')
-              .select('id, first_name, last_name')
-              .eq('id', pedido.user_id)
-              .single();
-            
-            if (!userError && userData) {
-              user = {
-                id: userData.id,
-                name: `${userData.first_name} ${userData.last_name}`.trim()
-              };
-            }
-          }
+      // 1) Usuarios en lote
+      const userMap = new Map();
+      if (userIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .in('id', userIds);
+        (usersData || []).forEach(u => {
+          userMap.set(u.id, {
+            id: u.id,
+            name: `${u.first_name} ${u.last_name}`.trim()
+          });
+        });
+      }
 
-          // Si tiene personal_id, obtener el personal
-          if (pedido.personal_id) {
-            const { data: personalData, error: personalError } = await supabase
-              .from('personal')
-              .select('id, first_name, last_name')
-              .eq('id', pedido.personal_id)
-              .single();
-            
-            if (!personalError && personalData) {
-              personal = {
-                id: personalData.id,
-                name: `${personalData.first_name} ${personalData.last_name}`.trim()
-              };
-            }
-          }
+      // 2) Personal en lote
+      const personalMap = new Map();
+      if (personalIds.length > 0) {
+        const { data: personalData } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .in('id', personalIds);
+        (personalData || []).forEach(p => {
+          personalMap.set(p.id, {
+            id: p.id,
+            name: `${p.first_name} ${p.last_name}`.trim()
+          });
+        });
+      }
 
-          return {
-            ...pedido,
-            user,
-            personal
-          };
-        })
-      );
+      // 3) Productos en lote
+      const productoMap = new Map();
+      if (productoIds.length > 0) {
+        const { data: productosData } = await supabase
+          .from('products_acopio')
+          .select('id, name, description')
+          .in('id', productoIds);
+        (productosData || []).forEach(p => {
+          productoMap.set(p.id, {
+            id: p.id,
+            name: p.name,
+            description: p.description
+          });
+        });
+      }
+
+      // 4) Sucursales en lote
+      const sucursalMap = new Map();
+      if (sucursalIds.length > 0) {
+        const { data: sucursalesData } = await supabase
+          .from('sucursales')
+          .select('id, name')
+          .in('id', sucursalIds);
+        (sucursalesData || []).forEach(s => {
+          sucursalMap.set(s.id, {
+            id: s.id,
+            name: s.name
+          });
+        });
+      }
+
+      // Mapear todas las relaciones a los pedidos
+      const pedidosConNombres = pedidosFiltrados.map((pedido) => {
+        const user = pedido.user_id ? (userMap.get(pedido.user_id) || null) : null;
+        const personal = pedido.personal_id ? (personalMap.get(pedido.personal_id) || null) : null;
+        const producto_acopio = productoMap.get(pedido.producto_acopio_id) || null;
+        const sucursal = sucursalMap.get(pedido.sucu_id) || null;
+        return { ...pedido, user, personal, producto_acopio, sucursal };
+      });
 
       const { count, error: countError } = await supabase
         .from('pedidos_acopio')
@@ -444,20 +464,10 @@ class pedidosAcopio {
         throw new Error('ID del usuario es requerido');
       }
 
-      // Obtener el pedido primero para validar que existe y obtener el nombre del producto
+      // Obtener el pedido primero para validar que existe (optimizado - solo campos necesarios)
       const { data: pedidoExistente, error: pedidoError } = await supabase
         .from('pedidos_acopio')
-        .select(`
-          id, 
-          estado, 
-          producto_acopio_id, 
-          cantidad, 
-          tipo_medida,
-          producto_acopio:producto_acopio_id (
-            id,
-            name
-          )
-        `)
+        .select('id, estado, producto_acopio_id, cantidad, tipo_medida, sucu_id')
         .eq('id', pedidoId)
         .single();
 
@@ -472,9 +482,21 @@ class pedidosAcopio {
         throw new Error('El pedido ya ha sido entregado');
       }
 
-      // Crear el gasto primero
+      // Crear el gasto primero (optimizado - obtener nombre del producto en lote)
       const gastosModel = require('./gastos');
-      const nombreProducto = pedidoExistente.producto_acopio?.name || 'Producto';
+      
+      // Obtener nombre del producto para el concepto del gasto
+      const { data: productoData, error: productoError } = await supabase
+        .from('products_acopio')
+        .select('name')
+        .eq('id', pedidoExistente.producto_acopio_id)
+        .single();
+      
+      if (productoError) {
+        throw new Error(`Error al obtener producto: ${productoError.message}`);
+      }
+      
+      const nombreProducto = productoData?.name || 'Producto';
       const concepto = `${nombreProducto} - ${entregaData.cantidadEntregada} ${entregaData.unidadEntregada}`;
       
       const gastoData = {
@@ -486,21 +508,10 @@ class pedidosAcopio {
         fecha_gasto: new Date().toISOString().split('T')[0] // Formato YYYY-MM-DD
       };
 
-      // Obtener el sucu_id del pedido para el gasto
-      const { data: pedidoConSucursal, error: pedidoError2 } = await supabase
-        .from('pedidos_acopio')
-        .select('sucu_id')
-        .eq('id', pedidoId)
-        .single();
-
-      if (pedidoError2) {
-        throw new Error(`Error al obtener sucursal del pedido: ${pedidoError2.message}`);
-      }
-
       const gastoResult = await gastosModel.create({
         ...gastoData,
         user_id: userId,
-        sucu_id: pedidoConSucursal.sucu_id
+        sucu_id: pedidoExistente.sucu_id  // Usar sucu_id ya obtenido
       });
 
       if (!gastoResult.success) {
@@ -510,7 +521,7 @@ class pedidosAcopio {
       console.log('Gasto creado:', gastoResult.data);
       console.log('Gasto ID:', gastoResult.data.id);
 
-      // Actualizar el pedido con los datos de entrega
+      // Actualizar el pedido con los datos de entrega (optimizado - sin embedded relations)
       const { data: pedidoActualizado, error: updateError } = await supabase
         .from('pedidos_acopio')
         .update({
@@ -524,31 +535,33 @@ class pedidosAcopio {
           gasto_id: gastoResult.data.id
         })
         .eq('id', pedidoId)
-        .select(`
-          *,
-          producto_acopio:producto_acopio_id (
-            id,
-            name,
-            description
-          ),
-          gasto:gasto_id (
-            id,
-            concepto,
-            valor,
-            metodo_pago,
-            fecha_gasto
-          )
-        `)
+        .select('*')
         .single();
 
       if (updateError) {
         throw new Error(`Error al actualizar el pedido: ${updateError.message}`);
       }
 
+      // Construir respuesta con datos relacionados (sin embedded relations)
+      const responseData = {
+        ...pedidoActualizado,
+        producto_acopio: {
+          id: pedidoExistente.producto_acopio_id,
+          name: nombreProducto
+        },
+        gasto: {
+          id: gastoResult.data.id,
+          concepto: gastoData.concepto,
+          valor: gastoData.valor,
+          metodo_pago: gastoData.metodo_pago,
+          fecha_gasto: gastoData.fecha_gasto
+        }
+      };
+
       return {
         success: true,
         message: 'Pedido entregado exitosamente',
-        data: pedidoActualizado
+        data: responseData
       };
 
     } catch (error) {

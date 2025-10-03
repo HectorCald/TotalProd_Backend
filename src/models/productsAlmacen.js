@@ -225,12 +225,16 @@ class productsAlmacen {
 
   // Crear un producto con precios, receta y stock en sucursal
   static async create(productData, empresaId, sucuId = null) {
+    const tCreateStart = Date.now();
+    console.log('🚀 [CREATE PRODUCT] Iniciando creación de producto');
+    
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
       }
 
       // 1. Crear el producto principal (sin stock, ya que se maneja en productos_sucursal)
+      const tProductStart = Date.now();
       const dbProductData = {
         name: productData.name,
         codigo_barras: productData.codigo_barras || null,
@@ -244,6 +248,8 @@ class productsAlmacen {
         .from('products_almacen')
         .insert([dbProductData])
         .select();
+      const tProductMs = Date.now() - tProductStart;
+      console.log(`⏱️ [CREATE PRODUCT] Crear producto principal: ${tProductMs}ms`);
 
       if (productError) {
         console.error('Error de Supabase al crear producto:', productError);
@@ -256,42 +262,55 @@ class productsAlmacen {
 
       const productId = product[0].id;
 
-      // 2. Crear el stock en la sucursal si se proporciona sucuId
-      if (sucuId && productData.stock !== undefined) {
-        const { error: stockError } = await supabase
-          .from('productos_sucursal')
-          .insert([{
-            producto_id: productId,
-            sucursal_id: sucuId,
-            stock: productData.stock || 0
-          }]);
+      // 2. Crear stock y precios en paralelo (OPTIMIZADO)
+      const tParallelStart = Date.now();
+      const parallelOperations = [];
 
-        if (stockError) {
-          console.error('Error al crear stock en sucursal:', stockError);
-          // No lanzar error aquí, solo log
-        }
+      // Preparar operación de stock
+      if (sucuId && productData.stock !== undefined) {
+        parallelOperations.push(
+          supabase
+            .from('productos_sucursal')
+            .insert([{
+              producto_id: productId,
+              sucursal_id: sucuId,
+              stock: productData.stock || 0
+            }])
+        );
       }
 
-      // 3. Crear los precios para todos los tipos de precios
+      // Preparar operación de precios
       if (productData.prices && Object.keys(productData.prices).length > 0) {
         const priceInserts = Object.entries(productData.prices).map(([priceTypeId, valor]) => ({
           producto_almacen_id: productId,
           price_id: priceTypeId,
-          valor: valor || 0 // Si no tiene valor, poner 0
+          valor: valor || 0
         }));
 
-        const { error: pricesError } = await supabase
-          .from('price_product')
-          .insert(priceInserts);
-
-        if (pricesError) {
-          console.error('Error al crear precios:', pricesError);
-          // No lanzar error aquí, solo log
-        }
+        parallelOperations.push(
+          supabase
+            .from('price_product')
+            .insert(priceInserts)
+        );
       }
 
-      // 3. Crear la receta si existe
+      // Ejecutar operaciones en paralelo
+      if (parallelOperations.length > 0) {
+        const results = await Promise.allSettled(parallelOperations);
+        const tParallelMs = Date.now() - tParallelStart;
+        console.log(`⏱️ [CREATE PRODUCT] Crear stock y precios en paralelo: ${tParallelMs}ms`);
+
+        // Verificar errores
+        results.forEach((result, index) => {
+          if (result.status === 'rejected' || result.value.error) {
+            console.error(`Error en operación paralela ${index}:`, result.value?.error || result.reason);
+          }
+        });
+      }
+
+      // 4. Crear la receta si existe
       if (productData.receta && productData.receta.productos && productData.receta.productos.length > 0) {
+        const tRecetaStart = Date.now();
         // Crear la receta principal
         const { data: receta, error: recetaError } = await supabase
           .from('recetas')
@@ -323,67 +342,47 @@ class productsAlmacen {
             // No lanzar error aquí, solo log
           }
         }
+        const tRecetaMs = Date.now() - tRecetaStart;
+        console.log(`⏱️ [CREATE PRODUCT] Crear receta y detalles: ${tRecetaMs}ms`);
       }
 
-      // Devolver el producto completo con todos los joins
-      const { data: completeProduct, error: completeError } = await supabase
-        .from('products_almacen')
-        .select(`
-          *,
-          category_almacen:category_id (
-            id,
-            name
-          ),
-          price_product (
-            id,
-            valor,
-            prices_types (
-              id,
-              name,
-              description
-            )
-          ),
-          recetas (
-            id,
-            descripcion,
-            recetas_detalle (
-              id,
-              cantidad,
-              products_acopio:producto_acopio_id (
-                id,
-                name,
-                quantity
-              )
-            )
-          ),
-          productos_sucursal (
-            id,
-            stock,
-            sucursal_id
-          )
-        `)
-        .eq('id', product[0].id)
-        .eq('empresa_id', empresaId)
-        .single();
+      // Devolver producto básico sin JOINs pesados (OPTIMIZADO)
+      const tCompleteStart = Date.now();
+      
+      // Construir respuesta básica sin consultas adicionales
+      const basicProduct = {
+        ...product[0],
+        stock: productData.stock || 0,
+        category_name: 'Sin categoría', // Se puede obtener después si es necesario
+        price_product: productData.prices ? Object.entries(productData.prices).map(([price_id, valor]) => ({
+          producto_almacen_id: productId,
+          price_id: price_id,
+          valor: parseFloat(valor) || 0,
+          prices_types: { id: price_id, name: 'Precio', description: '' }
+        })) : [],
+        recetas: productData.receta ? [{
+          id: 'temp_id',
+          descripcion: productData.receta.descripcion || '',
+          recetas_detalle: productData.receta.productos ? productData.receta.productos.map(prod => ({
+            id: 'temp_id',
+            cantidad: parseFloat(prod.cantidad) || 0,
+            products_acopio: { id: prod.producto_acopio_id, name: 'Producto', quantity: 0 }
+          })) : []
+        }] : [],
+        productos_sucursal: sucuId ? [{
+          producto_id: productId,
+          sucursal_id: sucuId,
+          stock: productData.stock || 0
+        }] : []
+      };
+      
+      const tCompleteMs = Date.now() - tCompleteStart;
+      console.log(`⏱️ [CREATE PRODUCT] Construir respuesta básica: ${tCompleteMs}ms`);
 
-      if (completeError) {
-        console.error('Error al obtener producto completo:', completeError);
-        // Si hay error, devolver al menos el producto básico
-        return product[0];
-      }
+      const tCreateMs = Date.now() - tCreateStart;
+      console.log(`⏱️ [CREATE PRODUCT] Total creación: ${tCreateMs}ms`);
 
-      // Si se especifica sucuId, agregar el stock de esa sucursal específica
-      if (sucuId && completeProduct) {
-        const stockSucursal = completeProduct.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
-        completeProduct.stock = stockSucursal ? stockSucursal.stock : 0;
-      }
-
-      // Agregar category_name
-      if (completeProduct) {
-        completeProduct.category_name = completeProduct.category_almacen?.name || 'Sin categoría';
-      }
-
-      return completeProduct;
+      return basicProduct;
     } catch (error) {
       console.error('Error al crear el producto:', error);
       throw error;
@@ -392,6 +391,9 @@ class productsAlmacen {
 
   // Actualizar un producto
   static async update(id, productData, sucuId = null) {
+    const tUpdateStart = Date.now();
+    console.log('🚀 [UPDATE PRODUCT] Iniciando actualización de producto');
+    
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
@@ -406,11 +408,14 @@ class productsAlmacen {
       };
 
       // Actualizar el producto principal
+      const tProductStart = Date.now();
       const { data, error } = await supabase
         .from('products_almacen')
         .update(updateData)
         .eq('id', id)
         .select();
+      const tProductMs = Date.now() - tProductStart;
+      console.log(`⏱️ [UPDATE PRODUCT] Actualizar producto principal: ${tProductMs}ms`);
 
       if (error) {
         throw new Error('No se pudo actualizar el producto');
@@ -422,27 +427,27 @@ class productsAlmacen {
 
       const productId = data[0].id;
 
-      // Actualizar stock en productos_sucursal si se proporciona sucuId
-      if (sucuId && productData.stock !== undefined) {
-        // Usar UPSERT para optimizar (inserta si no existe, actualiza si existe)
-        const { error: stockUpsertError } = await supabase
-          .from('productos_sucursal')
-          .upsert({
-            producto_id: productId,
-            sucursal_id: sucuId,
-            stock: productData.stock || 0
-          }, {
-            onConflict: 'producto_id,sucursal_id'
-          });
+      // Actualizar stock y precios en paralelo (OPTIMIZADO)
+      const tParallelStart = Date.now();
+      const parallelOperations = [];
 
-        if (stockUpsertError) {
-          throw new Error('Error al actualizar el stock');
-        }
+      // Preparar operación de stock
+      if (sucuId && productData.stock !== undefined) {
+        parallelOperations.push(
+          supabase
+            .from('productos_sucursal')
+            .upsert({
+              producto_id: productId,
+              sucursal_id: sucuId,
+              stock: productData.stock || 0
+            }, {
+              onConflict: 'producto_id,sucursal_id'
+            })
+        );
       }
 
-      // Actualizar precios si se proporcionan (OPTIMIZADO)
+      // Preparar operación de precios
       if (productData.prices && Object.keys(productData.prices).length > 0) {
-        // Preparar array de precios para batch insert
         const preciosArray = [];
         for (const [priceTypeId, valor] of Object.entries(productData.prices)) {
           if (valor && valor !== '') {
@@ -454,27 +459,43 @@ class productsAlmacen {
           }
         }
 
-        // Eliminar precios existentes y insertar nuevos en una sola transacción
         if (preciosArray.length > 0) {
-          // Eliminar precios existentes
-          await supabase
-            .from('price_product')
-            .delete()
-            .eq('producto_almacen_id', productId);
+          // Crear operación de precios (eliminar + insertar)
+          parallelOperations.push(
+            (async () => {
+              // Eliminar precios existentes
+              await supabase
+                .from('price_product')
+                .delete()
+                .eq('producto_almacen_id', productId);
 
-          // Insertar nuevos precios
-          const { error: preciosBatchError } = await supabase
-            .from('price_product')
-            .insert(preciosArray);
-
-          if (preciosBatchError) {
-            throw new Error('Error al actualizar los precios');
-          }
+              // Insertar nuevos precios
+              return await supabase
+                .from('price_product')
+                .insert(preciosArray);
+            })()
+          );
         }
+      }
+
+      // Ejecutar operaciones en paralelo
+      if (parallelOperations.length > 0) {
+        const results = await Promise.allSettled(parallelOperations);
+        const tParallelMs = Date.now() - tParallelStart;
+        console.log(`⏱️ [UPDATE PRODUCT] Actualizar stock y precios en paralelo: ${tParallelMs}ms`);
+
+        // Verificar errores
+        results.forEach((result, index) => {
+          if (result.status === 'rejected' || result.value?.error) {
+            console.error(`Error en operación paralela ${index}:`, result.value?.error || result.reason);
+            throw new Error('Error al actualizar stock o precios');
+          }
+        });
       }
 
       // Actualizar receta si se proporciona (OPTIMIZADO)
       if (productData.receta) {
+        const tRecetaStart = Date.now();
         // Primero obtener los IDs de recetas existentes
         const { data: existingRecetas } = await supabase
           .from('recetas')
@@ -529,6 +550,8 @@ class productsAlmacen {
             }
           }
         }
+        const tRecetaMs = Date.now() - tRecetaStart;
+        console.log(`⏱️ [UPDATE PRODUCT] Actualizar receta: ${tRecetaMs}ms`);
       }
 
       // Obtener nombre de la categoría
@@ -595,6 +618,9 @@ class productsAlmacen {
         }] : []
       };
 
+      const tUpdateMs = Date.now() - tUpdateStart;
+      console.log(`⏱️ [UPDATE PRODUCT] Total actualización: ${tUpdateMs}ms`);
+
       return productoActualizado;
     } catch (error) {
       throw error;
@@ -619,7 +645,7 @@ class productsAlmacen {
         throw new Error('No se pudieron obtener las recetas del producto');
       }
 
-      // 2. Eliminar detalles de recetas si existen
+      // 2. Eliminar detalles de recetas primero (dependencia de recetas)
       if (recetas && recetas.length > 0) {
         const recetaIds = recetas.map(r => r.id);
         const { error: errorDetalles } = await supabase
@@ -633,7 +659,7 @@ class productsAlmacen {
         }
       }
 
-      // 3. Eliminar las recetas
+      // 3. Eliminar recetas
       const { error: errorRecetas } = await supabase
         .from('recetas')
         .delete()
@@ -644,25 +670,26 @@ class productsAlmacen {
         throw new Error('No se pudieron eliminar las recetas');
       }
 
-      // 4. Eliminar los precios del producto
-      const { error: errorPrecios } = await supabase
-        .from('price_product')
-        .delete()
-        .eq('producto_almacen_id', id);
+      // 4-5. Eliminar precios y stock en paralelo (sin dependencias entre sí)
+      const [preciosResult, stockResult] = await Promise.allSettled([
+        supabase
+          .from('price_product')
+          .delete()
+          .eq('producto_almacen_id', id),
+        supabase
+          .from('productos_sucursal')
+          .delete()
+          .eq('producto_id', id)
+      ]);
 
-      if (errorPrecios) {
-        console.error('Error eliminando precios:', errorPrecios);
+      // Verificar errores
+      if (preciosResult.status === 'rejected' || preciosResult.value?.error) {
+        console.error('Error eliminando precios:', preciosResult.value?.error || preciosResult.reason);
         throw new Error('No se pudieron eliminar los precios del producto');
       }
 
-      // 5. Eliminar todas las relaciones de stock en productos_sucursal
-      const { error: errorStock } = await supabase
-        .from('productos_sucursal')
-        .delete()
-        .eq('producto_id', id);
-
-      if (errorStock) {
-        console.error('Error eliminando stock de sucursales:', errorStock);
+      if (stockResult.status === 'rejected' || stockResult.value?.error) {
+        console.error('Error eliminando stock:', stockResult.value?.error || stockResult.reason);
         throw new Error('No se pudieron eliminar las relaciones de stock del producto');
       }
 
@@ -670,7 +697,7 @@ class productsAlmacen {
       const { error } = await supabase
         .from('products_almacen')
         .delete()
-        .eq('id', id)
+        .eq('id', id);
 
       if (error) {
         console.error('Error eliminando producto principal:', error);

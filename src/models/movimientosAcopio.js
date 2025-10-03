@@ -339,6 +339,7 @@ class movimientosAcopio {
   // Obtener todos los movimientos
   static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc') {
     try {
+      const tStart = Date.now();
       if (!sucuId) {
         throw new Error('ID de la sucursal es requerido');
       }
@@ -421,51 +422,44 @@ class movimientosAcopio {
         throw new Error('No se pudo obtener los movimientos');
       }
 
-      // Obtener nombres de usuarios y personal para cada movimiento
-      const movimientosConNombres = await Promise.all(
-        (data || []).map(async (movimiento) => {
-          let user = null;
-          let personal = null;
+      // Hidratación: resolver usuarios/personal en lote para evitar N+1 y evitar embeds (RLS sensibles)
+      const tHydrateStart = Date.now();
+      const userIds = Array.from(new Set((data || []).map(m => m.user_id).filter(Boolean)));
+      const personalIds = Array.from(new Set((data || []).map(m => m.personal_id).filter(Boolean)));
 
-          // Si tiene user_id, obtener el usuario
-          if (movimiento.user_id) {
-            const { data: userData, error: userError } = await supabase
-              .from('users')
-              .select('id, first_name, last_name')
-              .eq('id', movimiento.user_id)
-              .single();
-            
-            if (!userError && userData) {
-              user = {
-                id: userData.id,
-                name: `${userData.first_name} ${userData.last_name}`.trim()
-              };
-            }
-          }
+      const usersMap = new Map();
+      if (userIds.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .in('id', userIds);
+        if (!usersError && usersData) {
+          usersData.forEach(u => {
+            usersMap.set(u.id, { id: u.id, name: `${u.first_name || ''} ${u.last_name || ''}`.trim() });
+          });
+        }
+      }
 
-          // Si tiene personal_id, obtener el personal
-          if (movimiento.personal_id) {
-            const { data: personalData, error: personalError } = await supabase
-              .from('personal')
-              .select('id, first_name, last_name')
-              .eq('id', movimiento.personal_id)
-              .single();
-            
-            if (!personalError && personalData) {
-              personal = {
-                id: personalData.id,
-                name: `${personalData.first_name} ${personalData.last_name}`.trim()
-              };
-            }
-          }
+      const personalMap = new Map();
+      if (personalIds.length > 0) {
+        const { data: persData, error: persError } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .in('id', personalIds);
+        if (!persError && persData) {
+          persData.forEach(p => {
+            personalMap.set(p.id, { id: p.id, name: `${p.first_name || ''} ${p.last_name || ''}`.trim() });
+          });
+        }
+      }
 
-          return {
-            ...movimiento,
-            user,
-            personal
-          };
-        })
-      );
+      const movimientosConNombres = (data || []).map(mov => ({
+        ...mov,
+        user: mov.user_id ? (usersMap.get(mov.user_id) || null) : null,
+        personal: mov.personal_id ? (personalMap.get(mov.personal_id) || null) : null
+      }));
+      const tHydrateMs = Date.now() - tHydrateStart;
+      const tTotalMs = Date.now() - tStart;
 
       return {
         success: true,
@@ -739,32 +733,12 @@ class movimientosAcopio {
   // Anular un movimiento
   static async anular(movimientoId) {
     try {
-      // Obtener el movimiento con todos sus datos
+      // Obtener el movimiento básico primero (OPTIMIZADO)
       const { data: movimiento, error: movimientoError } = await supabase
         .from('movimientos_acopio')
-        .select(`
-          *,
-          product:product_id (
-            id,
-            name,
-            quantity,
-            recetas_acopio (
-              id,
-              description,
-              recetas_acopio_detalle (
-                id,
-                cantidad,
-                products_acopio:producto_acopio_id (
-                  id,
-                  name,
-                  quantity
-                )
-              )
-            )
-          )
-        `)
+        .select('id, type, quantity, estado, gasto_id, restar_ingredientes, product_id')
         .eq('id', movimientoId)
-        .single();
+        .maybeSingle();
 
       if (movimientoError) {
         console.error('Error obteniendo movimiento:', movimientoError);
@@ -778,6 +752,18 @@ class movimientosAcopio {
       // Verificar que no esté ya anulado
       if (movimiento.estado === 'anulado') {
         return { success: false, message: 'El movimiento ya está anulado' };
+      }
+
+      // Validar relación con pedidos: si está relacionado, no permitir anular (OPTIMIZADO)
+      const { data: pedidosRelacionados } = await supabase
+        .from('pedidos_almacen')
+        .select('id')
+        .or(`movimiento_salida_id.eq.${movimientoId},movimiento_entrada_id.eq.${movimientoId}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (pedidosRelacionados) {
+        return { success: false, message: 'No se puede anular: el movimiento está relacionado con un pedido' };
       }
 
       // Si tiene gasto_id, eliminar el gasto asociado primero
@@ -805,16 +791,28 @@ class movimientosAcopio {
         return { success: false, message: 'Error al anular el movimiento' };
       }
 
+      // Obtener producto actual para calcular nueva cantidad
+      const { data: producto, error: productoError } = await supabase
+        .from('products_acopio')
+        .select('quantity')
+        .eq('id', movimiento.product_id)
+        .maybeSingle();
+
+      if (productoError || !producto) {
+        console.error('Error obteniendo producto:', productoError);
+        return { success: false, message: 'Error al obtener el producto' };
+      }
+
       // Revertir el stock del producto principal
       const cantidadMovimiento = parseFloat(movimiento.quantity);
       let nuevaCantidad;
 
       if (movimiento.type === 'entrada') {
         // Anular entrada = restar del stock
-        nuevaCantidad = movimiento.product.quantity - cantidadMovimiento;
+        nuevaCantidad = producto.quantity - cantidadMovimiento;
       } else {
         // Anular salida = sumar al stock
-        nuevaCantidad = movimiento.product.quantity + cantidadMovimiento;
+        nuevaCantidad = producto.quantity + cantidadMovimiento;
       }
 
       // Actualizar stock del producto principal
@@ -834,28 +832,48 @@ class movimientosAcopio {
       }
 
       // Si es entrada, tiene receta Y restar_ingredientes es true, devolver ingredientes consumidos
-      if (movimiento.type === 'entrada' && movimiento.restar_ingredientes && movimiento.product.recetas_acopio && movimiento.product.recetas_acopio.length > 0) {
-        const receta = movimiento.product.recetas_acopio[0];
+      if (movimiento.type === 'entrada' && movimiento.restar_ingredientes) {
+        // Obtener recetas solo cuando sea necesario
+        const { data: recetas, error: recetasError } = await supabase
+          .from('recetas_acopio')
+          .select(`
+            id,
+            recetas_acopio_detalle (
+              id,
+              cantidad,
+              products_acopio:producto_acopio_id (
+                id,
+                name,
+                quantity
+              )
+            )
+          `)
+          .eq('producto_acopio_id', movimiento.product_id)
+          .limit(1);
         
-        if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
-          // Devolver ingredientes (sumar al stock)
-          for (const ingrediente of receta.recetas_acopio_detalle) {
-            if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
-              continue;
-            }
+        if (!recetasError && recetas && recetas.length > 0) {
+          const receta = recetas[0];
+          
+          if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
+            // Devolver ingredientes (sumar al stock)
+            for (const ingrediente of receta.recetas_acopio_detalle) {
+              if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
+                continue;
+              }
 
-            const cantidadADevolver = ingrediente.cantidad * cantidadMovimiento;
-            const cantidadActual = ingrediente.products_acopio.quantity;
-            const nuevaCantidadIngrediente = cantidadActual + cantidadADevolver;
+              const cantidadADevolver = ingrediente.cantidad * cantidadMovimiento;
+              const cantidadActual = ingrediente.products_acopio.quantity;
+              const nuevaCantidadIngrediente = cantidadActual + cantidadADevolver;
 
-            const { error: ingredienteError } = await supabase
-              .from('products_acopio')
-              .update({ quantity: nuevaCantidadIngrediente })
-              .eq('id', ingrediente.products_acopio.id);
+              const { error: ingredienteError } = await supabase
+                .from('products_acopio')
+                .update({ quantity: nuevaCantidadIngrediente })
+                .eq('id', ingrediente.products_acopio.id);
 
-            if (ingredienteError) {
-              console.error(`Error devolviendo ingrediente ${ingrediente.products_acopio.name}:`, ingredienteError);
-              // Continuar con el siguiente ingrediente
+              if (ingredienteError) {
+                console.error(`Error devolviendo ingrediente ${ingrediente.products_acopio.name}:`, ingredienteError);
+                // Continuar con el siguiente ingrediente
+              }
             }
           }
         }

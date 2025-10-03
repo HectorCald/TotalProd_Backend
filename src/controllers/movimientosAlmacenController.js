@@ -4,7 +4,9 @@ const { checkDeletePermission, checkAnularPermission } = require('../utils/permi
 class movimientosAlmacenController {
     // Crear un nuevo movimiento
     static async create(req, res) {
+        
         try {
+            const tValidationStart = Date.now();
             const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id } = req.body;
             const user_id = req.user?.id;
             const userType = req.user?.type; // Verificar si es empleado o usuario normal
@@ -105,7 +107,6 @@ class movimientosAlmacenController {
             };
 
             // VALIDAR INGREDIENTES ANTES de crear el movimiento si es entrada con restar_ingredientes
-            console.log('🔍 DEBUG - Validando ingredientes:', { type, restar_ingredientes, productosLength: productos.length });
             if (type === 'entrada' && restar_ingredientes) {
                 try {
                     // Obtener productos con recetas en una sola query (bulk)
@@ -170,8 +171,7 @@ class movimientosAlmacenController {
 
             res.status(201).json({
                 success: true,
-                message: `${type === 'entrada' ? 'Entrada' : 'Salida'} registrada correctamente`,
-                data: result.data
+                id: result.data.id
             });
 
         } catch (error) {
@@ -212,6 +212,7 @@ class movimientosAlmacenController {
                 data: result.data,
                 pagination: result.pagination
             });
+
 
         } catch (error) {
             console.error('Error en movimientosAlmacenController.getAll:', error);
@@ -311,8 +312,10 @@ class movimientosAlmacenController {
 
     // Anular un movimiento
     static async anular(req, res) {
+        
         try {
             const { id } = req.params;
+            const { desdePedido } = req.body; // Nuevo parámetro para indicar si se anula desde pedido
             const userType = req.user?.type;
 
             // Verificar permisos de anulación solo si es empleado
@@ -320,6 +323,7 @@ class movimientosAlmacenController {
                 const personal_id = req.user.id; // El personal_id viene del token
 
                 const hasPermission = await checkAnularPermission(personal_id);
+                
                 if (!hasPermission) {
                     return res.status(403).json({
                         success: false,
@@ -328,7 +332,7 @@ class movimientosAlmacenController {
                 }
             }
 
-            const result = await movimientosAlmacen.anular(id);
+            const result = await movimientosAlmacen.anular(id, desdePedido);
 
             if (!result.success) {
                 return res.status(400).json({
@@ -336,6 +340,7 @@ class movimientosAlmacenController {
                     message: result.message
                 });
             }
+
 
             res.json({
                 success: true,
@@ -388,6 +393,47 @@ class movimientosAlmacenController {
 
         } catch (error) {
             console.error('Error en movimientosAlmacenController.eliminar:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
+    // Verificar si un producto tiene movimientos (ULTRA OPTIMIZADO)
+    static async hasMovements(req, res) {
+        try {
+            const { productId } = req.params;
+            const sucu_id = req.query.sucu_id;
+
+            if (!sucu_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
+
+            if (!productId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID del producto es requerido'
+                });
+            }
+
+            const result = await movimientosAlmacen.hasMovements(productId, sucu_id);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json({
+                success: true,
+                hasMovements: result.hasMovements
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.hasMovements:', error);
             res.status(500).json({
                 success: false,
                 message: 'Error interno del servidor',

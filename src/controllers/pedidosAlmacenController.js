@@ -6,6 +6,7 @@ class pedidosAlmacenController {
   // Crear un pedido
   static async create(req, res) {
     try {
+      
       const { productos, observaciones, personal_id } = req.body;
       const userId = req.user?.id;
       const userType = req.user?.type; // Verificar si es empleado o usuario normal
@@ -96,6 +97,9 @@ class pedidosAlmacenController {
   // Obtener todos los pedidos de la sucursal
   static async getAll(req, res) {
     try {
+      const tStart = Date.now();
+      console.log('[PedidosAlmacenController.getAll] Iniciando obtención de pedidos');
+      
       const { sucu_id } = req.query;
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
@@ -110,7 +114,13 @@ class pedidosAlmacenController {
         });
       }
 
+      const tModelStart = Date.now();
       const result = await pedidosAlmacen.getAll(sucu_id, page, limit, searchQuery, estado, ordenamiento);
+      const tModelMs = Date.now() - tModelStart;
+      console.log('[PedidosAlmacenController.getAll] Model.getAll ms=', tModelMs);
+
+      const tTotalMs = Date.now() - tStart;
+      console.log('[PedidosAlmacenController.getAll] TOTAL ms=', tTotalMs);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -196,6 +206,7 @@ class pedidosAlmacenController {
   // Actualizar pedido completo
   static async update(req, res) {
     try {
+      
       const { id } = req.params;
       const { productos, observaciones, personal_id } = req.body;
       const userId = req.user?.id;
