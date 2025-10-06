@@ -182,7 +182,8 @@ class movimientosAcopioController {
   // Obtener todos los movimientos
   static async getAll(req, res) {
     try {
-      const { page = 1, limit = 10, tipo, estado, ordenamiento = 'fecha_desc', sucu_id } = req.query;
+      const { page = 1, limit = 10, tipo, estado, ordenamiento = 'fecha_desc', sucu_id, search = null } = req.query;
+      console.log('[MovAcopioCtrl.getAll] params =>', { sucu_id, page, limit, tipo, estado, ordenamiento, search });
 
       if (!sucu_id) {
         return res.status(400).json({
@@ -191,7 +192,8 @@ class movimientosAcopioController {
         });
       }
 
-      const result = await movimientosAcopio.getAll(sucu_id, parseInt(page), parseInt(limit), tipo, estado, ordenamiento);
+      const result = await movimientosAcopio.getAll(sucu_id, parseInt(page), parseInt(limit), tipo, estado, ordenamiento, search);
+      console.log('[MovAcopioCtrl.getAll] result =>', { success: result?.success, dataLen: result?.data?.length, pagination: result?.pagination });
 
       if (!result.success) {
         return res.status(500).json({

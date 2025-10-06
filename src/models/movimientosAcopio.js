@@ -337,7 +337,7 @@ class movimientosAcopio {
   }
 
   // Obtener todos los movimientos
-  static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc') {
+  static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc', search = null) {
     try {
       const tStart = Date.now();
       if (!sucuId) {
@@ -453,7 +453,13 @@ class movimientosAcopio {
         }
       }
 
-      const movimientosConNombres = (data || []).map(mov => ({
+      let dataFiltrada = data || [];
+      if (search && search.trim() !== '') {
+        const term = search.toLowerCase();
+        dataFiltrada = dataFiltrada.filter(m => (m.product?.name || '').toLowerCase().includes(term));
+      }
+
+      const movimientosConNombres = (dataFiltrada || []).map(mov => ({
         ...mov,
         user: mov.user_id ? (usersMap.get(mov.user_id) || null) : null,
         personal: mov.personal_id ? (personalMap.get(mov.personal_id) || null) : null
@@ -461,17 +467,18 @@ class movimientosAcopio {
       const tHydrateMs = Date.now() - tHydrateStart;
       const tTotalMs = Date.now() - tStart;
 
-      return {
+      const result = {
         success: true,
         message: 'Movimientos obtenidos exitosamente',
         data: movimientosConNombres,
         pagination: {
           currentPage: page,
-          totalPages: Math.ceil(count / limit),
-          totalItems: count,
-          hasNextPage: page < Math.ceil(count / limit)
+          totalPages: Math.ceil(((search ? movimientosConNombres.length : count) || 0) / limit),
+          totalItems: search ? movimientosConNombres.length : count,
+          hasNextPage: search ? false : page < Math.ceil(count / limit)
         }
       };
+      return result;
     } catch (error) {
       console.error('Error al obtener los movimientos:', error);
       throw new Error('No se pudo obtener los movimientos');

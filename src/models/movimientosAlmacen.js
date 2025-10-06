@@ -395,7 +395,7 @@ class movimientosAlmacen {
     }
 
     // Obtener todos los movimientos de una sucursal
-    static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc') {
+    static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc', search = null) {
         try {
             const tStart = Date.now();
             const offset = (page - 1) * limit;
@@ -412,6 +412,49 @@ class movimientosAlmacen {
                     personal:personal_id(id, first_name, last_name)
                 `, { count: 'exact' })
                 .eq('sucu_id', sucuId);
+
+            // Si hay búsqueda por nombre de producto, prefiltrar por IDs de movimientos que tengan ese producto en el detalle
+            let movimientosIdsFiltrados = null;
+            if (search && search.trim() !== '') {
+                const term = `%${search}%`;
+                // 1) Buscar productos por nombre en products_almacen
+                const { data: productosMatches, error: prodErr } = await supabase
+                    .from('products_almacen')
+                    .select('id, name')
+                    .ilike('name', term);
+                if (prodErr) {
+                    console.error('[MovAlmacenModel.getAll] products search error =>', prodErr);
+                } else {
+                    const productIds = (productosMatches || []).map(p => p.id);
+                    console.log('[MovAlmacenModel.getAll] products search =>', { term, productIds: productIds.length });
+                    if (productIds.length === 0) {
+                        return {
+                            success: true,
+                            data: [],
+                            pagination: { total: 0, page, limit, hasNextPage: false }
+                        };
+                    }
+                    // 2) Buscar en detalle movimientos que contengan esos productos
+                    const { data: detalleMatches, error: detalleErr } = await supabase
+                        .from('movimiento_almacen_producto')
+                        .select('movimiento_almacen_id')
+                        .in('producto_almacen_id', productIds);
+                    if (detalleErr) {
+                        console.error('[MovAlmacenModel.getAll] detalle match error =>', detalleErr);
+                    } else {
+                        movimientosIdsFiltrados = Array.from(new Set((detalleMatches || []).map(d => d.movimiento_almacen_id)));
+                        console.log('[MovAlmacenModel.getAll] detalle IDs =>', { ids: movimientosIdsFiltrados.length });
+                        if (movimientosIdsFiltrados.length === 0) {
+                            return {
+                                success: true,
+                                data: [],
+                                pagination: { total: 0, page, limit, hasNextPage: false }
+                            };
+                        }
+                        query = query.in('id', movimientosIdsFiltrados);
+                    }
+                }
+            }
 
             // Aplicar filtro de tipo si se proporciona
             if (tipo) {
@@ -473,8 +516,8 @@ class movimientosAlmacen {
 				.in('movimiento_almacen_id', movimientoIds);
 			tProductosBatchMs = Date.now() - tProdBatchStart;
 			const productosByMovimiento = new Map();
-			(movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
-			(productosAll || []).forEach(p => {
+            (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
+            (productosAll || []).forEach(p => {
 				const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
 				arr.push(p);
 				productosByMovimiento.set(p.movimiento_almacen_id, arr);
@@ -483,7 +526,7 @@ class movimientosAlmacen {
             // Usuarios y personal vienen embebidos en la query principal (sin llamadas extra)
 
 			// Armar respuesta final (sin relación con pedidos para acelerar listado)
-			const movimientosConProductos = movimientos.map(mov => {
+            let movimientosConProductos = movimientos.map(mov => {
                 const user = mov.user ? { id: mov.user.id, name: `${mov.user.first_name || ''} ${mov.user.last_name || ''}`.trim() } : null;
                 const personal = mov.personal ? { id: mov.personal.id, name: `${mov.personal.first_name || ''} ${mov.personal.last_name || ''}`.trim() } : null;
 				return {
@@ -494,19 +537,22 @@ class movimientosAlmacen {
 				};
 			});
 
+            // Ya prefiltramos por IDs si search existe; no es necesario refiltrar en memoria
+
             const tHydrateMs = Date.now() - tHydrateStart;
 
             const tTotalMs = Date.now() - tStart;
-            return {
+            const result = {
                 success: true,
                 data: movimientosConProductos,
                 pagination: {
-                    total: count,
+                    total: search ? movimientosConProductos.length : count,
                     page,
                     limit,
-                    hasNextPage: count > offset + limit
+                    hasNextPage: search ? false : count > offset + limit
                 }
             };
+            return result;
 
         } catch (error) {
             console.error('Error en MovimientosAlmacen.getAll:', error);

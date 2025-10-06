@@ -116,7 +116,21 @@ class pedidosAcopio {
         .order(orderBy, { ascending: ascending })
         .range(offset, offset + limit - 1);
 
-      // La búsqueda se aplicará post-consulta para poder filtrar por nombre del producto
+      // Si hay búsqueda, pre-matchear IDs de productos por nombre y luego filtrar por observaciones
+      let productoIdsFiltrados = null;
+      if (searchQuery && searchQuery.trim() !== '') {
+        const term = `%${searchQuery}%`;
+        const { data: productosMatch, error: prodErr } = await supabase
+          .from('products_acopio')
+          .select('id, name')
+          .ilike('name', term);
+        if (prodErr) {
+          console.error('[PedidosAcopioModel.getAll] products search error =>', prodErr);
+        } else {
+          productoIdsFiltrados = (productosMatch || []).map(p => p.id);
+          console.log('[PedidosAcopioModel.getAll] products search =>', { term, productIds: productoIdsFiltrados.length });
+        }
+      }
 
       // Aplicar filtro de estado si se proporciona
       if (estado && estado.trim() !== '') {
@@ -129,14 +143,17 @@ class pedidosAcopio {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
       }
 
-      // Filtrar por nombre del producto si hay búsqueda
+      // Filtrar por producto (IDs pre-matcheados) u observaciones
       let pedidosFiltrados = pedidos;
       if (searchQuery && searchQuery.trim() !== '') {
         const searchLower = searchQuery.toLowerCase();
         pedidosFiltrados = pedidos.filter(pedido => {
-          const productoName = pedido.producto_acopio?.name?.toLowerCase() || '';
+          const matchProducto = Array.isArray(productoIdsFiltrados) && productoIdsFiltrados.length > 0
+            ? productoIdsFiltrados.includes(pedido.producto_acopio_id)
+            : false;
           const observaciones = pedido.observaciones?.toLowerCase() || '';
-          return productoName.includes(searchLower) || observaciones.includes(searchLower);
+        
+          return matchProducto || observaciones.includes(searchLower);
         });
       }
 
@@ -232,9 +249,9 @@ class pedidosAcopio {
         data: pedidosConNombres,
         pagination: {
           currentPage: page,
-          totalPages: Math.ceil(count / limit),
-          totalItems: count,
-          hasNextPage: page < Math.ceil(count / limit)
+          totalPages: Math.ceil(((searchQuery ? pedidosConNombres.length : count) || 0) / limit),
+          totalItems: searchQuery ? pedidosConNombres.length : count,
+          hasNextPage: searchQuery ? false : page < Math.ceil(count / limit)
         }
       };
 

@@ -244,34 +244,39 @@ class pedidosAlmacen {
         .order(orderBy, { ascending: ascending })
         .range(offset, offset + limit - 1);
 
-      // Si hay búsqueda, primero obtener los IDs de pedidos que contienen el producto
+      // Si hay búsqueda, primero obtener IDs de productos por nombre, luego IDs de pedidos por detalle
       let pedidosIdsFiltrados = null;
       if (searchQuery && searchQuery.trim() !== '') {
         const tSearchStart = Date.now();
-        const { data: pedidosConProducto, error: detalleError } = await supabase
-          .from('pedido_almacen_detalle')
-          .select(`
-            pedido_almacen_id,
-            producto_almacen_id,
-            producto_almacen:producto_almacen_id (
-              id,
-              name
-            )
-          `)
-          .ilike('producto_almacen.name', `%${searchQuery}%`);
-        const tSearchMs = Date.now() - tSearchStart;
-        console.log('[PedidosAlmacenModel.getAll] Búsqueda de productos ms=', tSearchMs);
-
-        if (detalleError) {
-          console.error('Error al buscar productos en detalle:', detalleError);
+        const term = `%${searchQuery}%`;
+        // 1) Productos por nombre
+        const { data: productosMatch, error: prodErr } = await supabase
+          .from('products_almacen')
+          .select('id, name')
+          .ilike('name', term);
+        if (prodErr) {
+          console.error('[PedidosAlmacenModel.getAll] products search error =>', prodErr);
         } else {
-          // Filtrar solo los que tienen producto_almacen válido
-          const pedidosValidos = pedidosConProducto?.filter(detalle => 
-            detalle.producto_almacen && detalle.producto_almacen.name
-          ) || [];
-          
-          pedidosIdsFiltrados = pedidosValidos.map(detalle => detalle.pedido_almacen_id);
+          const productIds = (productosMatch || []).map(p => p.id);
+          console.log('[PedidosAlmacenModel.getAll] products search =>', { term, productIds: productIds.length });
+          if (productIds.length > 0) {
+            // 2) Detalle por producto
+            const { data: detalleMatch, error: detErr } = await supabase
+              .from('pedido_almacen_detalle')
+              .select('pedido_almacen_id')
+              .in('producto_almacen_id', productIds);
+            if (detErr) {
+              console.error('[PedidosAlmacenModel.getAll] detalle match error =>', detErr);
+            } else {
+              pedidosIdsFiltrados = Array.from(new Set((detalleMatch || []).map(d => d.pedido_almacen_id)));
+              console.log('[PedidosAlmacenModel.getAll] detalle IDs =>', { ids: pedidosIdsFiltrados.length });
+            }
+          } else {
+            pedidosIdsFiltrados = [];
+          }
         }
+        const tSearchMs = Date.now() - tSearchStart;
+        console.log('[PedidosAlmacenModel.getAll] Búsqueda total ms=', tSearchMs);
       }
 
       // Aplicar filtro de estado si se proporciona
@@ -279,8 +284,8 @@ class pedidosAlmacen {
         query = query.eq('estado', estado);
       }
 
-      // Si hay búsqueda, filtrar solo los pedidos que contienen el producto
-      if (pedidosIdsFiltrados && pedidosIdsFiltrados.length > 0) {
+      // Si hay IDs encontrados, filtrar por esos IDs; si hay búsqueda y no hay IDs, devolver vacío
+      if (Array.isArray(pedidosIdsFiltrados) && pedidosIdsFiltrados.length > 0) {
         console.log('✅ pedidosAlmacen - Aplicando filtro con IDs:', pedidosIdsFiltrados);
         query = query.in('id', pedidosIdsFiltrados);
       } else if (searchQuery && searchQuery.trim() !== '') {
