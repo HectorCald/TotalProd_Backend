@@ -97,8 +97,6 @@ class pedidosAlmacenController {
   // Obtener todos los pedidos de la sucursal
   static async getAll(req, res) {
     try {
-      const tStart = Date.now();
-      console.log('[PedidosAlmacenController.getAll] Iniciando obtención de pedidos');
       
       const { sucu_id } = req.query;
       const page = parseInt(req.query.page) || 1;
@@ -106,7 +104,6 @@ class pedidosAlmacenController {
       const searchQuery = req.query.search || null;
       const estado = req.query.estado || null;
       const ordenamiento = req.query.ordenamiento || 'fecha_desc';
-      console.log('[PedidosAlmacenCtrl.getAll] params =>', { sucu_id, page, limit, searchQuery, estado, ordenamiento });
 
       if (!sucu_id) {
         return res.status(400).json({
@@ -115,14 +112,7 @@ class pedidosAlmacenController {
         });
       }
 
-      const tModelStart = Date.now();
       const result = await pedidosAlmacen.getAll(sucu_id, page, limit, searchQuery, estado, ordenamiento);
-      console.log('[PedidosAlmacenCtrl.getAll] result =>', { success: result?.success, dataLen: result?.data?.length, pagination: result?.pagination });
-      const tModelMs = Date.now() - tModelStart;
-      console.log('[PedidosAlmacenController.getAll] Model.getAll ms=', tModelMs);
-
-      const tTotalMs = Date.now() - tStart;
-      console.log('[PedidosAlmacenController.getAll] TOTAL ms=', tTotalMs);
 
       if (result.success) {
         return res.status(200).json(result);

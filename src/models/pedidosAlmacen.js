@@ -180,8 +180,6 @@ class pedidosAlmacen {
   // Obtener todos los pedidos de la sucursal (pedidos que hizo o que están destinados a esta sucursal)
   static async getAll(sucuId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc') {
     try {
-      const tStart = Date.now();
-      console.log('[PedidosAlmacenModel.getAll] Iniciando obtención de pedidos');
       
       if (!sucuId) {
         throw new Error('ID de la sucursal es requerido');
@@ -247,36 +245,27 @@ class pedidosAlmacen {
       // Si hay búsqueda, primero obtener IDs de productos por nombre, luego IDs de pedidos por detalle
       let pedidosIdsFiltrados = null;
       if (searchQuery && searchQuery.trim() !== '') {
-        const tSearchStart = Date.now();
         const term = `%${searchQuery}%`;
         // 1) Productos por nombre
         const { data: productosMatch, error: prodErr } = await supabase
           .from('products_almacen')
           .select('id, name')
           .ilike('name', term);
-        if (prodErr) {
-          console.error('[PedidosAlmacenModel.getAll] products search error =>', prodErr);
-        } else {
+        if (!prodErr) {
           const productIds = (productosMatch || []).map(p => p.id);
-          console.log('[PedidosAlmacenModel.getAll] products search =>', { term, productIds: productIds.length });
           if (productIds.length > 0) {
             // 2) Detalle por producto
             const { data: detalleMatch, error: detErr } = await supabase
               .from('pedido_almacen_detalle')
               .select('pedido_almacen_id')
               .in('producto_almacen_id', productIds);
-            if (detErr) {
-              console.error('[PedidosAlmacenModel.getAll] detalle match error =>', detErr);
-            } else {
+            if (!detErr) {
               pedidosIdsFiltrados = Array.from(new Set((detalleMatch || []).map(d => d.pedido_almacen_id)));
-              console.log('[PedidosAlmacenModel.getAll] detalle IDs =>', { ids: pedidosIdsFiltrados.length });
             }
           } else {
             pedidosIdsFiltrados = [];
           }
         }
-        const tSearchMs = Date.now() - tSearchStart;
-        console.log('[PedidosAlmacenModel.getAll] Búsqueda total ms=', tSearchMs);
       }
 
       // Aplicar filtro de estado si se proporciona
@@ -286,10 +275,8 @@ class pedidosAlmacen {
 
       // Si hay IDs encontrados, filtrar por esos IDs; si hay búsqueda y no hay IDs, devolver vacío
       if (Array.isArray(pedidosIdsFiltrados) && pedidosIdsFiltrados.length > 0) {
-        console.log('✅ pedidosAlmacen - Aplicando filtro con IDs:', pedidosIdsFiltrados);
         query = query.in('id', pedidosIdsFiltrados);
       } else if (searchQuery && searchQuery.trim() !== '') {
-        console.log('❌ pedidosAlmacen - No se encontraron productos, devolviendo array vacío');
         // Si hay búsqueda pero no se encontraron productos, devolver array vacío
         return {
           success: true,
@@ -304,16 +291,7 @@ class pedidosAlmacen {
         };
       }
 
-      console.log('📊 pedidosAlmacen - Ejecutando consulta final...');
-      const tQueryStart = Date.now();
       const { data: pedidos, error } = await query;
-      const tQueryMs = Date.now() - tQueryStart;
-      console.log('[PedidosAlmacenModel.getAll] Consulta principal ms=', tQueryMs);
-      console.log('📊 pedidosAlmacen - Resultado consulta:', {
-        cantidad: pedidos?.length,
-        error,
-        pedidos: pedidos?.map(p => ({ id: p.id, sucursal: p.sucursal?.name }))
-      });
 
       if (error) {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
@@ -321,22 +299,18 @@ class pedidosAlmacen {
 
 
       // Obtener nombres de usuarios y personal para cada pedido (BATCH LOADING)
-      const tNombresStart = Date.now();
       
       // Obtener IDs únicos de usuarios y personal
       const userIds = Array.from(new Set(pedidos.map(p => p.user_id).filter(Boolean)));
       const personalIds = Array.from(new Set(pedidos.map(p => p.personal_id).filter(Boolean)));
 
       // 1) Usuarios en lote
-      let tUsersBatchMs = 0;
       const userMap = new Map();
       if (userIds.length > 0) {
-        const tUsersStart = Date.now();
         const { data: usersData } = await supabase
           .from('users')
           .select('id, first_name, last_name')
           .in('id', userIds);
-        tUsersBatchMs = Date.now() - tUsersStart;
         (usersData || []).forEach(u => {
           userMap.set(u.id, {
             id: u.id,
@@ -346,15 +320,12 @@ class pedidosAlmacen {
       }
 
       // 2) Personal en lote
-      let tPersonalBatchMs = 0;
       const personalMap = new Map();
       if (personalIds.length > 0) {
-        const tPersonalStart = Date.now();
         const { data: personalData } = await supabase
           .from('personal')
           .select('id, first_name, last_name')
           .in('id', personalIds);
-        tPersonalBatchMs = Date.now() - tPersonalStart;
         (personalData || []).forEach(p => {
           personalMap.set(p.id, {
             id: p.id,
@@ -370,9 +341,6 @@ class pedidosAlmacen {
         return { ...pedido, user, personal };
       });
       
-      const tNombresMs = Date.now() - tNombresStart;
-      console.log('[PedidosAlmacenModel.getAll] Obtener nombres ms=', tNombresMs, 'users batch ms=', tUsersBatchMs, 'personal batch ms=', tPersonalBatchMs);
-
       // Obtener el total de pedidos para la paginación
       const { count, error: countError } = await supabase
         .from('pedidos_almacen')
@@ -382,9 +350,6 @@ class pedidosAlmacen {
       if (countError) {
         throw new Error(`Error al contar pedidos: ${countError.message}`);
       }
-
-      const tTotalMs = Date.now() - tStart;
-      console.log('[PedidosAlmacenModel.getAll] TOTAL ms=', tTotalMs);
 
       return {
         success: true,
