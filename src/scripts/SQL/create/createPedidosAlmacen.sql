@@ -13,6 +13,7 @@ CREATE TABLE pedidos_almacen (
     movimiento_salida_id UUID,
     movimiento_entrada_id UUID,
     deuda_id UUID,
+    cliente_id UUID,
     CONSTRAINT pedidos_almacen_empresa_id_fkey
         FOREIGN KEY (empresa_id) REFERENCES empresas (id),
     CONSTRAINT pedidos_almacen_sucursal_id_fkey
@@ -26,5 +27,7 @@ CREATE TABLE pedidos_almacen (
     CONSTRAINT pedidos_almacen_movimiento_salida_id_fkey
         FOREIGN KEY (movimiento_salida_id) REFERENCES movimientos_almacen (id),
     CONSTRAINT pedidos_almacen_deuda_id_fkey
-        FOREIGN KEY (deuda_id) REFERENCES deudas (id)
+        FOREIGN KEY (deuda_id) REFERENCES deudas (id),
+    CONSTRAINT pedidos_almacen_cliente_id_fkey
+        FOREIGN KEY (cliente_id) REFERENCES clientes (id)
 );

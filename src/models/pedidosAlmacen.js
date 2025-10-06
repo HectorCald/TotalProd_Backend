@@ -52,6 +52,10 @@ class pedidosAlmacen {
       if (personalId && personalId !== null) {
         pedidoPrincipal.personal_id = personalId;
       }
+      // Asignar cliente_id solo si viene definido
+      if (typeof pedidoData.cliente_id !== 'undefined' && pedidoData.cliente_id !== null) {
+        pedidoPrincipal.cliente_id = pedidoData.cliente_id;
+      }
 
       const { data: pedido, error: pedidoError } = await supabase
         .from('pedidos_almacen')
@@ -144,6 +148,7 @@ class pedidosAlmacen {
         sucursal_id: sucuId,
         precio_id: pedidoData.precio_id,
         sucursal_destino_id: pedidoData.sucursal_destino_id,
+        cliente_id: (typeof pedidoData.cliente_id !== 'undefined' ? pedidoData.cliente_id : null),
         observaciones: pedidoData.observaciones || null,
         estado: 'Pendiente',
         fecha: pedidoPrincipal.fecha,
@@ -230,6 +235,10 @@ class pedidosAlmacen {
             name
           ),
           sucursal_destino:sucursal_destino_id (
+            id,
+            name
+          ),
+          cliente:cliente_id (
             id,
             name
           ),
@@ -399,6 +408,10 @@ class pedidosAlmacen {
             id,
             name
           ),
+          cliente:cliente_id (
+            id,
+            name
+          ),
           precio:prices_types (
             id,
             name
@@ -506,6 +519,10 @@ class pedidosAlmacen {
             id,
             name
           ),
+          cliente:cliente_id (
+            id,
+            name
+          ),
           precio:prices_types (
             id,
             name
@@ -600,7 +617,11 @@ class pedidosAlmacen {
 
       const { data: updateResult, error: pedidoError } = await supabase
         .from('pedidos_almacen')
-        .update(pedidoPrincipal)
+        .update({
+          ...pedidoPrincipal,
+          // Permitir actualizar cliente_id si se manda en la petición (puede ser null para limpiar)
+          ...(Object.prototype.hasOwnProperty.call(pedidoData, 'cliente_id') ? { cliente_id: pedidoData.cliente_id } : {})
+        })
         .eq('id', pedidoId)
         .select('id');
 

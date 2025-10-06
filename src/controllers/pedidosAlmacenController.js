@@ -65,7 +65,9 @@ class pedidosAlmacenController {
         productos,
         observaciones,
         precio_id: req.body.precio_id,
-        sucursal_destino_id: req.body.sucursal_destino_id
+        sucursal_destino_id: req.body.sucursal_destino_id,
+        // Solo asignar cliente_id si viene en body (para evitar overwriting)
+        ...(Object.prototype.hasOwnProperty.call(req.body, 'cliente_id') ? { cliente_id: req.body.cliente_id } : {})
       };
 
       const result = await pedidosAlmacen.create(pedidoData, finalUserId, req.body.empresa_id, finalPersonalId, req.body.sucu_id);
@@ -252,6 +254,11 @@ class pedidosAlmacenController {
         observaciones,
         precio_id: req.body.precio_id
       };
+
+      // Si en la actualización llega cliente_id, permitirlo (incluso si es null para limpiar)
+      if (Object.prototype.hasOwnProperty.call(req.body, 'cliente_id')) {
+        pedidoData.cliente_id = req.body.cliente_id;
+      }
 
       const result = await pedidosAlmacen.update(id, pedidoData, finalUserId, req.body.empresa_id, finalPersonalId);
 
