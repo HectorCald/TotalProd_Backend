@@ -73,7 +73,7 @@ const sucursalesController = {
             }
 
             // Obtener empresa_id del usuario desde la base de datos
-            const User = require('../models/user');
+            const User = require('../models/User');
             const user = await User.getById(userId);
             
             if (!user || !user.empresa_id) {
