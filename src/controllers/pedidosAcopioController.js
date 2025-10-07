@@ -57,7 +57,6 @@ class pedidosAcopioController {
       const searchQuery = req.query.search || null;
       const estado = req.query.estado || null;
       const ordenamiento = req.query.ordenamiento || 'fecha_desc';
-      console.log('[PedidosAcopioCtrl.getAll] params =>', { empresa_id, page, limit, searchQuery, estado, ordenamiento });
 
       if (!empresa_id) {
         return res.status(400).json({ 
@@ -67,7 +66,6 @@ class pedidosAcopioController {
       }
 
       const result = await pedidosAcopio.getAll(empresa_id, page, limit, searchQuery, estado, ordenamiento);
-      console.log('[PedidosAcopioCtrl.getAll] result =>', { success: result?.success, dataLen: result?.data?.length, pagination: result?.pagination });
 
       if (result.success) {
         return res.status(200).json(result);

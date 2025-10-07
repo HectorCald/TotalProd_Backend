@@ -9,6 +9,7 @@ const sucursales = {
                 .select(`
                     id,
                     name,
+                    almacen_sucursal_id,
                     created_at,
                     empresas!inner (
                         id,
@@ -45,6 +46,7 @@ const sucursales = {
                 .select(`
                     id,
                     name,
+                    almacen_sucursal_id,
                     created_at,
                     empresas!inner (
                         id,
@@ -82,6 +84,7 @@ const sucursales = {
                 .select(`
                     id,
                     name,
+                    almacen_sucursal_id,
                     created_at,
                     empresas!inner (
                         id,
@@ -119,6 +122,7 @@ const sucursales = {
                 .select(`
                     id,
                     name,
+                    almacen_sucursal_id,
                     created_at,
                     empresas!inner (
                         id,

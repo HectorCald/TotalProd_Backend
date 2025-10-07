@@ -41,7 +41,8 @@ class pedidosAlmacen {
         sucursal_destino_id: pedidoData.sucursal_destino_id,
         observaciones: pedidoData.observaciones || null,
         estado: 'Pendiente',
-        fecha: ahoraBolivia.toISOString() // Usar timestamp en zona horaria de Bolivia
+        fecha: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
+        agrupado: !!pedidoData.agrupado
       };
 
       // Solo agregar user_id o personal_id si tienen valor
@@ -612,7 +613,8 @@ class pedidosAlmacen {
       // Actualizar el pedido principal (solo observaciones y precio_id, NO sucursal/empresa)
       const pedidoPrincipal = {
         observaciones: pedidoData.observaciones || null,
-        precio_id: pedidoData.precio_id || null
+        precio_id: pedidoData.precio_id || null,
+        agrupado: (typeof pedidoData.agrupado !== 'undefined') ? !!pedidoData.agrupado : undefined
       };
 
       const { data: updateResult, error: pedidoError } = await supabase

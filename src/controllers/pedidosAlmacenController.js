@@ -66,6 +66,7 @@ class pedidosAlmacenController {
         observaciones,
         precio_id: req.body.precio_id,
         sucursal_destino_id: req.body.sucursal_destino_id,
+        ...(Object.prototype.hasOwnProperty.call(req.body, 'agrupado') ? { agrupado: !!req.body.agrupado } : {}),
         // Solo asignar cliente_id si viene en body (para evitar overwriting)
         ...(Object.prototype.hasOwnProperty.call(req.body, 'cliente_id') ? { cliente_id: req.body.cliente_id } : {})
       };
@@ -252,7 +253,8 @@ class pedidosAlmacenController {
       const pedidoData = {
         productos,
         observaciones,
-        precio_id: req.body.precio_id
+        precio_id: req.body.precio_id,
+        ...(Object.prototype.hasOwnProperty.call(req.body, 'agrupado') ? { agrupado: !!req.body.agrupado } : {})
       };
 
       // Si en la actualización llega cliente_id, permitirlo (incluso si es null para limpiar)

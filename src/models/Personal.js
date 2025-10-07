@@ -408,6 +408,16 @@ class Personal {
         throw new Error('ID del personal es requerido');
       }
 
+      // Eliminar permisos del personal primero (posible FK)
+      const { error: permisosError } = await supabase
+        .from('personal_permisos')
+        .delete()
+        .eq('personal_id', id);
+
+      if (permisosError) {
+        console.error('Error al eliminar permisos del personal:', permisosError);
+      }
+
       // Eliminar relaciones de módulos primero
       const { error: moduleError } = await supabase
         .from('personal_modulo_permiso')

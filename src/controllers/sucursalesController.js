@@ -62,7 +62,7 @@ const sucursalesController = {
     // Crear nueva sucursal
     async create(req, res) {
         try {
-            const { name } = req.body;
+            const { name, almacen_sucursal_id } = req.body;
             const userId = req.user.id;
             
             if (!name || !name.trim()) {
@@ -85,7 +85,9 @@ const sucursalesController = {
 
             const sucursalData = {
                 name: name.trim(),
-                empresa_id: user.empresa_id
+                empresa_id: user.empresa_id,
+                // Si viene almacen_sucursal_id (switch inactivo), persistirlo
+                ...(almacen_sucursal_id ? { almacen_sucursal_id } : {})
             };
 
             const result = await sucursales.create(sucursalData);
@@ -104,7 +106,7 @@ const sucursalesController = {
     async update(req, res) {
         try {
             const { id } = req.params;
-            const { name } = req.body;
+            const { name, almacen_sucursal_id } = req.body;
             
             if (!name || !name.trim()) {
                 return res.status(400).json({
@@ -123,7 +125,8 @@ const sucursalesController = {
             }
 
             const sucursalData = {
-                name: name.trim()
+                name: name.trim(),
+                ...(typeof almacen_sucursal_id !== 'undefined' ? { almacen_sucursal_id } : {})
             };
 
             const result = await sucursales.update(id, sucursalData);

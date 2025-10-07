@@ -14,6 +14,7 @@ CREATE TABLE pedidos_almacen (
     movimiento_entrada_id UUID,
     deuda_id UUID,
     cliente_id UUID,
+    agrupado BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT pedidos_almacen_empresa_id_fkey
         FOREIGN KEY (empresa_id) REFERENCES empresas (id),
     CONSTRAINT pedidos_almacen_sucursal_id_fkey
