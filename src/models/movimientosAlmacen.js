@@ -288,8 +288,8 @@ class movimientosAlmacen {
                 .from('movimientos_almacen')
                 .select(`
                     *,
-                    cliente:clients(id, name),
-                    proveedor:proveedores(id, name),
+                    cliente:clients(id, name, total_orders),
+                    proveedor:proveedores(id, name, total_orders),
                     precio:prices_types(id, name),
                     sucursal:sucu_id(id, name)
                 `)
@@ -409,8 +409,8 @@ class movimientosAlmacen {
                 .from('movimientos_almacen')
                 .select(`
                     *,
-                    cliente:clients(id, name),
-                    proveedor:proveedores(id, name),
+                    cliente:clients(id, name, total_orders),
+                    proveedor:proveedores(id, name, total_orders),
                     precio:prices_types(id, name),
                     sucursal:sucu_id(id, name),
                     user:user_id(id, first_name, last_name),

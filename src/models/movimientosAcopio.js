@@ -118,7 +118,8 @@ class movimientosAcopio {
           ),
           proveedor:proveedor_id (
             id,
-            name
+            name,
+            total_orders
           )
         `)
         .single();
@@ -167,11 +168,13 @@ class movimientosAcopio {
           ),
           proveedor:proveedor_id (
             id,
-            name
+            name,
+            total_orders
           ),
           cliente:cliente_id (
             id,
-            name
+            name,
+            total_orders
           )
         `)
         .eq('product_id', productId)
@@ -260,11 +263,13 @@ class movimientosAcopio {
           ),
           proveedor:proveedor_id (
             id,
-            name
+            name,
+            total_orders
           ),
           cliente:cliente_id (
             id,
-            name
+            name,
+            total_orders
           ),
           sucursal:sucu_id (
             id,
