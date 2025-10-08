@@ -269,7 +269,7 @@ class gastosController {
       if (gastoAsociado) {
         return res.status(400).json({
           success: false,
-          message: 'No se puede eliminar un gasto asociado a un movimiento de acopio'
+          message: 'No se puede eliminar este gasto porque está asociado a un movimiento. Anule/elimine el movimiento primero.'
         });
       }
 

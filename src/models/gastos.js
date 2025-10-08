@@ -440,7 +440,18 @@ class gastos {
 
             if (error) {
                 console.error('Error al eliminar gasto:', error);
-                throw new Error('Error al eliminar el gasto');
+                // Manejo específico de errores de llave foránea (asociado a movimiento)
+                const rawMsg = (error.message || '').toLowerCase();
+                if (error.code === '23503' || rawMsg.includes('foreign key') || rawMsg.includes('referential integrity')) {
+                    return {
+                        success: false,
+                        message: 'No se puede eliminar este gasto porque está asociado a un movimiento. Anule/elimine el movimiento primero.'
+                    };
+                }
+                return {
+                    success: false,
+                    message: error.message || 'Error al eliminar el gasto'
+                };
             }
 
             return {
@@ -503,18 +514,31 @@ class gastos {
     // Verificar si un gasto está asociado a algún movimiento
     static async isAssociatedWithMovement(gastoId) {
         try {
-            const { data, error } = await supabase
+            // Revisar asociación con movimientos de acopio
+            const { data: acopioData, error: acopioError } = await supabase
                 .from('movimientos_acopio')
                 .select('id')
                 .eq('gasto_id', gastoId)
                 .limit(1);
 
-            if (error) {
-                console.error('Error verificando asociación de gasto:', error);
-                return false;
+            if (acopioError) {
+                console.error('Error verificando asociación de gasto (acopio):', acopioError);
             }
 
-            return data && data.length > 0;
+            if (acopioData && acopioData.length > 0) return true;
+
+            // Revisar asociación con movimientos de almacén
+            const { data: almacenData, error: almacenError } = await supabase
+                .from('movimientos_almacen')
+                .select('id')
+                .eq('gasto_id', gastoId)
+                .limit(1);
+
+            if (almacenError) {
+                console.error('Error verificando asociación de gasto (almacén):', almacenError);
+            }
+
+            return !!(almacenData && almacenData.length > 0);
         } catch (error) {
             console.error('Error en isAssociatedWithMovement:', error);
             return false;

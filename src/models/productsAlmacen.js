@@ -233,10 +233,32 @@ class productsAlmacen {
         throw new Error('ID de la empresa es requerido');
       }
 
+      // Validación: evitar nombres duplicados por empresa (case-insensitive)
+      const nombreProducto = (productData.name || '').trim();
+      if (!nombreProducto) {
+        throw new Error('El nombre del producto es requerido');
+      }
+
+      const { data: existentes, error: errorExistentes } = await supabase
+        .from('products_almacen')
+        .select('id')
+        .eq('empresa_id', empresaId)
+        .ilike('name', nombreProducto)
+        .limit(1);
+
+      if (errorExistentes) {
+        console.error('Error verificando duplicados de producto (almacen):', errorExistentes);
+        throw new Error('No se pudo verificar si el producto ya existe');
+      }
+
+      if (existentes && existentes.length > 0) {
+        throw new Error('Ya existe un producto con el mismo nombre en esta empresa');
+      }
+
       // 1. Crear el producto principal (sin stock, ya que se maneja en productos_sucursal)
       const tProductStart = Date.now();
       const dbProductData = {
-        name: productData.name,
+        name: nombreProducto,
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
         description: productData.description || null,

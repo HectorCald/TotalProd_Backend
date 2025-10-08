@@ -5,7 +5,7 @@ class movimientosAlmacen {
     static async create(movimientoData) {
         
         try {
-            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado } = movimientoData;
+            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id } = movimientoData;
 
             // Crear timestamp en zona horaria de Bolivia (GMT-4) - OPTIMIZADO
             const ahora = new Date();
@@ -35,6 +35,9 @@ class movimientosAlmacen {
             }
             if (personal_id && personal_id !== null) {
                 insertData.personal_id = personal_id;
+            }
+            if (gasto_id && gasto_id !== null) {
+                insertData.gasto_id = gasto_id;
             }
 
             
@@ -884,6 +887,39 @@ class movimientosAlmacen {
                     console.log(`Registro de producción ${movimiento.produccion_damabrava_id} actualizado: cantidad_ingresada=${nuevaCantidadIngresada}, estado=${nuevoEstado}`);
                 }
                 
+            }
+
+            // Si tiene gasto_id: PRIMERO limpiar gasto_id en el movimiento, LUEGO eliminar el gasto
+            const { data: gastoAsociado } = await supabase
+                .from('movimientos_almacen')
+                .select('gasto_id')
+                .eq('id', movimientoId)
+                .maybeSingle();
+
+            const gastoIdAEliminar = gastoAsociado?.gasto_id || null;
+
+            if (gastoIdAEliminar) {
+                // 1) Limpiar gasto_id del movimiento para evitar FK al borrar el gasto
+                const { error: limpiarGastoIdError } = await supabase
+                    .from('movimientos_almacen')
+                    .update({ gasto_id: null })
+                    .eq('id', movimientoId);
+
+                if (limpiarGastoIdError) {
+                    console.error('Error limpiando gasto_id del movimiento:', limpiarGastoIdError);
+                    return { success: false, message: 'Error al limpiar gasto del movimiento' };
+                }
+
+                // 2) Eliminar el gasto ahora que no hay referencia
+                const { error: deleteGastoError } = await supabase
+                    .from('gastos')
+                    .delete()
+                    .eq('id', gastoIdAEliminar);
+
+                if (deleteGastoError) {
+                    console.error('Error eliminando gasto asociado:', deleteGastoError);
+                    return { success: false, message: 'Error al eliminar el gasto asociado' };
+                }
             }
 
             // Validar que no esté relacionado con pedidos (ULTRA OPTIMIZADO)

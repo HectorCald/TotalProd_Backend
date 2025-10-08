@@ -15,6 +15,7 @@ CREATE TABLE movimientos_almacen (
     produccion_damabrava_id UUID NULL,
     restar_ingredientes BOOLEAN NOT NULL DEFAULT FALSE,
     agrupado BOOLEAN NOT NULL DEFAULT FALSE,
+    gasto_id UUID NULL,
     CONSTRAINT movimientos_almacen_cliente_id_fkey
         FOREIGN KEY (cliente_id) REFERENCES clients (id),
     CONSTRAINT movimientos_almacen_proveedor_id_fkey
@@ -27,4 +28,6 @@ CREATE TABLE movimientos_almacen (
         FOREIGN KEY (deuda_id) REFERENCES deudas (id),
     CONSTRAINT movimientos_almacen_produccion_damabrava_id_fkey
         FOREIGN KEY (produccion_damabrava_id) REFERENCES registros_produccion_damabrava (id)
+    CONSTRAINT movimientos_almacen_gasto_id_fkey
+        FOREIGN KEY (gasto_id) REFERENCES gastos (id)
 );

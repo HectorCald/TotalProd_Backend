@@ -7,7 +7,7 @@ class movimientosAlmacenController {
         
         try {
             const tValidationStart = Date.now();
-            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado } = req.body;
+            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id } = req.body;
             const user_id = req.user?.id;
             const userType = req.user?.type; // Verificar si es empleado o usuario normal
 
@@ -97,13 +97,15 @@ class movimientosAlmacenController {
                 sucu_id,
                 type,
                 observaciones: observaciones || null,
-                metodo_pago: type === 'salida' ? (metodo_pago || null) : null,
+                // Permitir metodo_pago también en entradas cuando se registra gasto
+                metodo_pago: metodo_pago || null,
                 cliente_id: type === 'salida' ? (cliente_id || null) : null,
                 proveedor_id: type === 'entrada' ? (proveedor_id || null) : null,
                 precio_id: finalPrecioId,
                 productos,
                 restar_ingredientes: restar_ingredientes || false,
                 produccion_damabrava_id: produccion_damabrava_id || null,
+                ...(gasto_id ? { gasto_id } : {}),
                 ...(typeof agrupado !== 'undefined' ? { agrupado: !!agrupado } : {})
             };
 
