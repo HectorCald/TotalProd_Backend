@@ -594,10 +594,28 @@ class pedidosAlmacen {
         };
       }
 
+      // Obtener método de pago del movimiento de salida si el pedido está entregado
+      let movimiento_salida = null;
+      if (pedido.estado === 'Entregado' && pedido.movimiento_salida_id) {
+        const { data: movimientoData, error: movimientoError } = await supabase
+          .from('movimientos_almacen')
+          .select('id, metodo_pago')
+          .eq('id', pedido.movimiento_salida_id)
+          .single();
+        
+        if (movimientoData) {
+          movimiento_salida = {
+            id: movimientoData.id,
+            metodo_pago: movimientoData.metodo_pago
+          };
+        }
+      }
+
       const pedidoConNombres = {
         ...pedido,
         user,
-        personal
+        personal,
+        movimiento_salida
       };
 
       return {
