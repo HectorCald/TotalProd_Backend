@@ -344,11 +344,36 @@ class pedidosAlmacen {
         });
       }
 
-      // Mapear user/personal a los pedidos
+      // Obtener métodos de pago de movimientos de salida para pedidos entregados
+      const movimientoSalidaIds = Array.from(new Set(
+        pedidos
+          .filter(p => p.estado === 'Entregado' && p.movimiento_salida_id)
+          .map(p => p.movimiento_salida_id)
+      ));
+      
+      const movimientoSalidaMap = new Map();
+      if (movimientoSalidaIds.length > 0) {
+        console.log('🔍 DEBUG - Obteniendo métodos de pago para movimientos:', movimientoSalidaIds);
+        const { data: movimientosData } = await supabase
+          .from('movimientos_almacen')
+          .select('id, metodo_pago')
+          .in('id', movimientoSalidaIds);
+        
+        (movimientosData || []).forEach(m => {
+          movimientoSalidaMap.set(m.id, {
+            id: m.id,
+            metodo_pago: m.metodo_pago
+          });
+        });
+        console.log('🔍 DEBUG - Movimientos obtenidos:', movimientosData);
+      }
+
+      // Mapear user/personal y movimiento_salida a los pedidos
       const pedidosConNombres = pedidos.map((pedido) => {
         const user = pedido.user_id ? (userMap.get(pedido.user_id) || null) : null;
         const personal = pedido.personal_id ? (personalMap.get(pedido.personal_id) || null) : null;
-        return { ...pedido, user, personal };
+        const movimiento_salida = pedido.movimiento_salida_id ? (movimientoSalidaMap.get(pedido.movimiento_salida_id) || null) : null;
+        return { ...pedido, user, personal, movimiento_salida };
       });
       
       // Obtener el total de pedidos para la paginación
