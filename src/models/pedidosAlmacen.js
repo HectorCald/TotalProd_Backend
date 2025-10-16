@@ -162,7 +162,8 @@ class pedidosAlmacen {
           producto_almacen: {
             id: pedidoData.productos.find(p => p.id === detalle.producto_almacen_id)?.id,
             name: pedidoData.productos.find(p => p.id === detalle.producto_almacen_id)?.name,
-            description: pedidoData.productos.find(p => p.id === detalle.producto_almacen_id)?.description
+            description: pedidoData.productos.find(p => p.id === detalle.producto_almacen_id)?.description,
+            grup: pedidoData.productos.find(p => p.id === detalle.producto_almacen_id)?.grup
           }
         }))
       };
@@ -228,7 +229,8 @@ class pedidosAlmacen {
             producto_almacen:producto_almacen_id (
               id,
               name,
-              description
+              description,
+              grup
             )
           ),
           sucursal:sucursal_id (
@@ -423,7 +425,8 @@ class pedidosAlmacen {
             producto_almacen:producto_almacen_id (
               id,
               name,
-              description
+              description,
+              grup
             )
           ),
           sucursal:sucursal_id (
@@ -534,7 +537,8 @@ class pedidosAlmacen {
             producto_almacen:producto_almacen_id (
               id,
               name,
-              description
+              description,
+              grup
             )
           ),
           sucursal:sucursal_id (
@@ -715,7 +719,8 @@ class pedidosAlmacen {
             producto_almacen:producto_almacen_id (
               id,
               name,
-              description
+              description,
+              grup
             )
           ),
           sucursal:sucursal_id (
@@ -890,7 +895,8 @@ class pedidosAlmacen {
             producto_almacen:producto_almacen_id (
               id,
               name,
-              description
+              description,
+              grup
             )
           ),
           sucursal:sucursal_id (

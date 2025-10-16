@@ -6,7 +6,7 @@ class movimientosAcopioController {
   // Crear un movimiento
   static async create(req, res) {
     try {
-      const { product_id, type, observations, proveedor_id, cliente_id, quantity, costo, metodo_pago, gasto_id, restar_materia_prima, restar_ingredientes, sucu_id, personal_id } = req.body;
+      const { product_id, type, observations, proveedor_id, cliente_id, quantity, costo, metodo_pago, gasto_id, restar_materia_prima, restar_ingredientes, sucu_id, personal_id, ingredientes_cantidades_personalizadas } = req.body;
       const userId = req.user?.id;
       const userType = req.user?.type;
 
@@ -44,7 +44,11 @@ class movimientosAcopioController {
                 producto, 
                 parseFloat(quantity), 
                 receta.recetas_acopio_detalle,
-                req.user.empresa_id
+                req.user.empresa_id,
+                ingredientes_cantidades_personalizadas,
+                sucu_id,
+                finalUserId,
+                finalPersonalId
               );
               
               // Si la validación falla, retornar error sin crear el movimiento

@@ -5,6 +5,7 @@ CREATE TABLE personal_permisos (
     can_create BOOLEAN NOT NULL,
     can_update BOOLEAN NOT NULL,
     can_anular BOOLEAN NOT NULL,
+    can_replace BOOLEAN NOT NULL,
     CONSTRAINT personal_permisos_personal_id_fkey 
         FOREIGN KEY (personal_id) REFERENCES personal (id)
 );

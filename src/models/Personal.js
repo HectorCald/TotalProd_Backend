@@ -44,7 +44,8 @@ class Personal {
             can_create,
             can_delete,
             can_update,
-            can_anular
+            can_anular,
+            can_replace
           )
         `)
         .eq('empresa_id', empresaId)
@@ -67,12 +68,14 @@ class Personal {
           crear: personal.personal_permisos[0].can_create,
           eliminar: personal.personal_permisos[0].can_delete,
           editar: personal.personal_permisos[0].can_update,
-          anular: personal.personal_permisos[0].can_anular
+          anular: personal.personal_permisos[0].can_anular,
+          reemplazar: personal.personal_permisos[0].can_replace
         } : {
           crear: false,
           eliminar: false,
           editar: false,
-          anular: false
+          anular: false,
+          reemplazar: false
         };
 
         // Procesar la sucursal
@@ -128,7 +131,8 @@ class Personal {
             can_create,
             can_delete,
             can_update,
-            can_anular
+            can_anular,
+            can_replace
           )
         `)
         .eq('id', id)
@@ -152,12 +156,14 @@ class Personal {
         crear: data.personal_permisos[0].can_create,
         eliminar: data.personal_permisos[0].can_delete,
         editar: data.personal_permisos[0].can_update,
-        anular: data.personal_permisos[0].can_anular
+        anular: data.personal_permisos[0].can_anular,
+        reemplazar: data.personal_permisos[0].can_replace
       } : {
         crear: false,
         eliminar: false,
         editar: false,
-        anular: false
+        anular: false,
+        reemplazar: false
       };
 
       // Procesar la sucursal
@@ -262,7 +268,8 @@ class Personal {
             can_delete: permisos.eliminar || false,
             can_create: permisos.crear || false,
             can_update: permisos.editar || false,
-            can_anular: permisos.anular || false
+            can_anular: permisos.anular || false,
+            can_replace: permisos.reemplazar || false
           }]);
 
         if (permisosError) {
@@ -355,7 +362,8 @@ class Personal {
             can_delete: permisos.eliminar || false,
             can_create: permisos.crear || false,
             can_update: permisos.editar || false,
-            can_anular: permisos.anular || false
+            can_anular: permisos.anular || false,
+            can_replace: permisos.reemplazar || false
           }]);
 
         if (permisosError) {

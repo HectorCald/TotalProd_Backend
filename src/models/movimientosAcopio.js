@@ -616,7 +616,7 @@ class movimientosAcopio {
   }
 
   // Método para restar ingredientes del stock cuando se hace una entrada con receta
-  static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, empresaId) {
+  static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, empresaId, cantidadesPersonalizadas = null, sucuId = null, userId = null, personalId = null) {
     try {
       // Preparar datos de ingredientes válidos
       const ingredientesValidos = ingredientes.filter(ingrediente => 
@@ -651,8 +651,17 @@ class movimientosAcopio {
       const actualizaciones = [];
       const ingredientesConStockInsuficiente = [];
 
-      for (const ingrediente of ingredientesValidos) {
-        const cantidadARestar = ingrediente.cantidad * cantidadEntrada;
+      for (let i = 0; i < ingredientesValidos.length; i++) {
+        const ingrediente = ingredientesValidos[i];
+        
+        // Usar cantidad personalizada si existe, sino usar la calculada
+        let cantidadARestar;
+        if (cantidadesPersonalizadas && cantidadesPersonalizadas[i] !== undefined) {
+          cantidadARestar = parseFloat(cantidadesPersonalizadas[i]);
+        } else {
+          cantidadARestar = ingrediente.cantidad * cantidadEntrada;
+        }
+        
         const cantidadActual = stocksActuales[ingrediente.products_acopio.id] || 0;
         const nuevaCantidad = cantidadActual - cantidadARestar;
         
@@ -727,6 +736,60 @@ class movimientosAcopio {
           }
 
           throw new Error('Error al actualizar algunos ingredientes');
+        }
+
+        // Crear movimientos de salida para cada ingrediente actualizado
+        const movimientosSalida = [];
+        for (let i = 0; i < ingredientesValidos.length; i++) {
+          const ingrediente = ingredientesValidos[i];
+          
+          // Usar cantidad personalizada si existe, sino usar la calculada
+          let cantidadARestar;
+          if (cantidadesPersonalizadas && cantidadesPersonalizadas[i] !== undefined) {
+            cantidadARestar = parseFloat(cantidadesPersonalizadas[i]);
+          } else {
+            cantidadARestar = ingrediente.cantidad * cantidadEntrada;
+          }
+
+          // Solo crear movimiento si la cantidad es mayor a 0
+          if (cantidadARestar > 0) {
+            const movimientoSalida = {
+              product_id: ingrediente.products_acopio.id,
+              sucu_id: sucuId,
+              type: 'salida',
+              observations: `Consumo por receta de ${productoPrincipal.name}`,
+              quantity: cantidadARestar.toString(),
+              date: new Date().toISOString(),
+              // No incluir proveedor_id ni cliente_id para movimientos de salida por receta
+              proveedor_id: null,
+              cliente_id: null
+            };
+
+            // Agregar user_id o personal_id según corresponda
+            if (userId) {
+              movimientoSalida.user_id = userId;
+            }
+            if (personalId) {
+              movimientoSalida.personal_id = personalId;
+            }
+
+            movimientosSalida.push(movimientoSalida);
+          }
+        }
+
+        // Insertar movimientos de salida si hay alguno
+        if (movimientosSalida.length > 0) {
+          const { error: movimientosError } = await supabase
+            .from('movimientos_acopio')
+            .insert(movimientosSalida);
+
+          if (movimientosError) {
+            console.error('Error creando movimientos de salida para ingredientes:', movimientosError);
+            // No lanzar error aquí para no afectar la actualización del stock
+            // Los movimientos de salida son informativos, el stock ya se actualizó correctamente
+          } else {
+            console.log(`Movimientos de salida creados para ${movimientosSalida.length} ingredientes`);
+          }
         }
       }
 

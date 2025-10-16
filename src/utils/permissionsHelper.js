@@ -124,9 +124,41 @@ const checkCreatePermission = async (personalId) => {
   }
 };
 
+/**
+ * Verifica si un empleado tiene permisos para reemplazar
+ * @param {string} personalId - ID del personal
+ * @returns {Promise<boolean>} - true si tiene permisos, false si no
+ */
+const checkReplacePermission = async (personalId) => {
+  try {
+    if (!personalId) {
+      return false;
+    }
+
+    // Consultar los permisos del personal
+    const { data, error } = await supabase
+      .from('personal_permisos')
+      .select('can_replace')
+      .eq('personal_id', personalId)
+      .single();
+
+    if (error) {
+      console.error('Error al verificar permisos de reemplazo:', error);
+      return false;
+    }
+
+    // Si no hay datos o can_replace es false, no tiene permisos
+    return data?.can_replace === true;
+  } catch (error) {
+    console.error('Error en checkReplacePermission:', error);
+    return false;
+  }
+};
+
 module.exports = {
   checkDeletePermission,
   checkAnularPermission,
   checkUpdatePermission,
-  checkCreatePermission
+  checkCreatePermission,
+  checkReplacePermission
 };
