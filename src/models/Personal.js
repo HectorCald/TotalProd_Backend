@@ -240,7 +240,7 @@ class Personal {
           codigo,
           empresa_id,
           sucursal_id: sucursal_id || null,
-          is_active: false
+          is_active: true
         }])
         .select()
         .single();
@@ -293,7 +293,9 @@ class Personal {
         }
       }
 
-      return new Personal(newPersonal);
+      // Obtener los datos completos del personal creado
+      const completePersonal = await this.getById(newPersonal.id);
+      return completePersonal;
     } catch (error) {
       console.error('Error al crear personal:', error);
       throw error;
