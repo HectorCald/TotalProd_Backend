@@ -46,12 +46,6 @@ class productsAcopioController {
         });
       }
 
-      if (!quantity || !quantity.toString().trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'La cantidad es obligatoria'
-        });
-      }
 
       if (!type_measure_id) {
         return res.status(400).json({

@@ -1063,6 +1063,62 @@ class movimientosAlmacen {
                 console.log(`✅ [MODEL ANULAR] RPC exitoso - Saltando reversión manual redundante`);
             }
 
+            // Si es entrada, tiene receta Y restar_ingredientes es true, devolver ingredientes consumidos
+            if (movimiento.type === 'entrada' && movimiento.restar_ingredientes) {
+                console.log('🔄 [MODEL ANULAR] Devolviendo ingredientes para movimiento de entrada con restar_ingredientes=true');
+                
+                // Obtener recetas de cada producto del movimiento
+                for (const productoMovimiento of movimiento.productos) {
+                    const cantidadMovimiento = parseFloat(productoMovimiento.cantidad);
+                    
+                    // Obtener recetas del producto de almacén
+                    const { data: recetas, error: recetasError } = await supabase
+                        .from('recetas')
+                        .select(`
+                            id,
+                            recetas_detalle (
+                                id,
+                                cantidad,
+                                products_acopio:producto_acopio_id (
+                                    id,
+                                    name,
+                                    quantity
+                                )
+                            )
+                        `)
+                        .eq('producto_almacen_id', productoMovimiento.producto_almacen_id)
+                        .limit(1);
+                    
+                    if (!recetasError && recetas && recetas.length > 0) {
+                        const receta = recetas[0];
+                        
+                        if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
+                            // Devolver ingredientes (sumar al stock)
+                            for (const ingrediente of receta.recetas_detalle) {
+                                if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
+                                    continue;
+                                }
+
+                                const cantidadADevolver = ingrediente.cantidad * cantidadMovimiento;
+                                const cantidadActual = ingrediente.products_acopio.quantity;
+                                const nuevaCantidadIngrediente = cantidadActual + cantidadADevolver;
+
+                                const { error: ingredienteError } = await supabase
+                                    .from('products_acopio')
+                                    .update({ quantity: nuevaCantidadIngrediente })
+                                    .eq('id', ingrediente.products_acopio.id);
+
+                                if (ingredienteError) {
+                                    console.error(`Error devolviendo ingrediente ${ingrediente.products_acopio.name}:`, ingredienteError);
+                                    // Continuar con el siguiente ingrediente
+                                } else {
+                                    console.log(`✅ [MODEL ANULAR] Ingrediente devuelto: ${ingrediente.products_acopio.name} - Cantidad: ${cantidadADevolver}`);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             return { 
                 success: true, 
