@@ -235,11 +235,13 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           cliente:cliente_id (
             id,
@@ -431,11 +433,13 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           cliente:cliente_id (
             id,
@@ -543,11 +547,13 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           cliente:cliente_id (
             id,
@@ -725,11 +731,13 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           precio:prices_types (
             id,
@@ -901,11 +909,13 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name
+            name,
+            total_pedidos
           ),
           precio:prices_types (
             id,
@@ -1003,6 +1013,23 @@ class pedidosAlmacen {
         throw new Error('Nuevo estado es requerido');
       }
 
+      // Obtener el pedido actual para verificar el estado anterior y la sucursal que hizo el pedido
+      const { data: pedidoActual, error: pedidoError } = await supabase
+        .from('pedidos_almacen')
+        .select('estado, sucursal_id')
+        .eq('id', pedidoId)
+        .single();
+
+      if (pedidoError) {
+        if (pedidoError.code === 'PGRST116') {
+          throw new Error('Pedido no encontrado');
+        }
+        throw new Error(`Error al obtener el pedido: ${pedidoError.message}`);
+      }
+
+      const estadoAnterior = pedidoActual.estado;
+      const sucursalId = pedidoActual.sucursal_id;
+
       const updateData = { estado: nuevoEstado };
       
       // Si se proporciona un movimiento_salida_id, agregarlo
@@ -1043,10 +1070,25 @@ class pedidosAlmacen {
         throw new Error(`Error al actualizar el pedido: ${error.message}`);
       }
 
+      // Actualizar contador de pedidos en la sucursal que hizo el pedido
+      if (sucursalId) {
+        // Si el estado cambió de no-Entregado a Entregado, incrementar contador en la sucursal que hizo el pedido
+        if (estadoAnterior !== 'Entregado' && nuevoEstado === 'Entregado') {
+          await this.incrementarTotalPedidosSucursal(sucursalId);
+        }
+        // Si el estado cambió de Entregado a no-Entregado, decrementar contador en la sucursal que hizo el pedido
+        else if (estadoAnterior === 'Entregado' && nuevoEstado !== 'Entregado') {
+          await this.decrementarTotalPedidosSucursal(sucursalId);
+        }
+      }
+
+      // Obtener el pedido completo actualizado con la información de la sucursal
+      const pedidoCompleto = await this.getById(pedidoId);
+      
       return {
         success: true,
         message: 'Estado del pedido actualizado exitosamente',
-        data: data
+        data: pedidoCompleto.success ? pedidoCompleto.data : data
       };
 
     } catch (error) {
@@ -1055,6 +1097,82 @@ class pedidosAlmacen {
         success: false,
         message: error.message
       };
+    }
+  }
+
+  // Incrementar el contador de pedidos en una sucursal
+  static async incrementarTotalPedidosSucursal(sucursalId) {
+    try {
+      if (!sucursalId) {
+        throw new Error('ID de la sucursal es requerido');
+      }
+
+      // Primero obtener el valor actual
+      const { data: sucursal, error: fetchError } = await supabase
+        .from('sucursales')
+        .select('total_pedidos')
+        .eq('id', sucursalId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error al obtener total_pedidos actual:', fetchError);
+        return;
+      }
+
+      // Incrementar el valor
+      const nuevoTotal = (sucursal.total_pedidos || 0) + 1;
+
+      const { error } = await supabase
+        .from('sucursales')
+        .update({ total_pedidos: nuevoTotal })
+        .eq('id', sucursalId);
+
+      if (error) {
+        console.error('Error al incrementar total_pedidos:', error);
+        // No lanzar error para no interrumpir el flujo principal
+      }
+
+    } catch (error) {
+      console.error('Error en incrementarTotalPedidosSucursal:', error);
+      // No lanzar error para no interrumpir el flujo principal
+    }
+  }
+
+  // Decrementar el contador de pedidos en una sucursal
+  static async decrementarTotalPedidosSucursal(sucursalId) {
+    try {
+      if (!sucursalId) {
+        throw new Error('ID de la sucursal es requerido');
+      }
+
+      // Primero obtener el valor actual
+      const { data: sucursal, error: fetchError } = await supabase
+        .from('sucursales')
+        .select('total_pedidos')
+        .eq('id', sucursalId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error al obtener total_pedidos actual:', fetchError);
+        return;
+      }
+
+      // Decrementar el valor (no puede ser menor a 0)
+      const nuevoTotal = Math.max((sucursal.total_pedidos || 0) - 1, 0);
+
+      const { error } = await supabase
+        .from('sucursales')
+        .update({ total_pedidos: nuevoTotal })
+        .eq('id', sucursalId);
+
+      if (error) {
+        console.error('Error al decrementar total_pedidos:', error);
+        // No lanzar error para no interrumpir el flujo principal
+      }
+
+    } catch (error) {
+      console.error('Error en decrementarTotalPedidosSucursal:', error);
+      // No lanzar error para no interrumpir el flujo principal
     }
   }
 
