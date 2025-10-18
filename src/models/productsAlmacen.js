@@ -371,11 +371,27 @@ class productsAlmacen {
       // Devolver producto básico sin JOINs pesados (OPTIMIZADO)
       const tCompleteStart = Date.now();
       
+      // Obtener información de la categoría si existe
+      let categoryName = 'Sin categoría';
+      let categoryAlmacen = null;
+      if (productData.category_id) {
+        const { data: categoria } = await supabase
+          .from('category_almacen')
+          .select('id, name')
+          .eq('id', productData.category_id)
+          .single();
+        if (categoria) {
+          categoryName = categoria.name;
+          categoryAlmacen = categoria;
+        }
+      }
+      
       // Construir respuesta básica sin consultas adicionales
       const basicProduct = {
         ...product[0],
         stock: productData.stock || 0,
-        category_name: 'Sin categoría', // Se puede obtener después si es necesario
+        category_name: categoryName,
+        category_almacen: categoryAlmacen,
         price_product: productData.prices ? Object.entries(productData.prices).map(([price_id, valor]) => ({
           producto_almacen_id: productId,
           price_id: price_id,

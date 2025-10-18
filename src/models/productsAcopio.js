@@ -154,7 +154,7 @@ class productsAcopio {
       const dbProductData = {
         name: nombreProducto,
         description: productData.description || null,
-        quantity: productData.quantity,
+        quantity: productData.quantity !== undefined ? productData.quantity : 0,
         type_measure_id: productData.type_measure_id || null,
         category_id: productData.category_id || null,
         empresa_id: empresaId
@@ -267,16 +267,7 @@ class productsAcopio {
         }
       }
 
-      // 4. Eliminar los lotes asociados
-      const { error: lotesError } = await supabase
-        .from('lotes_acopio')
-        .delete()
-        .eq('product_id', id);
-
-      if (lotesError) {
-        console.error('Error al eliminar lotes:', lotesError);
-        // Continuar con la eliminación del producto
-      }
+      // 4. Los lotes se eliminan automáticamente por CASCADE si existen
 
       // 5. Finalmente eliminar el producto
       const { error } = await supabase
@@ -339,7 +330,7 @@ class productsAcopio {
       const dbData = {
         name: productData.name,
         description: productData.description || null,
-        quantity: productData.quantity || null,
+        quantity: productData.quantity !== undefined ? productData.quantity : 0,
         type_measure_id: productData.type_measure_id || null,
         category_id: productData.category_id || null
       };
