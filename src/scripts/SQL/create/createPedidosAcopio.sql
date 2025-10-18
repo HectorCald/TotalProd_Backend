@@ -14,6 +14,7 @@ CREATE TABLE pedidos_acopio (
     fecha_entregado DATE NULL,
     cantidad_entregada NUMERIC NULL,
     cantidad_entregada_ud NUMERIC NULL,
+    cantidad_entregada_medida NUMERIC NULL,
     estado_entrega TEXT NULL,
     observaciones_entrega TEXT NULL,
     movimiento_entrada_id UUID NULL,
