@@ -829,16 +829,43 @@ class movimientosAcopio {
         return { success: false, message: 'El movimiento ya está anulado' };
       }
 
-      // Validar relación con pedidos: si está relacionado, no permitir anular (OPTIMIZADO)
-      const { data: pedidosRelacionados } = await supabase
+      // Verificar relación con pedidos de acopio: si está relacionado, actualizar el pedido
+      const { data: pedidosAcopioRelacionados } = await supabase
+        .from('pedidos_acopio')
+        .select('id, estado')
+        .eq('movimiento_entrada_id', movimientoId)
+        .limit(1)
+        .maybeSingle();
+
+      // Si está relacionado con un pedido de acopio, actualizar el pedido
+      if (pedidosAcopioRelacionados) {
+        // Cambiar estado del pedido de "Completado" a "Entregado" y limpiar movimiento_entrada_id
+        const { error: updatePedidoError } = await supabase
+          .from('pedidos_acopio')
+          .update({ 
+            estado: 'Entregado',
+            movimiento_entrada_id: null
+          })
+          .eq('id', pedidosAcopioRelacionados.id);
+
+        if (updatePedidoError) {
+          console.error('Error actualizando pedido de acopio:', updatePedidoError);
+          return { success: false, message: 'Error al actualizar el pedido relacionado' };
+        }
+        
+        console.log('Pedido de acopio actualizado al anular movimiento:', pedidosAcopioRelacionados.id);
+      }
+
+      // Verificar relación con pedidos de almacén: si está relacionado, no permitir anular
+      const { data: pedidosAlmacenRelacionados } = await supabase
         .from('pedidos_almacen')
         .select('id')
         .or(`movimiento_salida_id.eq.${movimientoId},movimiento_entrada_id.eq.${movimientoId}`)
         .limit(1)
         .maybeSingle();
 
-      if (pedidosRelacionados) {
-        return { success: false, message: 'No se puede anular: el movimiento está relacionado con un pedido' };
+      if (pedidosAlmacenRelacionados) {
+        return { success: false, message: 'No se puede anular: el movimiento está relacionado con un pedido de almacén' };
       }
 
       // Si tiene gasto_id, eliminar el gasto asociado primero
@@ -956,8 +983,15 @@ class movimientosAcopio {
 
       return { 
         success: true, 
-        message: 'Movimiento anulado correctamente',
-        data: { ...movimiento, estado: 'anulado' }
+        message: pedidosAcopioRelacionados 
+          ? 'Movimiento anulado correctamente. El pedido relacionado ha sido actualizado a estado "Entregado"'
+          : 'Movimiento anulado correctamente',
+        data: { ...movimiento, estado: 'anulado' },
+        pedidoActualizado: pedidosAcopioRelacionados ? {
+          id: pedidosAcopioRelacionados.id,
+          estadoAnterior: pedidosAcopioRelacionados.estado,
+          estadoNuevo: 'Entregado'
+        } : null
       };
 
     } catch (error) {

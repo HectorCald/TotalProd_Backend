@@ -15,6 +15,9 @@ router.get('/:id', productsAlmacenController.getById);
 // POST /api/products-almacen - Crear un producto
 router.post('/', productsAlmacenController.create);
 
+// PUT /api/products-almacen/bulk-update - Actualizar múltiples productos en lote
+router.put('/bulk-update', productsAlmacenController.bulkUpdate);
+
 // PUT /api/products-almacen/:id - Actualizar un producto
 router.put('/:id', productsAlmacenController.update);
 

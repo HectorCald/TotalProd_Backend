@@ -665,6 +665,113 @@ class productsAlmacen {
     }
   }
 
+  // Actualizar múltiples productos en lote (para importación)
+  static async bulkUpdate(productosData, empresaId) {
+    try {
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
+      }
+
+      if (!Array.isArray(productosData) || productosData.length === 0) {
+        throw new Error('Array de productos es requerido');
+      }
+
+      const resultados = {
+        actualizados: 0,
+        errores: [],
+        total: productosData.length
+      };
+
+      // Procesar cada producto en paralelo (con límite de concurrencia)
+      const BATCH_SIZE = 10; // Procesar de 10 en 10 para evitar sobrecarga
+      const batches = [];
+      
+      for (let i = 0; i < productosData.length; i += BATCH_SIZE) {
+        batches.push(productosData.slice(i, i + BATCH_SIZE));
+      }
+
+      for (const batch of batches) {
+        const batchPromises = batch.map(async (productoData) => {
+          try {
+            const { id, name, codigo_barras, description, precios } = productoData;
+            
+            if (!id) {
+              throw new Error('ID del producto es requerido');
+            }
+
+            // Preparar datos de actualización
+            const updateData = {};
+            if (name !== undefined && name !== null && name !== '') updateData.name = name;
+            if (codigo_barras !== undefined && codigo_barras !== null) updateData.codigo_barras = codigo_barras;
+            if (description !== undefined && description !== null) updateData.description = description;
+
+            // Actualizar producto principal si hay cambios
+            if (Object.keys(updateData).length > 0) {
+              const { error: productError } = await supabase
+                .from('products_almacen')
+                .update(updateData)
+                .eq('id', id)
+                .eq('empresa_id', empresaId);
+
+              if (productError) {
+                throw new Error(`Error actualizando producto ${id}: ${productError.message}`);
+              }
+            }
+
+            // Actualizar precios si se proporcionan
+            if (precios && Object.keys(precios).length > 0) {
+              // Eliminar precios existentes
+              await supabase
+                .from('price_product')
+                .delete()
+                .eq('producto_almacen_id', id);
+
+              // Insertar nuevos precios
+              const preciosArray = Object.entries(precios)
+                .filter(([_, valor]) => valor !== null && valor !== undefined && valor !== '')
+                .map(([priceTypeId, valor]) => ({
+                  producto_almacen_id: id,
+                  price_id: priceTypeId,
+                  valor: parseFloat(valor) || 0
+                }));
+
+              if (preciosArray.length > 0) {
+                const { error: preciosError } = await supabase
+                  .from('price_product')
+                  .insert(preciosArray);
+
+                if (preciosError) {
+                  throw new Error(`Error actualizando precios del producto ${id}: ${preciosError.message}`);
+                }
+              }
+            }
+
+            resultados.actualizados++;
+            return { success: true, id, name: productoData.name };
+          } catch (error) {
+            const errorMsg = `Producto ${productoData.id || 'desconocido'}: ${error.message}`;
+            resultados.errores.push(errorMsg);
+            console.error('Error en producto individual:', errorMsg);
+            return { success: false, id: productoData.id, error: errorMsg };
+          }
+        });
+
+        // Esperar a que termine el batch actual
+        await Promise.allSettled(batchPromises);
+      }
+
+
+      return {
+        success: true,
+        data: resultados,
+        message: `Actualización completada: ${resultados.actualizados}/${resultados.total} productos actualizados`
+      };
+    } catch (error) {
+      console.error('Error en bulkUpdate:', error);
+      throw error;
+    }
+  }
+
   // Eliminar un producto
   static async delete(id) {
     try {

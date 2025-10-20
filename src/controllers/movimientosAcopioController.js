@@ -247,8 +247,9 @@ class movimientosAcopioController {
 
       res.json({
         success: true,
-        message: 'Movimiento anulado correctamente',
-        data: result.data
+        message: result.message,
+        data: result.data,
+        pedidoActualizado: result.pedidoActualizado
       });
     } catch (error) {
       console.error('Error en anular:', error);
