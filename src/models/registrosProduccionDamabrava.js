@@ -144,6 +144,16 @@ class registrosProduccionDamabrava {
                     sucursal:sucursal_id(
                         id,
                         name
+                    ),
+                    user:user_id(
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id(
+                        id,
+                        first_name,
+                        last_name
                     )
                 `, { count: 'exact' });
 
@@ -185,51 +195,33 @@ class registrosProduccionDamabrava {
                 };
             }
 
-            // Obtener información de usuario/personal para cada registro
-            const registrosConUsuarios = await Promise.all(
-                registros.map(async (registro) => {
-                    let user = null;
-                    let personal = null;
+            // Procesar datos de usuario/personal (ya vienen en la consulta)
+            const registrosConUsuarios = registros.map(registro => {
+                let user = null;
+                let personal = null;
 
-                    // Si tiene user_id, obtener el usuario
-                    if (registro.user_id) {
-                        const { data: userData, error: userError } = await supabase
-                            .from('users')
-                            .select('id, first_name, last_name')
-                            .eq('id', registro.user_id)
-                            .single();
-                        
-                        if (!userError && userData) {
-                            user = {
-                                id: userData.id,
-                                name: `${userData.first_name} ${userData.last_name}`.trim()
-                            };
-                        }
-                    }
-
-                    // Si tiene personal_id, obtener el personal
-                    if (registro.personal_id) {
-                        const { data: personalData, error: personalError } = await supabase
-                            .from('personal')
-                            .select('id, first_name, last_name')
-                            .eq('id', registro.personal_id)
-                            .single();
-                        
-                        if (!personalError && personalData) {
-                            personal = {
-                                id: personalData.id,
-                                name: `${personalData.first_name} ${personalData.last_name}`.trim()
-                            };
-                        }
-                    }
-
-                    return {
-                        ...registro,
-                        user,
-                        personal
+                // Procesar usuario si existe
+                if (registro.user) {
+                    user = {
+                        id: registro.user.id,
+                        name: `${registro.user.first_name} ${registro.user.last_name}`.trim()
                     };
-                })
-            );
+                }
+
+                // Procesar personal si existe
+                if (registro.personal) {
+                    personal = {
+                        id: registro.personal.id,
+                        name: `${registro.personal.first_name} ${registro.personal.last_name}`.trim()
+                    };
+                }
+
+                return {
+                    ...registro,
+                    user,
+                    personal
+                };
+            });
 
             // Aplicar búsqueda por texto si se proporciona
             let registrosFiltrados = registrosConUsuarios;
@@ -665,6 +657,16 @@ class registrosProduccionDamabrava {
                     sucursal:sucursal_id(
                         id,
                         name
+                    ),
+                    user:user_id(
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id(
+                        id,
+                        first_name,
+                        last_name
                     )
                 `, { count: 'exact' });
 
@@ -704,51 +706,33 @@ class registrosProduccionDamabrava {
                 };
             }
 
-            // Obtener información de usuario/personal para cada registro
-            const registrosConUsuarios = await Promise.all(
-                registros.map(async (registro) => {
-                    let user = null;
-                    let personal = null;
+            // Procesar datos de usuario/personal (ya vienen en la consulta)
+            const registrosConUsuarios = registros.map(registro => {
+                let user = null;
+                let personal = null;
 
-                    // Si tiene user_id, obtener el usuario
-                    if (registro.user_id) {
-                        const { data: userData, error: userError } = await supabase
-                            .from('users')
-                            .select('id, first_name, last_name')
-                            .eq('id', registro.user_id)
-                            .single();
-                        
-                        if (!userError && userData) {
-                            user = {
-                                id: userData.id,
-                                name: `${userData.first_name} ${userData.last_name}`.trim()
-                            };
-                        }
-                    }
-
-                    // Si tiene personal_id, obtener el personal
-                    if (registro.personal_id) {
-                        const { data: personalData, error: personalError } = await supabase
-                            .from('personal')
-                            .select('id, first_name, last_name')
-                            .eq('id', registro.personal_id)
-                            .single();
-                        
-                        if (!personalError && personalData) {
-                            personal = {
-                                id: personalData.id,
-                                name: `${personalData.first_name} ${personalData.last_name}`.trim()
-                            };
-                        }
-                    }
-
-                    return {
-                        ...registro,
-                        user,
-                        personal
+                // Procesar usuario si existe
+                if (registro.user) {
+                    user = {
+                        id: registro.user.id,
+                        name: `${registro.user.first_name} ${registro.user.last_name}`.trim()
                     };
-                })
-            );
+                }
+
+                // Procesar personal si existe
+                if (registro.personal) {
+                    personal = {
+                        id: registro.personal.id,
+                        name: `${registro.personal.first_name} ${registro.personal.last_name}`.trim()
+                    };
+                }
+
+                return {
+                    ...registro,
+                    user,
+                    personal
+                };
+            });
 
             // Aplicar búsqueda por texto si se proporciona
             let registrosFiltrados = registrosConUsuarios;
