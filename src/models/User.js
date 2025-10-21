@@ -57,10 +57,14 @@ class User {
       }
 
       // 4. Crear registro en user_plans
+      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+
       const userPlanData = {
         user_id: insertedUser.id,
         plan_id: freePlan.id,
-        start_date: new Date().toISOString(),
+        start_date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
         end_date: 'infinity', // Plan Free es infinito
         is_active: true
       };
@@ -448,10 +452,14 @@ class User {
       }
 
       // 3. Crear nuevo registro de plan
+      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+
       const userPlanData = {
         user_id: userId,
         plan_id: plan.id,
-        start_date: new Date().toISOString(),
+        start_date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
         end_date: planName === 'Free' ? 'infinity' : null, // Plan Free es infinito
         is_active: true
       };

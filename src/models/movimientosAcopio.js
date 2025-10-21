@@ -27,7 +27,7 @@ class movimientosAcopio {
 
       // Crear timestamp en zona horaria de Bolivia (GMT-4)
       const ahora = new Date();
-      const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+      const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
 
       const dbData = {
         product_id: movimientoData.product_id,
@@ -753,13 +753,17 @@ class movimientosAcopio {
 
           // Solo crear movimiento si la cantidad es mayor a 0
           if (cantidadARestar > 0) {
+            // Crear timestamp en zona horaria de Bolivia (GMT-4)
+            const ahora = new Date();
+            const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+
             const movimientoSalida = {
               product_id: ingrediente.products_acopio.id,
               sucu_id: sucuId,
               type: 'salida',
               observations: `Consumo por receta de ${productoPrincipal.name}`,
               quantity: cantidadARestar.toString(),
-              date: new Date().toISOString(),
+              date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
               // No incluir proveedor_id ni cliente_id para movimientos de salida por receta
               proveedor_id: null,
               cliente_id: null

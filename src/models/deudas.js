@@ -620,7 +620,10 @@ class deudas {
                 };
             }
 
-            const hoy = new Date().toISOString().split('T')[0];
+            // Crear timestamp en zona horaria de Bolivia (GMT-4)
+            const ahora = new Date();
+            const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+            const hoy = ahoraBolivia.toISOString().split('T')[0];
 
             const { data, error } = await supabase
                 .from('deudas')

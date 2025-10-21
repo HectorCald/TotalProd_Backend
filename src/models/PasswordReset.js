@@ -158,10 +158,14 @@ class PasswordReset {
   // Método estático para limpiar tokens expirados
   static async cleanExpiredTokens() {
     try {
+      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+
       const { error } = await supabase
         .from('password_resets')
         .delete()
-        .lt('expiration', new Date().toISOString());
+        .lt('expiration', ahoraBolivia.toISOString()); // Usar timestamp en zona horaria de Bolivia
 
       if (error) {
         console.error('Error al limpiar tokens expirados:', error);

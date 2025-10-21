@@ -516,13 +516,18 @@ class pedidosAcopio {
       const nombreProducto = productoData?.name || 'Producto';
       const concepto = `${nombreProducto} - ${entregaData.cantidadEntregada} ${entregaData.unidadEntregada}`;
       
+      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      const ahora = new Date();
+      const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+      const fechaBolivia = ahoraBolivia.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+
       const gastoData = {
         concepto: concepto,
         valor: entregaData.costo,
         metodo_pago: entregaData.metodo_pago,
         proveedor_id: entregaData.proveedor_id,
         observaciones: entregaData.observaciones || null,
-        fecha_gasto: new Date().toISOString().split('T')[0] // Formato YYYY-MM-DD
+        fecha_gasto: fechaBolivia // Usar fecha en zona horaria de Bolivia
       };
 
       const gastoResult = await gastosModel.create({

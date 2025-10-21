@@ -12,11 +12,12 @@ class gastos {
                 // Si viene una fecha específica, usarla directamente
                 fechaFinal = fecha_gasto;
             } else {
-                // Si no viene fecha, usar la actual en formato YYYY-MM-DD
+                // Si no viene fecha, usar la actual en formato YYYY-MM-DD en zona horaria de Bolivia
                 const ahora = new Date();
-                const año = ahora.getFullYear();
-                const mes = String(ahora.getMonth() + 1).padStart(2, '0');
-                const dia = String(ahora.getDate()).padStart(2, '0');
+                const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+                const año = ahoraBolivia.getFullYear();
+                const mes = String(ahoraBolivia.getMonth() + 1).padStart(2, '0');
+                const dia = String(ahoraBolivia.getDate()).padStart(2, '0');
                 fechaFinal = `${año}-${mes}-${dia}`;
             }
 
@@ -390,10 +391,10 @@ class gastos {
                 proveedor_id: proveedor_id || null
             };
 
-            // Si viene una fecha específica, convertirla a Bolivia
+            // Si viene una fecha específica, convertirla a zona horaria de Bolivia
             if (fecha_gasto) {
                 const fechaOriginal = new Date(fecha_gasto);
-                const fechaGastoBolivia = new Date(fechaOriginal.getTime() - (4 * 60 * 60 * 1000));
+                const fechaGastoBolivia = new Date(fechaOriginal.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
                 dbData.fecha_gasto = fechaGastoBolivia.toISOString();
             }
 

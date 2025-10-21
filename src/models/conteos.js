@@ -15,13 +15,13 @@ class ConteosModel {
 				return { success: false, message: 'Debe incluir al menos un detalle de conteo' };
 			}
 
-			// Fecha en zona Bolivia (GMT-4)
+			// Crear timestamp en zona horaria de Bolivia (GMT-4)
 			const ahora = new Date();
-			const fechaBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000));
+			const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
 
 			// Insertar encabezado de conteo
 			const insertHeader = {
-				fecha: fechaBolivia.toISOString(),
+				fecha: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
 				tipo,
 				sucursal_id,
 				observaciones: observaciones || null

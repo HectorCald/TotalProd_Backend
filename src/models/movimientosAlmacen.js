@@ -9,7 +9,7 @@ class movimientosAlmacen {
 
             // Crear timestamp en zona horaria de Bolivia (GMT-4) - OPTIMIZADO
             const ahora = new Date();
-            const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+            const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
 
             // Iniciar transacción - OPTIMIZADO: Solo campos necesarios, sin defaults
             const insertData = {
