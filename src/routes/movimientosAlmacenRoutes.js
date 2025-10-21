@@ -21,6 +21,9 @@ router.get('/product/:productId/has-movements', movimientosAlmacenController.has
 // Obtener movimientos por producto
 router.get('/product/:productId', movimientosAlmacenController.getByProduct);
 
+// Obtener movimientos por cliente
+router.get('/cliente/:clienteId', movimientosAlmacenController.getByCliente);
+
 // Obtener un movimiento específico por ID
 router.get('/:id', movimientosAlmacenController.getById);
 

@@ -344,7 +344,8 @@ class movimientosAlmacen {
                     producto:producto_almacen_id(
                         id, 
                         name, 
-                        description
+                        description,
+                        grup
                     )
                 `)
                 .eq('movimiento_almacen_id', id);
@@ -551,7 +552,8 @@ class movimientosAlmacen {
 					producto:producto_almacen_id(
 						id,
 						name,
-						description
+						description,
+						grup
 					)
 				`)
 				.in('movimiento_almacen_id', movimientoIds);
@@ -1362,6 +1364,106 @@ class movimientosAlmacen {
 
         } catch (error) {
             console.error('Error en getByProduct:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
+    // Obtener movimientos por cliente (OPTIMIZADO - igual que getAll)
+    static async getByCliente(clienteId, sucuId) {
+        try {
+            if (!clienteId) {
+                throw new Error('ID del cliente es requerido');
+            }
+
+            if (!sucuId) {
+                throw new Error('ID de la sucursal es requerido');
+            }
+
+            // Obtener movimientos del cliente con información básica
+            const { data: movimientos, error } = await supabase
+                .from('movimientos_almacen')
+                .select(`
+                    *,
+                    cliente:clients(id, name, total_orders),
+                    proveedor:proveedores(id, name, total_orders),
+                    precio:prices_types(id, name),
+                    sucursal:sucu_id(id, name),
+                    user:user_id(id, first_name, last_name),
+                    personal:personal_id(id, first_name, last_name)
+                `)
+                .eq('cliente_id', clienteId)
+                .eq('sucu_id', sucuId)
+                .order('fecha', { ascending: false })
+                .limit(50); // Limitar a los últimos 50 movimientos
+
+            if (error) {
+                console.error('Error obteniendo movimientos por cliente:', error);
+                return { success: false, message: 'Error al obtener movimientos del cliente', error };
+            }
+
+            // Si no hay movimientos, retornar array vacío
+            if (!movimientos || movimientos.length === 0) {
+                return {
+                    success: true,
+                    data: []
+                };
+            }
+
+            // Hidratación OPTIMIZADA: cargar productos en lote para evitar N+1
+            const movimientoIds = movimientos.map(m => m.id);
+
+            // 1) Productos de todos los movimientos en una sola consulta (igual que getAll)
+            const { data: productosAll, error: productosError } = await supabase
+                .from('movimiento_almacen_producto')
+                .select(`
+                    movimiento_almacen_id,
+                    producto_almacen_id,
+                    cantidad,
+                    precio_unitario,
+                    subtotal,
+                    producto:producto_almacen_id(
+                        id,
+                        name,
+                        description,
+                        grup
+                    )
+                `)
+                .in('movimiento_almacen_id', movimientoIds);
+
+            if (productosError) {
+                console.error('Error obteniendo productos:', productosError);
+                return { success: false, message: 'Error al obtener productos', error: productosError };
+            }
+
+            // Crear mapa de productos por movimiento
+            const productosByMovimiento = new Map();
+            (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
+            (productosAll || []).forEach(p => {
+                const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
+                arr.push(p);
+                productosByMovimiento.set(p.movimiento_almacen_id, arr);
+            });
+
+            // Armar respuesta final con productos incluidos
+            const movimientosConProductos = movimientos.map(mov => {
+                const user = mov.user ? { id: mov.user.id, name: `${mov.user.first_name || ''} ${mov.user.last_name || ''}`.trim() } : null;
+                const personal = mov.personal ? { id: mov.personal.id, name: `${mov.personal.first_name || ''} ${mov.personal.last_name || ''}`.trim() } : null;
+                
+                return {
+                    ...mov,
+                    productos: productosByMovimiento.get(mov.id) || [],
+                    user,
+                    personal
+                };
+            });
+
+            return {
+                success: true,
+                data: movimientosConProductos
+            };
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacen.getByCliente:', error);
             return { success: false, message: 'Error interno del servidor', error };
         }
     }

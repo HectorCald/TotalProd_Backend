@@ -487,6 +487,47 @@ class movimientosAlmacenController {
         }
     }
 
+    // Obtener movimientos por cliente
+    static async getByCliente(req, res) {
+        try {
+            const { clienteId } = req.params;
+            const sucu_id = req.query.sucu_id;
+
+            if (!sucu_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
+
+            if (!clienteId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID del cliente es requerido'
+                });
+            }
+
+            const result = await movimientosAlmacen.getByCliente(clienteId, sucu_id);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json({
+                success: true,
+                data: result.data
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.getByCliente:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
     // Actualizar un movimiento
     static async update(req, res) {
         try {
