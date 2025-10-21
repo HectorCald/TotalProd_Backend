@@ -46,7 +46,7 @@ class clients {
         name: clientData.name,
         phone: clientData.phone || null,
         description: clientData.description || null,
-        total_orders: 0,
+        total_orders: clientData.total_orders || 0,
         sucu_id: sucuId,
       };
 
@@ -110,7 +110,8 @@ class clients {
       const dbData = {
         name: clientData.name,
         phone: clientData.phone || null,
-        description: clientData.description || null
+        description: clientData.description || null,
+        total_orders: clientData.total_orders || 0
       };
 
       // Si hay location, usarla directamente

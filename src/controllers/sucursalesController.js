@@ -146,6 +146,13 @@ const sucursalesController = {
         try {
             const { id } = req.params;
             
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de sucursal es requerido'
+                });
+            }
+            
             // Verificar si es la sucursal "Casa Matriz"
             const sucursalActual = await sucursales.getById(id);
             if (sucursalActual.success && sucursalActual.data.name === 'Casa Matriz') {
@@ -159,11 +166,30 @@ const sucursalesController = {
             if (result.success) {
                 res.json(result);
             } else {
-                res.status(500).json(result);
+                // Determinar el código de estado apropiado basado en el tipo de error
+                let statusCode = 500;
+                
+                if (result.message.includes('no existe')) {
+                    statusCode = 404;
+                } else if (result.message.includes('No se puede eliminar') || 
+                          result.message.includes('tiene registros relacionados') ||
+                          result.message.includes('tiene movimientos') ||
+                          result.message.includes('tiene pedidos') ||
+                          result.message.includes('tiene personal')) {
+                    statusCode = 409; // Conflict
+                } else if (result.message.includes('Error de base de datos')) {
+                    statusCode = 500;
+                }
+                
+                res.status(statusCode).json(result);
             }
         } catch (error) {
             console.error('Error en sucursalesController.delete:', error);
-            res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
+            res.status(500).json({ 
+                success: false, 
+                message: 'Error interno del servidor al eliminar la sucursal', 
+                error: error.message 
+            });
         }
     }
 };

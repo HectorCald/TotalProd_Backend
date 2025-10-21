@@ -35,7 +35,7 @@ class clientsController {
   // Crear un cliente
   static async create(req, res) {
     try {
-      const { name, phone, direccion, description, location, sucu_id } = req.body;
+      const { name, phone, direccion, description, total_orders, location, sucu_id } = req.body;
 
       // Validaciones básicas
       if (!name || !name.trim()) {
@@ -58,6 +58,7 @@ class clientsController {
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
+        total_orders: total_orders || 0,
         location: location || null
       }, sucu_id);
 
@@ -121,7 +122,7 @@ class clientsController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { name, phone, direccion, description, location } = req.body;
+      const { name, phone, direccion, description, total_orders, location } = req.body;
       const userType = req.user?.type;
 
       if (!id) {
@@ -157,6 +158,7 @@ class clientsController {
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
+        total_orders: total_orders || 0,
         location: location || null
       });
 
