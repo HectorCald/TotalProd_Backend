@@ -267,12 +267,39 @@ class movimientosAlmacen {
             }
             
 
-            // Incrementar total_orders del cliente si es una salida con cliente
+            // Para salidas con cliente: incrementar total_orders PRIMERO, luego guardar el valor actualizado en numero_orden
             if (type === 'salida' && cliente_id) {
-                const incrementResult = await this.incrementarTotalOrdersCliente(cliente_id);
-                if (!incrementResult.success) {
-                    console.warn('Error incrementando total_orders del cliente:', incrementResult.message);
-                    // No fallar el movimiento por esto, solo logear el warning
+                try {
+                    // 1) PRIMERO: Incrementar total_orders del cliente
+                    const incrementResult = await this.incrementarTotalOrdersCliente(cliente_id);
+                    if (!incrementResult.success) {
+                        console.warn('Error incrementando total_orders del cliente:', incrementResult.message);
+                    } else {
+                        // 2) SEGUNDO: Obtener el total_orders actualizado del cliente
+                        const { data: clienteActualizado, error: clienteError } = await supabase
+                            .from('clients')
+                            .select('total_orders')
+                            .eq('id', cliente_id)
+                            .single();
+
+                        if (clienteError) {
+                            console.warn('Error obteniendo total_orders actualizado del cliente:', clienteError);
+                        } else {
+                            const numeroOrdenActualizado = clienteActualizado?.total_orders || 0;
+                            
+                            // 3) TERCERO: Actualizar el movimiento con el numero_orden (total_orders actualizado del cliente)
+                            const { error: updateMovimientoError } = await supabase
+                                .from('movimientos_almacen')
+                                .update({ numero_orden: numeroOrdenActualizado })
+                                .eq('id', movimiento.id);
+
+                            if (updateMovimientoError) {
+                                console.warn('Error actualizando numero_orden del movimiento:', updateMovimientoError);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error procesando numero_orden:', error);
                 }
             }
 
@@ -816,7 +843,7 @@ class movimientosAlmacen {
             // Obtener el movimiento con datos mínimos (ULTRA OPTIMIZADO)
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
-                .select('id, sucu_id, type, estado, restar_ingredientes, produccion_damabrava_id')
+                .select('id, sucu_id, type, estado, restar_ingredientes, produccion_damabrava_id, cliente_id')
                 .eq('id', movimientoId)
                 .maybeSingle(); // Usar maybeSingle para mejor performance
 
@@ -1380,17 +1407,29 @@ class movimientosAlmacen {
         try {
             if (!clienteId) return { success: true };
 
+            // Primero obtener el valor actual
+            const { data: clienteActual, error: fetchError } = await supabase
+                .from('clients')
+                .select('total_orders')
+                .eq('id', clienteId)
+                .single();
+
+            if (fetchError) {
+                console.error('Error obteniendo total_orders actual:', fetchError);
+                return { success: false, message: 'Error al obtener total_orders actual' };
+            }
+
+            const nuevoTotal = (clienteActual?.total_orders || 0) + 1;
+
             const { error } = await supabase
                 .from('clients')
-                .update({ total_orders: supabase.raw('total_orders + 1') })
+                .update({ total_orders: nuevoTotal })
                 .eq('id', clienteId);
 
             if (error) {
                 console.error('Error incrementando total_orders del cliente:', error);
                 return { success: false, message: 'Error al actualizar contador de órdenes del cliente' };
             }
-
-            console.log(`✅ [TOTAL_ORDERS] Cliente ${clienteId} - total_orders incrementado`);
             return { success: true };
         } catch (error) {
             console.error('Error en incrementarTotalOrdersCliente:', error);
@@ -1403,20 +1442,34 @@ class movimientosAlmacen {
         try {
             if (!clienteId) return { success: true };
 
+            // Primero obtener el valor actual
+            const { data: clienteActual, error: fetchError } = await supabase
+                .from('clients')
+                .select('total_orders')
+                .eq('id', clienteId)
+                .single();
+
+            if (fetchError) {
+                console.error('❌ [ERROR] Error obteniendo total_orders actual para decrementar:', fetchError);
+                return { success: false, message: 'Error al obtener total_orders actual' };
+            }
+
+            const nuevoTotal = Math.max((clienteActual?.total_orders || 0) - 1, 0);
+
             const { error } = await supabase
                 .from('clients')
-                .update({ total_orders: supabase.raw('GREATEST(total_orders - 1, 0)') })
+                .update({ total_orders: nuevoTotal })
                 .eq('id', clienteId);
 
             if (error) {
-                console.error('Error decrementando total_orders del cliente:', error);
+                console.error('❌ [ERROR] Error decrementando total_orders del cliente:', error);
                 return { success: false, message: 'Error al actualizar contador de órdenes del cliente' };
             }
 
             console.log(`✅ [TOTAL_ORDERS] Cliente ${clienteId} - total_orders decrementado`);
             return { success: true };
         } catch (error) {
-            console.error('Error en decrementarTotalOrdersCliente:', error);
+            console.error('❌ [ERROR] Error en decrementarTotalOrdersCliente:', error);
             return { success: false, message: 'Error al decrementar contador de órdenes' };
         }
     }
