@@ -772,6 +772,140 @@ class productsAlmacen {
     }
   }
 
+  // Crear múltiples productos en lote (para plantillas)
+  static async bulkCreate(productosData, empresaId, sucuId = null) {
+    try {
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
+      }
+
+      if (!Array.isArray(productosData) || productosData.length === 0) {
+        throw new Error('Array de productos es requerido');
+      }
+
+      const resultados = {
+        creados: 0,
+        errores: [],
+        total: productosData.length
+      };
+
+      // Procesar cada producto en paralelo (con límite de concurrencia)
+      const BATCH_SIZE = 10; // Procesar de 10 en 10 para evitar sobrecarga
+      const batches = [];
+      
+      for (let i = 0; i < productosData.length; i += BATCH_SIZE) {
+        batches.push(productosData.slice(i, i + BATCH_SIZE));
+      }
+
+      for (const batch of batches) {
+        const batchPromises = batch.map(async (productoData) => {
+          try {
+            const { name, codigo_barras, description, precios } = productoData;
+            
+            if (!name || !name.trim()) {
+              throw new Error('El nombre del producto es requerido');
+            }
+
+            // Verificar si ya existe un producto con el mismo nombre en la empresa
+            const { data: existentes, error: errorExistentes } = await supabase
+              .from('products_almacen')
+              .select('id')
+              .eq('empresa_id', empresaId)
+              .ilike('name', name.trim())
+              .limit(1);
+
+            if (errorExistentes) {
+              throw new Error(`Error verificando duplicados: ${errorExistentes.message}`);
+            }
+
+            if (existentes && existentes.length > 0) {
+              throw new Error(`Ya existe un producto con el nombre "${name}" en esta empresa`);
+            }
+
+            // Crear el producto principal
+            const { data: product, error: productError } = await supabase
+              .from('products_almacen')
+              .insert([{
+                name: name.trim(),
+                codigo_barras: codigo_barras || null,
+                description: description || null,
+                empresa_id: empresaId
+              }])
+              .select();
+
+            if (productError) {
+              throw new Error(`Error creando producto: ${productError.message}`);
+            }
+
+            if (!product || product.length === 0) {
+              throw new Error('No se pudo crear el producto');
+            }
+
+            const productId = product[0].id;
+
+            // Crear stock en sucursal si se especifica
+            if (sucuId) {
+              const { error: stockError } = await supabase
+                .from('productos_sucursal')
+                .insert([{
+                  producto_id: productId,
+                  sucursal_id: sucuId,
+                  stock: 0 // Stock inicial en 0
+                }]);
+
+              if (stockError) {
+                console.error('Error creando stock:', stockError);
+                // No lanzar error aquí, solo log
+              }
+            }
+
+            // Crear precios si se proporcionan
+            if (precios && Object.keys(precios).length > 0) {
+              const preciosArray = Object.entries(precios)
+                .filter(([_, valor]) => valor !== null && valor !== undefined && valor !== '')
+                .map(([priceTypeId, valor]) => ({
+                  producto_almacen_id: productId,
+                  price_id: priceTypeId,
+                  valor: parseFloat(valor) || 0
+                }));
+
+              if (preciosArray.length > 0) {
+                const { error: preciosError } = await supabase
+                  .from('price_product')
+                  .insert(preciosArray);
+
+                if (preciosError) {
+                  console.error('Error creando precios:', preciosError);
+                  // No lanzar error aquí, solo log
+                }
+              }
+            }
+
+            resultados.creados++;
+            return { success: true, id: productId, name: productoData.name };
+          } catch (error) {
+            const errorMsg = `Producto "${productoData.name || 'desconocido'}": ${error.message}`;
+            resultados.errores.push(errorMsg);
+            console.error('Error en producto individual:', errorMsg);
+            return { success: false, name: productoData.name, error: errorMsg };
+          }
+        });
+
+        // Esperar a que termine el batch actual
+        await Promise.allSettled(batchPromises);
+      }
+
+      return {
+        success: true,
+        data: resultados,
+        message: `Creación completada: ${resultados.creados}/${resultados.total} productos creados`
+      };
+    } catch (error) {
+      console.error('Error en bulkCreate:', error);
+      throw error;
+    }
+  }
+
   // Eliminar un producto
   static async delete(id) {
     try {

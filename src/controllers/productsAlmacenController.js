@@ -307,6 +307,43 @@ class productsAlmacenController {
       });
     }
   }
+
+  // Crear múltiples productos en lote (para plantillas)
+  static async bulkCreate(req, res) {
+    try {
+      const { productosData, empresa_id, sucu_id } = req.body;
+      const empresaId = req.user?.empresa_id || empresa_id;
+      const sucuId = req.user?.sucu_id || sucu_id;
+
+      if (!empresaId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
+      if (!productosData || !Array.isArray(productosData)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Array de productos es requerido'
+        });
+      }
+
+      const resultado = await productsAlmacen.bulkCreate(productosData, empresaId, sucuId);
+
+      res.status(201).json({
+        success: true,
+        message: resultado.message,
+        data: resultado.data
+      });
+    } catch (error) {
+      console.error('Error en bulkCreate:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
 }
 
 module.exports = productsAlmacenController;
