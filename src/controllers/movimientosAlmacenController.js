@@ -557,6 +557,72 @@ class movimientosAlmacenController {
             });
         }
     }
+
+    // Eliminar productos de un movimiento
+    static async deleteProductos(req, res) {
+        try {
+            const { id } = req.params;
+
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID del movimiento es requerido'
+                });
+            }
+
+            const result = await movimientosAlmacen.deleteProductos(id);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json(result);
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.deleteProductos:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // Crear productos de un movimiento
+    static async createProductos(req, res) {
+        try {
+            const { id } = req.params;
+            const { productos } = req.body;
+
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID del movimiento es requerido'
+                });
+            }
+
+            if (!productos || !Array.isArray(productos)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Productos son requeridos'
+                });
+            }
+
+            const result = await movimientosAlmacen.createProductos(id, productos);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json(result);
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.createProductos:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
 }
 
 module.exports = movimientosAlmacenController;

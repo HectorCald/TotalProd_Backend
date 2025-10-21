@@ -36,4 +36,8 @@ router.put('/:id/anular', movimientosAlmacenController.anular);
 // Ruta para eliminar un movimiento
 router.delete('/:id', movimientosAlmacenController.eliminar);
 
+// Rutas para manejar productos de movimientos
+router.delete('/:id/productos', movimientosAlmacenController.deleteProductos);
+router.post('/:id/productos', movimientosAlmacenController.createProductos);
+
 module.exports = router;

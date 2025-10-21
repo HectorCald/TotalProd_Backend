@@ -1596,6 +1596,80 @@ class movimientosAlmacen {
             console.error('Error en limpieza de movimiento:', error);
         }
     }
+
+    // Eliminar productos de un movimiento
+    static async deleteProductos(movimientoId) {
+        try {
+            if (!movimientoId) {
+                throw new Error('ID del movimiento es requerido');
+            }
+
+            const { error } = await supabase
+                .from('movimiento_almacen_producto')
+                .delete()
+                .eq('movimiento_almacen_id', movimientoId);
+
+            if (error) {
+                throw new Error(`Error al eliminar productos del movimiento: ${error.message}`);
+            }
+
+            return {
+                success: true,
+                message: 'Productos del movimiento eliminados exitosamente'
+            };
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacen.deleteProductos:', error);
+            return {
+                success: false,
+                message: error.message || 'Error al eliminar productos del movimiento'
+            };
+        }
+    }
+
+    // Crear productos de un movimiento
+    static async createProductos(movimientoId, productos) {
+        try {
+            if (!movimientoId) {
+                throw new Error('ID del movimiento es requerido');
+            }
+
+            if (!productos || !Array.isArray(productos)) {
+                throw new Error('Productos son requeridos');
+            }
+
+            // Preparar los datos de productos para insertar
+            const productosData = productos.map(producto => ({
+                movimiento_almacen_id: movimientoId,
+                producto_almacen_id: producto.id,
+                cantidad: producto.cantidad,
+                precio_unitario: producto.precio,
+                subtotal: producto.cantidad * producto.precio
+            }));
+
+            const { data, error } = await supabase
+                .from('movimiento_almacen_producto')
+                .insert(productosData)
+                .select();
+
+            if (error) {
+                throw new Error(`Error al crear productos del movimiento: ${error.message}`);
+            }
+
+            return {
+                success: true,
+                message: 'Productos del movimiento creados exitosamente',
+                data: data
+            };
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacen.createProductos:', error);
+            return {
+                success: false,
+                message: error.message || 'Error al crear productos del movimiento'
+            };
+        }
+    }
 }
 
 module.exports = movimientosAlmacen;
