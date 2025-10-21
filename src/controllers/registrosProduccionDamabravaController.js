@@ -44,11 +44,14 @@ class registrosProduccionDamabravaController {
                 });
             }
 
-            if (!microondas || isNaN(microondas) || parseFloat(microondas) < 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'La cantidad de microondas debe ser un número válido mayor o igual a 0'
-                });
+            // Validar microondas solo si se proporciona un valor
+            if (microondas !== undefined && microondas !== null && microondas !== '') {
+                if (isNaN(microondas) || parseFloat(microondas) < 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'La cantidad de microondas debe ser un número válido mayor o igual a 0'
+                    });
+                }
             }
 
             if (!terminados || isNaN(terminados) || parseFloat(terminados) < 0) {
@@ -101,7 +104,7 @@ class registrosProduccionDamabravaController {
                 producto_almacen_id,
                 lote: parseFloat(lote),
                 proceso,
-                microondas: parseFloat(microondas),
+                microondas: parseFloat(microondas) || 0,
                 terminados: parseFloat(terminados),
                 vencimiento: `${vencimiento}-01`, // Agregar día 1 para completar la fecha
                 sucursal_id,
