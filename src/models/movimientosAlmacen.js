@@ -267,6 +267,15 @@ class movimientosAlmacen {
             }
             
 
+            // Incrementar total_orders del cliente si es una salida con cliente
+            if (type === 'salida' && cliente_id) {
+                const incrementResult = await this.incrementarTotalOrdersCliente(cliente_id);
+                if (!incrementResult.success) {
+                    console.warn('Error incrementando total_orders del cliente:', incrementResult.message);
+                    // No fallar el movimiento por esto, solo logear el warning
+                }
+            }
+
             return { 
                 success: true, 
                 data: {
@@ -1120,6 +1129,15 @@ class movimientosAlmacen {
                 }
             }
 
+            // Decrementar total_orders del cliente si es una salida con cliente
+            if (movimiento.type === 'salida' && movimiento.cliente_id) {
+                const decrementResult = await this.decrementarTotalOrdersCliente(movimiento.cliente_id);
+                if (!decrementResult.success) {
+                    console.warn('Error decrementando total_orders del cliente:', decrementResult.message);
+                    // No fallar la anulación por esto, solo logear el warning
+                }
+            }
+
             return { 
                 success: true, 
                 message: 'Movimiento anulado correctamente',
@@ -1354,6 +1372,52 @@ class movimientosAlmacen {
                 success: false,
                 message: error.message
             };
+        }
+    }
+
+    // Método auxiliar para incrementar total_orders del cliente
+    static async incrementarTotalOrdersCliente(clienteId) {
+        try {
+            if (!clienteId) return { success: true };
+
+            const { error } = await supabase
+                .from('clients')
+                .update({ total_orders: supabase.raw('total_orders + 1') })
+                .eq('id', clienteId);
+
+            if (error) {
+                console.error('Error incrementando total_orders del cliente:', error);
+                return { success: false, message: 'Error al actualizar contador de órdenes del cliente' };
+            }
+
+            console.log(`✅ [TOTAL_ORDERS] Cliente ${clienteId} - total_orders incrementado`);
+            return { success: true };
+        } catch (error) {
+            console.error('Error en incrementarTotalOrdersCliente:', error);
+            return { success: false, message: 'Error al incrementar contador de órdenes' };
+        }
+    }
+
+    // Método auxiliar para decrementar total_orders del cliente
+    static async decrementarTotalOrdersCliente(clienteId) {
+        try {
+            if (!clienteId) return { success: true };
+
+            const { error } = await supabase
+                .from('clients')
+                .update({ total_orders: supabase.raw('GREATEST(total_orders - 1, 0)') })
+                .eq('id', clienteId);
+
+            if (error) {
+                console.error('Error decrementando total_orders del cliente:', error);
+                return { success: false, message: 'Error al actualizar contador de órdenes del cliente' };
+            }
+
+            console.log(`✅ [TOTAL_ORDERS] Cliente ${clienteId} - total_orders decrementado`);
+            return { success: true };
+        } catch (error) {
+            console.error('Error en decrementarTotalOrdersCliente:', error);
+            return { success: false, message: 'Error al decrementar contador de órdenes' };
         }
     }
 
