@@ -691,6 +691,47 @@ class Personal {
       };
     }
   }
+
+  // Método para resetear contraseña (limpiar hash de contraseña)
+  static async resetPassword(id) {
+    try {
+      if (!id) {
+        throw new Error('ID del personal es requerido');
+      }
+
+      // Verificar que el personal existe
+      const personal = await this.getById(id);
+      if (!personal) {
+        return {
+          success: false,
+          message: 'Personal no encontrado'
+        };
+      }
+
+      // Limpiar la contraseña estableciendo password a null
+      const { data, error } = await supabase
+        .from('personal')
+        .update({ password: null })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error('No se pudo resetear la contraseña');
+      }
+
+      return {
+        success: true,
+        message: 'Contraseña reseteada exitosamente. El empleado deberá establecer una nueva contraseña.'
+      };
+    } catch (error) {
+      console.error('Error al resetear contraseña:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
 }
 
 module.exports = Personal;

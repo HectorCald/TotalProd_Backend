@@ -14,10 +14,13 @@ router.post('/:id/change-password', PersonalController.changePassword); // Nueva
 // Aplicar autenticación a las rutas restantes
 router.use(requireAuth);
 
-// Aplicar middleware de acceso al módulo 'Personal' a todas las rutas
+// Rutas que requieren autenticación pero NO verificación de módulo
+router.post('/:id/reset-password', PersonalController.resetPassword);
+
+// Aplicar middleware de acceso al módulo 'Personal' a las rutas restantes
 router.use(requireModuleAccess('Personal'));
 
-// Rutas CRUD (solo autenticación requerida)
+// Rutas CRUD (autenticación + verificación de módulo requerida)
 router.get('/', PersonalController.getAll);
 router.get('/:id', PersonalController.getById);
 router.post('/', PersonalController.create);

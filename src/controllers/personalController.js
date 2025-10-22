@@ -353,6 +353,34 @@ class PersonalController {
       });
     }
   }
+
+  // Resetear contraseña de empleado
+  static async resetPassword(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del personal es requerido'
+        });
+      }
+
+      const result = await Personal.resetPassword(id);
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error) {
+      console.error('Error en resetPassword:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
 }
 
 module.exports = PersonalController;
