@@ -322,18 +322,18 @@ class User {
         return null; // Empresa sin propietario
       }
 
-      // 2. Obtener el plan del propietario
+      // 2. Obtener el plan del propietario con consulta optimizada
       const { data: activeUserPlan, error: userPlanError } = await supabase
         .from('user_plans')
         .select(`
           *,
-          plans (
+          plans!inner (
             id,
             name,
             price,
             duration,
-            plan_modules (
-              modules (
+            plan_modules!inner (
+              modules!inner (
                 id,
                 name,
                 description
@@ -342,6 +342,8 @@ class User {
           )
         `)
         .eq('user_id', empresa.propietario_id)
+        .eq('is_active', true)
+        .gt('end_date', new Date().toISOString())
         .order('start_date', { ascending: false })
         .limit(1)
         .single();

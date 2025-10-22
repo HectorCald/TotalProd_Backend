@@ -1,6 +1,7 @@
 const express = require('express');
 const PersonalController = require('../controllers/personalController');
 const { requireAuth } = require('../middleware/auth');
+const { requireModuleAccess } = require('../middleware/moduleAuth');
 
 const router = express.Router();
 
@@ -12,6 +13,9 @@ router.post('/:id/change-password', PersonalController.changePassword); // Nueva
 
 // Aplicar autenticación a las rutas restantes
 router.use(requireAuth);
+
+// Aplicar middleware de acceso al módulo 'Personal' a todas las rutas
+router.use(requireModuleAccess('Personal'));
 
 // Rutas CRUD (solo autenticación requerida)
 router.get('/', PersonalController.getAll);
