@@ -8,6 +8,9 @@ const router = express.Router();
 // Aplicar middleware de autenticación a todas las rutas
 router.use(requireAuth);
 
+// Aplicar middleware de acceso al módulo 'Deudas' a todas las rutas
+router.use(requireModuleAccess('Deudas'));
+
 // Rutas para las deudas
 router.get('/', deudasController.getAll);
 router.get('/sin-limite', deudasController.getAllSinLimite);

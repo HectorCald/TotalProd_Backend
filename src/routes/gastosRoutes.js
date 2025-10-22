@@ -8,6 +8,9 @@ const router = express.Router();
 // Aplicar middleware de autenticación a todas las rutas
 router.use(requireAuth);
 
+// Aplicar middleware de acceso al módulo 'Gastos' a todas las rutas
+router.use(requireModuleAccess('Gastos'));
+
 // Rutas para los gastos
 router.get('/', gastosController.getAll);
 router.get('/sin-limite', gastosController.getAllSinLimite);
