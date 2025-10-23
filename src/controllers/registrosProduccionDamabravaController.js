@@ -97,6 +97,45 @@ class registrosProduccionDamabravaController {
                 });
             }
 
+            // Obtener empresa_id de la sucursal seleccionada
+            let empresaId = req.user?.empresa_id;
+            
+            // Si no hay empresa_id en el usuario, intentar obtenerlo de la sucursal
+            if (!empresaId && sucursal_id) {
+                try {
+                    console.log('🔍 [CONTROLADOR] Obteniendo empresa_id de sucursal:', sucursal_id);
+                    const sucursales = require('../models/sucursales');
+                    const sucursalResponse = await sucursales.getById(sucursal_id);
+                    console.log('🔍 [CONTROLADOR] Respuesta completa de sucursal:', sucursalResponse);
+                    
+                    if (sucursalResponse && sucursalResponse.success && sucursalResponse.data) {
+                        const sucursal = sucursalResponse.data;
+                        console.log('🔍 [CONTROLADOR] Sucursal obtenida:', {
+                            id: sucursal?.id,
+                            name: sucursal?.name,
+                            empresa_id: sucursal?.empresa_id,
+                            empresas: sucursal?.empresas,
+                            tieneEmpresaId: !!sucursal?.empresa_id
+                        });
+                        
+                        // Intentar obtener empresa_id de diferentes fuentes
+                        if (sucursal.empresa_id) {
+                            empresaId = sucursal.empresa_id;
+                            console.log('✅ [CONTROLADOR] Empresa_id obtenido de sucursal.empresa_id:', empresaId);
+                        } else if (sucursal.empresas && sucursal.empresas.id) {
+                            empresaId = sucursal.empresas.id;
+                            console.log('✅ [CONTROLADOR] Empresa_id obtenido de sucursal.empresas.id:', empresaId);
+                        } else {
+                            console.log('❌ [CONTROLADOR] Sucursal no tiene empresa_id en ninguna fuente');
+                        }
+                    } else {
+                        console.log('❌ [CONTROLADOR] Error obteniendo sucursal:', sucursalResponse);
+                    }
+                } catch (error) {
+                    console.error('❌ [CONTROLADOR] Error obteniendo empresa_id de sucursal:', error);
+                }
+            }
+
             // Preparar datos del registro
             const registroData = {
                 user_id: finalUserId,
@@ -108,8 +147,18 @@ class registrosProduccionDamabravaController {
                 terminados: parseFloat(terminados),
                 vencimiento: `${vencimiento}-01`, // Agregar día 1 para completar la fecha
                 sucursal_id,
-                observaciones: observaciones || null
+                observaciones: observaciones || null,
+                empresa_id: empresaId // Usar el empresa_id obtenido
             };
+
+            console.log('🔍 [CONTROLADOR] Datos del registro:', {
+                producto_almacen_id,
+                terminados,
+                empresa_id: empresaId,
+                sucursal_id,
+                user_id: finalUserId,
+                personal_id: finalPersonalId
+            });
 
             // Crear el registro
             const result = await registrosProduccionDamabrava.create(registroData);

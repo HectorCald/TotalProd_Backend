@@ -689,17 +689,34 @@ class movimientosAlmacen {
     // Método para restar ingredientes del stock cuando se hace una entrada con receta
     static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, empresaId) {
         try {
+            console.log('🔍 [RESTAR INGREDIENTES] Iniciando proceso...');
+            console.log('🔍 [RESTAR INGREDIENTES] Parámetros recibidos:', {
+                productoPrincipal: productoPrincipal?.name,
+                cantidadEntrada,
+                empresaId,
+                ingredientesCount: ingredientes?.length
+            });
+
             // Preparar datos de ingredientes válidos
             const ingredientesValidos = ingredientes.filter(ingrediente => 
                 ingrediente.products_acopio && ingrediente.products_acopio.id
             );
 
+            console.log('🔍 [RESTAR INGREDIENTES] Ingredientes válidos:', ingredientesValidos.length);
+            console.log('🔍 [RESTAR INGREDIENTES] Detalles ingredientes:', ingredientesValidos.map(ing => ({
+                id: ing.products_acopio?.id,
+                name: ing.products_acopio?.name,
+                cantidad: ing.cantidad
+            })));
+
             if (ingredientesValidos.length === 0) {
+                console.log('⚠️ [RESTAR INGREDIENTES] No hay ingredientes válidos');
                 return { success: true, message: 'No hay ingredientes válidos para procesar' };
             }
 
             // Obtener IDs de ingredientes para consulta bulk
             const ingredienteIds = ingredientesValidos.map(ingrediente => ingrediente.products_acopio.id);
+            console.log('🔍 [RESTAR INGREDIENTES] IDs de ingredientes:', ingredienteIds);
 
             // Consulta bulk para obtener stocks actuales
             const { data: productosActuales, error: fetchError } = await supabase
@@ -708,15 +725,18 @@ class movimientosAlmacen {
                 .in('id', ingredienteIds);
 
             if (fetchError) {
-                console.error('Error obteniendo stocks de ingredientes:', fetchError);
+                console.error('❌ [RESTAR INGREDIENTES] Error obteniendo stocks:', fetchError);
                 throw new Error('Error al obtener stocks de ingredientes');
             }
+
+            console.log('🔍 [RESTAR INGREDIENTES] Stocks actuales obtenidos:', productosActuales);
 
             // Crear mapa de stocks actuales para acceso rápido
             const stocksActuales = {};
             productosActuales.forEach(producto => {
                 stocksActuales[producto.id] = producto.quantity;
             });
+            console.log('🔍 [RESTAR INGREDIENTES] Mapa de stocks:', stocksActuales);
 
             // Preparar actualizaciones batch
             const actualizaciones = [];
@@ -727,8 +747,18 @@ class movimientosAlmacen {
                 const cantidadActual = stocksActuales[ingrediente.products_acopio.id] || 0;
                 const nuevaCantidad = cantidadActual - cantidadARestar;
                 
+                console.log('🔍 [RESTAR INGREDIENTES] Procesando ingrediente:', {
+                    nombre: ingrediente.products_acopio.name,
+                    cantidadReceta: ingrediente.cantidad,
+                    cantidadEntrada,
+                    cantidadARestar,
+                    stockActual: cantidadActual,
+                    nuevaCantidad
+                });
+                
                 // Verificar stock suficiente
                 if (nuevaCantidad < 0) {
+                    console.log('❌ [RESTAR INGREDIENTES] Stock insuficiente para:', ingrediente.products_acopio.name);
                     ingredientesConStockInsuficiente.push({
                         nombre: ingrediente.products_acopio.name,
                         stockActual: cantidadActual,
@@ -745,6 +775,7 @@ class movimientosAlmacen {
 
             // Si hay ingredientes con stock insuficiente, retornar error
             if (ingredientesConStockInsuficiente.length > 0) {
+                console.log('❌ [RESTAR INGREDIENTES] Stock insuficiente, retornando error');
                 console.warn('Ingredientes con stock insuficiente:', ingredientesConStockInsuficiente);
                 
                 // Crear mensaje detallado de error
@@ -761,6 +792,8 @@ class movimientosAlmacen {
 
             // Ejecutar actualizaciones batch si hay ingredientes válidos
             if (actualizaciones.length > 0) {
+                console.log('🔍 [RESTAR INGREDIENTES] Actualizaciones a realizar:', actualizaciones);
+                
                 // Usar Promise.all para actualizaciones paralelas (más rápido que secuencial)
                 const updatePromises = actualizaciones.map(actualizacion =>
                     supabase
@@ -770,6 +803,7 @@ class movimientosAlmacen {
                 );
 
                 const updateResults = await Promise.all(updatePromises);
+                console.log('🔍 [RESTAR INGREDIENTES] Resultados de actualización:', updateResults);
 
                 // Verificar errores en las actualizaciones
                 const errores = updateResults
@@ -1688,6 +1722,77 @@ class movimientosAlmacen {
             return {
                 success: false,
                 message: error.message || 'Error al crear productos del movimiento'
+            };
+        }
+    }
+
+    // Método para devolver ingredientes (sumar al stock)
+    static async devolverIngredientes(producto, cantidad, ingredientes, empresaId) {
+        try {
+            console.log('🔍 [DEVOLVER INGREDIENTES] Iniciando proceso...');
+            console.log('🔍 [DEVOLVER INGREDIENTES] Parámetros recibidos:', {
+                producto: producto?.name,
+                cantidad,
+                empresaId,
+                ingredientesCount: ingredientes?.length
+            });
+
+            if (!ingredientes || ingredientes.length === 0) {
+                console.log('ℹ️ [DEVOLVER INGREDIENTES] No hay ingredientes para devolver');
+                return { success: true, message: 'No hay ingredientes para devolver' };
+            }
+
+            const ingredientesDevueltos = [];
+            
+            // Devolver ingredientes (sumar al stock)
+            for (const ingrediente of ingredientes) {
+                if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
+                    console.log('⚠️ [DEVOLVER INGREDIENTES] Ingrediente sin datos válidos, saltando');
+                    continue;
+                }
+
+                const cantidadADevolver = ingrediente.cantidad * cantidad;
+                const cantidadActual = ingrediente.products_acopio.quantity;
+                const nuevaCantidadIngrediente = cantidadActual + cantidadADevolver;
+
+                console.log('🔍 [DEVOLVER INGREDIENTES] Devolviendo ingrediente:', {
+                    nombre: ingrediente.products_acopio.name,
+                    cantidadReceta: ingrediente.cantidad,
+                    cantidad,
+                    cantidadADevolver,
+                    stockActual: cantidadActual,
+                    nuevoStock: nuevaCantidadIngrediente
+                });
+
+                const { error: ingredienteError } = await supabase
+                    .from('products_acopio')
+                    .update({ quantity: nuevaCantidadIngrediente })
+                    .eq('id', ingrediente.products_acopio.id);
+
+                if (ingredienteError) {
+                    console.error(`❌ [DEVOLVER INGREDIENTES] Error devolviendo ingrediente ${ingrediente.products_acopio.name}:`, ingredienteError);
+                    // Continuar con el siguiente ingrediente
+                } else {
+                    console.log(`✅ [DEVOLVER INGREDIENTES] Ingrediente devuelto: ${ingrediente.products_acopio.name} - Cantidad: ${cantidadADevolver}`);
+                    ingredientesDevueltos.push({
+                        nombre: ingrediente.products_acopio.name,
+                        cantidad: cantidadADevolver
+                    });
+                }
+            }
+
+            console.log('✅ [DEVOLVER INGREDIENTES] Proceso completado, ingredientes devueltos:', ingredientesDevueltos.length);
+            return {
+                success: true,
+                message: `Ingredientes devueltos correctamente: ${ingredientesDevueltos.length} ingredientes`,
+                ingredientesDevueltos: ingredientesDevueltos
+            };
+
+        } catch (error) {
+            console.error('❌ [DEVOLVER INGREDIENTES] Error en devolverIngredientes:', error);
+            return {
+                success: false,
+                message: 'Error interno al devolver ingredientes: ' + error.message
             };
         }
     }

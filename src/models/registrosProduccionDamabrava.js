@@ -1,4 +1,6 @@
 const { supabase } = require('../config/supabase');
+const productsAlmacen = require('./productsAlmacen');
+const movimientosAlmacen = require('./movimientosAlmacen');
 
 class registrosProduccionDamabrava {
     // Crear un nuevo registro de producción
@@ -14,12 +16,55 @@ class registrosProduccionDamabrava {
                 terminados, 
                 vencimiento, 
                 sucursal_id,
-                observaciones 
+                observaciones,
+                empresa_id 
             } = registroData;
 
             // Crear timestamp en zona horaria de Bolivia (GMT-4)
             const ahora = new Date();
             const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+
+            // VALIDAR Y RESTAR INGREDIENTES ANTES de crear el registro
+            if (empresa_id) {
+                try {
+                    // Obtener el producto con sus recetas
+                    const producto = await productsAlmacen.getById(producto_almacen_id, empresa_id);
+                    
+                    if (producto && producto.recetas && producto.recetas.length > 0) {
+                        const receta = producto.recetas[0];
+                        
+                        if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
+
+                            // Usar la función existente de movimientosAlmacen
+                            const resultadoIngredientes = await movimientosAlmacen.restarIngredientes(
+                                producto,
+                                parseFloat(terminados),
+                                receta.recetas_detalle,
+                                empresa_id
+                            );
+                            
+                            
+                            // Si la validación falla, retornar error sin crear el registro
+                            if (!resultadoIngredientes.success) {
+                                return {
+                                    success: false,
+                                    message: resultadoIngredientes.message,
+                                    ingredientesConStockInsuficiente: resultadoIngredientes.ingredientesConStockInsuficiente
+                                };
+                            }
+                            
+                        } else {
+                        }
+                    } else {
+                    }
+                } catch (error) {
+                    return {
+                        success: false,
+                        message: 'Error al validar el stock de ingredientes: ' + error.message
+                    };
+                }
+            } else {
+            }
 
             // Preparar datos para insertar
             const insertData = {
@@ -63,7 +108,6 @@ class registrosProduccionDamabrava {
                 .single();
 
             if (registroError) {
-                console.error('Error creando registro de producción:', registroError);
                 return { 
                     success: false, 
                     message: 'Error al crear el registro de producción', 
@@ -118,7 +162,6 @@ class registrosProduccionDamabrava {
             };
 
         } catch (error) {
-            console.error('Error en registrosProduccionDamabrava.create:', error);
             return { 
                 success: false, 
                 message: 'Error interno del servidor', 
@@ -259,7 +302,6 @@ class registrosProduccionDamabrava {
             };
 
         } catch (error) {
-            console.error('Error en registrosProduccionDamabrava.getAll:', error);
             return { success: false, message: 'Error interno del servidor', error };
         }
     }
@@ -267,6 +309,7 @@ class registrosProduccionDamabrava {
     // Eliminar un registro de producción
     static async delete(registroId) {
         try {
+            
             // Verificar que el registro existe
             const { data: registro, error: registroError } = await supabase
                 .from('registros_produccion_damabrava')
@@ -275,7 +318,6 @@ class registrosProduccionDamabrava {
                 .single();
 
             if (registroError) {
-                console.error('Error obteniendo registro:', registroError);
                 return { success: false, message: 'Registro no encontrado' };
             }
 
@@ -283,24 +325,85 @@ class registrosProduccionDamabrava {
                 return { success: false, message: 'Registro no encontrado' };
             }
 
-            // Eliminar el registro
+
+            // PASO 1: DEVOLVER INGREDIENTES PRIMERO
+            
+            let resultadoIngredientes = { ingredientesDevueltos: [] };
+            
+            // Obtener el registro con producto y recetas para devolver ingredientes
+            const { data: registroCompleto, error: registroCompletoError } = await supabase
+                .from('registros_produccion_damabrava')
+                .select(`
+                    id,
+                    terminados,
+                    producto_almacen_id,
+                    producto_almacen:producto_almacen_id(
+                        id,
+                        name,
+                        recetas(
+                            id,
+                            descripcion,
+                            recetas_detalle(
+                                id,
+                                cantidad,
+                                products_acopio:producto_acopio_id(
+                                    id,
+                                    name,
+                                    quantity
+                                )
+                            )
+                        )
+                    )
+                `)
+                .eq('id', registroId)
+                .single();
+
+            if (registroCompleto && registroCompleto.producto_almacen && 
+                registroCompleto.producto_almacen.recetas && 
+                registroCompleto.producto_almacen.recetas.length > 0) {
+                
+                const receta = registroCompleto.producto_almacen.recetas[0];
+                if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
+                    // Usar el método existente de movimientosAlmacen
+                    resultadoIngredientes = await movimientosAlmacen.devolverIngredientes(
+                        registroCompleto.producto_almacen,
+                        registroCompleto.terminados,
+                        receta.recetas_detalle,
+                        null // empresaId no es necesario para devolver
+                    );
+                    
+                    if (!resultadoIngredientes.success) {
+                    } else {
+                        console.log('✅ [ELIMINAR PRODUCCIÓN] PASO 1 COMPLETADO: Ingredientes devueltos correctamente');
+                    }
+                } else {
+                    console.log('ℹ️ [ELIMINAR PRODUCCIÓN] Producto sin ingredientes, no hay nada que devolver');
+                }
+            } else {
+                console.log('ℹ️ [ELIMINAR PRODUCCIÓN] Producto sin recetas, no hay ingredientes que devolver');
+            }
+
+            // PASO 2: ELIMINAR EL REGISTRO DESPUÉS
+            console.log('🔍 [ELIMINAR PRODUCCIÓN] PASO 2: Eliminando registro de la base de datos...');
             const { error: deleteError } = await supabase
                 .from('registros_produccion_damabrava')
                 .delete()
                 .eq('id', registroId);
 
             if (deleteError) {
-                console.error('Error eliminando registro:', deleteError);
+                console.error('❌ [ELIMINAR PRODUCCIÓN] Error eliminando registro:', deleteError);
                 return { success: false, message: 'Error al eliminar el registro' };
             }
 
+            console.log('✅ [ELIMINAR PRODUCCIÓN] PASO 2 COMPLETADO: Registro eliminado correctamente');
             return { 
                 success: true, 
-                message: 'Registro eliminado correctamente'
+                message: 'Registro eliminado correctamente',
+                ingredientesDevueltos: resultadoIngredientes.ingredientesDevueltos || []
             };
 
         } catch (error) {
-            console.error('Error en eliminar registro:', error);
+            console.error('❌ [ELIMINAR PRODUCCIÓN] Error en eliminar registro:', error);
             return { success: false, message: 'Error interno del servidor' };
         }
     }
@@ -310,28 +413,123 @@ class registrosProduccionDamabrava {
         try {
             const { cantidad_verificada, observaciones } = verificacionData;
 
+            console.log('🔍 [VERIFICAR PRODUCCIÓN] Iniciando verificación:', {
+                registroId,
+                cantidad_verificada
+            });
+
             // Crear timestamp en zona horaria de Bolivia (GMT-4)
             const ahora = new Date();
             const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
 
-            // Verificar que el registro existe y está en estado pendiente
+            // Verificar que el registro existe y obtener datos completos
             const { data: registro, error: registroError } = await supabase
                 .from('registros_produccion_damabrava')
-                .select('id, estado')
+                .select(`
+                    id, 
+                    estado, 
+                    terminados,
+                    producto_almacen_id,
+                    producto_almacen:producto_almacen_id(
+                        id,
+                        name,
+                        recetas(
+                            id,
+                            descripcion,
+                            recetas_detalle(
+                                id,
+                                cantidad,
+                                products_acopio:producto_acopio_id(
+                                    id,
+                                    name,
+                                    quantity
+                                )
+                            )
+                        )
+                    )
+                `)
                 .eq('id', registroId)
                 .single();
 
             if (registroError) {
-                console.error('Error obteniendo registro:', registroError);
+                console.error('❌ [VERIFICAR PRODUCCIÓN] Error obteniendo registro:', registroError);
                 return { success: false, message: 'Registro no encontrado' };
             }
 
             if (!registro) {
+                console.log('❌ [VERIFICAR PRODUCCIÓN] Registro no encontrado');
                 return { success: false, message: 'Registro no encontrado' };
             }
 
             if (registro.estado !== 'pendiente') {
+                console.log('❌ [VERIFICAR PRODUCCIÓN] Registro no está en estado pendiente:', registro.estado);
                 return { success: false, message: 'Solo se pueden verificar registros en estado pendiente' };
+            }
+
+            console.log('🔍 [VERIFICAR PRODUCCIÓN] Registro obtenido:', {
+                id: registro.id,
+                terminados: registro.terminados,
+                cantidad_verificada,
+                diferencia: parseFloat(cantidad_verificada) - registro.terminados
+            });
+
+            // MANEJAR DIFERENCIA ENTRE REGISTRADO Y VERIFICADO
+            const cantidadRegistrada = registro.terminados;
+            const cantidadVerificada = parseFloat(cantidad_verificada);
+            const diferencia = cantidadVerificada - cantidadRegistrada;
+
+            console.log('🔍 [VERIFICAR PRODUCCIÓN] Análisis de diferencia:', {
+                cantidadRegistrada,
+                cantidadVerificada,
+                diferencia,
+                tipo: diferencia > 0 ? 'MÁS' : diferencia < 0 ? 'MENOS' : 'IGUAL'
+            });
+
+            // Si hay diferencia, ajustar ingredientes
+            if (diferencia !== 0 && registro.producto_almacen && 
+                registro.producto_almacen.recetas && 
+                registro.producto_almacen.recetas.length > 0) {
+                
+                const receta = registro.producto_almacen.recetas[0];
+                if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
+                    
+                    if (diferencia < 0) {
+                        // VERIFICÓ MENOS: Devolver ingredientes de la diferencia
+                        console.log('🔍 [VERIFICAR PRODUCCIÓN] Verificó MENOS, devolviendo ingredientes de:', Math.abs(diferencia));
+                        const resultadoDevolver = await movimientosAlmacen.devolverIngredientes(
+                            registro.producto_almacen,
+                            Math.abs(diferencia),
+                            receta.recetas_detalle,
+                            null
+                        );
+                        
+                        if (resultadoDevolver.success) {
+                            console.log('✅ [VERIFICAR PRODUCCIÓN] Ingredientes devueltos correctamente');
+                        } else {
+                            console.log('⚠️ [VERIFICAR PRODUCCIÓN] Error devolviendo ingredientes:', resultadoDevolver.message);
+                        }
+                        
+                    } else if (diferencia > 0) {
+                        // VERIFICÓ MÁS: Restar ingredientes de la diferencia
+                        console.log('🔍 [VERIFICAR PRODUCCIÓN] Verificó MÁS, restando ingredientes de:', diferencia);
+                        const resultadoRestar = await movimientosAlmacen.restarIngredientes(
+                            registro.producto_almacen,
+                            diferencia,
+                            receta.recetas_detalle,
+                            null
+                        );
+                        
+                        if (resultadoRestar.success) {
+                            console.log('✅ [VERIFICAR PRODUCCIÓN] Ingredientes restados correctamente');
+                        } else {
+                            console.log('⚠️ [VERIFICAR PRODUCCIÓN] Error restando ingredientes:', resultadoRestar.message);
+                        }
+                    }
+                } else {
+                    console.log('ℹ️ [VERIFICAR PRODUCCIÓN] Producto sin ingredientes, no hay ajuste que hacer');
+                }
+            } else {
+                console.log('ℹ️ [VERIFICAR PRODUCCIÓN] Sin diferencia o producto sin recetas, no hay ajuste que hacer');
             }
 
             // Actualizar el registro con los datos de verificación
@@ -418,32 +616,127 @@ class registrosProduccionDamabrava {
     // Anular verificación de un registro de producción
     static async unverify(registroId) {
         try {
-            // Verificar que el registro existe y está verificado
+            console.log('🔍 [ANULAR VERIFICACIÓN] Iniciando anulación:', registroId);
+
+            // Verificar que el registro existe y obtener datos completos
             const { data: registro, error: registroError } = await supabase
                 .from('registros_produccion_damabrava')
-                .select('id, estado, cantidad_ingresada')
+                .select(`
+                    id, 
+                    estado, 
+                    cantidad_ingresada,
+                    terminados,
+                    cantidad_verificada,
+                    producto_almacen_id,
+                    producto_almacen:producto_almacen_id(
+                        id,
+                        name,
+                        recetas(
+                            id,
+                            descripcion,
+                            recetas_detalle(
+                                id,
+                                cantidad,
+                                products_acopio:producto_acopio_id(
+                                    id,
+                                    name,
+                                    quantity
+                                )
+                            )
+                        )
+                    )
+                `)
                 .eq('id', registroId)
                 .single();
 
             if (registroError) {
-                console.error('Error obteniendo registro:', registroError);
+                console.error('❌ [ANULAR VERIFICACIÓN] Error obteniendo registro:', registroError);
                 return { success: false, message: 'Registro no encontrado' };
             }
 
             if (!registro) {
+                console.log('❌ [ANULAR VERIFICACIÓN] Registro no encontrado');
                 return { success: false, message: 'Registro no encontrado' };
             }
 
             if (registro.estado !== 'verificado') {
+                console.log('❌ [ANULAR VERIFICACIÓN] Registro no está verificado:', registro.estado);
                 return { success: false, message: 'Solo se pueden anular verificaciones de registros verificados' };
             }
 
             // Verificar que no haya cantidad ingresada
             if (registro.cantidad_ingresada && registro.cantidad_ingresada > 0) {
+                console.log('❌ [ANULAR VERIFICACIÓN] Ya hay cantidad ingresada:', registro.cantidad_ingresada);
                 return { 
                     success: false, 
                     message: 'No se puede anular la verificación porque ya hay cantidad ingresada al almacén' 
                 };
+            }
+
+            console.log('🔍 [ANULAR VERIFICACIÓN] Registro obtenido:', {
+                id: registro.id,
+                terminados: registro.terminados,
+                cantidad_verificada: registro.cantidad_verificada,
+                diferencia: registro.cantidad_verificada - registro.terminados
+            });
+
+            // REVERTIR AJUSTE DE INGREDIENTES DE LA VERIFICACIÓN
+            const cantidadRegistrada = registro.terminados;
+            const cantidadVerificada = registro.cantidad_verificada;
+            const diferencia = cantidadVerificada - cantidadRegistrada;
+
+            console.log('🔍 [ANULAR VERIFICACIÓN] Análisis de diferencia a revertir:', {
+                cantidadRegistrada,
+                cantidadVerificada,
+                diferencia,
+                tipo: diferencia > 0 ? 'MÁS' : diferencia < 0 ? 'MENOS' : 'IGUAL'
+            });
+
+            // Si hay diferencia, revertir el ajuste de ingredientes
+            if (diferencia !== 0 && registro.producto_almacen && 
+                registro.producto_almacen.recetas && 
+                registro.producto_almacen.recetas.length > 0) {
+                
+                const receta = registro.producto_almacen.recetas[0];
+                if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
+                    
+                    if (diferencia < 0) {
+                        // VERIFICÓ MENOS: Revertir devolución (restar de vuelta)
+                        console.log('🔍 [ANULAR VERIFICACIÓN] Verificó MENOS, revirtiendo devolución (restando):', Math.abs(diferencia));
+                        const resultadoRevertir = await movimientosAlmacen.restarIngredientes(
+                            registro.producto_almacen,
+                            Math.abs(diferencia),
+                            receta.recetas_detalle,
+                            null
+                        );
+                        
+                        if (resultadoRevertir.success) {
+                            console.log('✅ [ANULAR VERIFICACIÓN] Reversión completada correctamente');
+                        } else {
+                            console.log('⚠️ [ANULAR VERIFICACIÓN] Error revirtiendo:', resultadoRevertir.message);
+                        }
+                        
+                    } else if (diferencia > 0) {
+                        // VERIFICÓ MÁS: Revertir resta (devolver de vuelta)
+                        console.log('🔍 [ANULAR VERIFICACIÓN] Verificó MÁS, revirtiendo resta (devolviendo):', diferencia);
+                        const resultadoRevertir = await movimientosAlmacen.devolverIngredientes(
+                            registro.producto_almacen,
+                            diferencia,
+                            receta.recetas_detalle,
+                            null
+                        );
+                        
+                        if (resultadoRevertir.success) {
+                            console.log('✅ [ANULAR VERIFICACIÓN] Reversión completada correctamente');
+                        } else {
+                            console.log('⚠️ [ANULAR VERIFICACIÓN] Error revirtiendo:', resultadoRevertir.message);
+                        }
+                    }
+                } else {
+                    console.log('ℹ️ [ANULAR VERIFICACIÓN] Producto sin ingredientes, no hay reversión que hacer');
+                }
+            } else {
+                console.log('ℹ️ [ANULAR VERIFICACIÓN] Sin diferencia o producto sin recetas, no hay reversión que hacer');
             }
 
             // Actualizar el registro quitando los datos de verificación
@@ -881,6 +1174,8 @@ class registrosProduccionDamabrava {
             return { success: false, message: 'Error interno del servidor' };
         }
     }
+
+
 }
 
 module.exports = registrosProduccionDamabrava;
