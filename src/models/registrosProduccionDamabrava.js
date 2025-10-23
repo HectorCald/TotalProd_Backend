@@ -20,9 +20,9 @@ class registrosProduccionDamabrava {
                 empresa_id 
             } = registroData;
 
-            // Crear timestamp en zona horaria de Bolivia (GMT-4)
+            // Crear timestamp en zona horaria de Bolivia (GMT-4) - OPTIMIZADO
             const ahora = new Date();
-            const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+            const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
 
             // VALIDAR Y RESTAR INGREDIENTES ANTES de crear el registro
             if (empresa_id) {
@@ -418,9 +418,9 @@ class registrosProduccionDamabrava {
                 cantidad_verificada
             });
 
-            // Crear timestamp en zona horaria de Bolivia (GMT-4)
+            // Crear timestamp en zona horaria de Bolivia (GMT-4) - OPTIMIZADO
             const ahora = new Date();
-            const ahoraBolivia = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)); // Restar 4 horas
+            const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
 
             // Verificar que el registro existe y obtener datos completos
             const { data: registro, error: registroError } = await supabase
