@@ -23,6 +23,9 @@ router.post('/', cotizacionesController.create);
 // Anular una cotización
 router.put('/:id/anular', cotizacionesController.anular);
 
+// Aprobar una cotización
+router.put('/:id/aprobar', cotizacionesController.aprobar);
+
 // Eliminar una cotización
 router.delete('/:id', cotizacionesController.eliminar);
 
