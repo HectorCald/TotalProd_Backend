@@ -1,5 +1,15 @@
 const { supabase } = require('../config/supabase');
 
+// Función helper para normalizar texto (quitar acentos)
+const normalizeText = (text) => {
+    if (!text) return '';
+    return text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+        .trim();
+};
+
 class movimientosAcopio {
   // Crear un movimiento
   static async create(movimientoData, userId, personalId = null) {
@@ -460,8 +470,11 @@ class movimientosAcopio {
 
       let dataFiltrada = data || [];
       if (search && search.trim() !== '') {
-        const term = search.toLowerCase();
-        dataFiltrada = dataFiltrada.filter(m => (m.product?.name || '').toLowerCase().includes(term));
+        const normalizedSearchTerm = normalizeText(search);
+        dataFiltrada = dataFiltrada.filter(m => {
+          const productName = normalizeText(m.product?.name || '');
+          return productName.includes(normalizedSearchTerm);
+        });
       }
 
       const movimientosConNombres = (dataFiltrada || []).map(mov => ({

@@ -1,5 +1,15 @@
 const { supabase } = require('../config/supabase');
 
+// Función helper para normalizar texto (quitar acentos)
+const normalizeText = (text) => {
+    if (!text) return '';
+    return text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+        .trim();
+};
+
 class movimientosAlmacen {
     // Crear un nuevo movimiento de almacén
     static async create(movimientoData) {
@@ -458,6 +468,7 @@ class movimientosAlmacen {
             // Si hay búsqueda por nombre de producto, prefiltrar por IDs de movimientos que tengan ese producto en el detalle
             let movimientosIdsFiltrados = null;
             if (search && search.trim() !== '') {
+                const normalizedSearchTerm = normalizeText(search);
                 const term = `%${search}%`;
                 // 1) Buscar productos por nombre en products_almacen
                 const { data: productosMatches, error: prodErr } = await supabase
@@ -580,7 +591,17 @@ class movimientosAlmacen {
 				};
 			});
 
-            // Ya prefiltramos por IDs si search existe; no es necesario refiltrar en memoria
+            // Filtrar adicionalmente en memoria para manejar acentos
+            if (search && search.trim() !== '') {
+                const normalizedSearchTerm = normalizeText(search);
+                movimientosConProductos = movimientosConProductos.filter(movimiento => {
+                    // Buscar en los nombres de productos del movimiento
+                    return movimiento.productos.some(producto => {
+                        const productName = normalizeText(producto.producto?.name || '');
+                        return productName.includes(normalizedSearchTerm);
+                    });
+                });
+            }
 
             const tHydrateMs = Date.now() - tHydrateStart;
 
