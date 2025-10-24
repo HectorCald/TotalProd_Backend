@@ -338,7 +338,8 @@ class registrosProduccionDamabravaController {
             if (!result.success) {
                 return res.status(400).json({
                     success: false,
-                    message: result.message
+                    message: result.message,
+                    ingredientesConStockInsuficiente: result.ingredientesConStockInsuficiente
                 });
             }
 
@@ -375,7 +376,8 @@ class registrosProduccionDamabravaController {
             if (!result.success) {
                 return res.status(400).json({
                     success: false,
-                    message: result.message
+                    message: result.message,
+                    ingredientesConStockInsuficiente: result.ingredientesConStockInsuficiente
                 });
             }
 

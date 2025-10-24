@@ -485,7 +485,7 @@ class registrosProduccionDamabrava {
                 tipo: diferencia > 0 ? 'MÁS' : diferencia < 0 ? 'MENOS' : 'IGUAL'
             });
 
-            // Si hay diferencia, ajustar ingredientes
+            // PRIMERO: Validar y ajustar ingredientes ANTES de actualizar el registro
             if (diferencia !== 0 && registro.producto_almacen && 
                 registro.producto_almacen.recetas && 
                 registro.producto_almacen.recetas.length > 0) {
@@ -507,6 +507,11 @@ class registrosProduccionDamabrava {
                             console.log('✅ [VERIFICAR PRODUCCIÓN] Ingredientes devueltos correctamente');
                         } else {
                             console.log('⚠️ [VERIFICAR PRODUCCIÓN] Error devolviendo ingredientes:', resultadoDevolver.message);
+                            // Si falla la devolución, retornar error y no continuar con la verificación
+                            return {
+                                success: false,
+                                message: resultadoDevolver.message
+                            };
                         }
                         
                     } else if (diferencia > 0) {
@@ -523,6 +528,12 @@ class registrosProduccionDamabrava {
                             console.log('✅ [VERIFICAR PRODUCCIÓN] Ingredientes restados correctamente');
                         } else {
                             console.log('⚠️ [VERIFICAR PRODUCCIÓN] Error restando ingredientes:', resultadoRestar.message);
+                            // Si no hay suficiente stock, retornar error y no continuar con la verificación
+                            return {
+                                success: false,
+                                message: resultadoRestar.message,
+                                ingredientesConStockInsuficiente: resultadoRestar.ingredientesConStockInsuficiente
+                            };
                         }
                     }
                 } else {
@@ -714,6 +725,12 @@ class registrosProduccionDamabrava {
                             console.log('✅ [ANULAR VERIFICACIÓN] Reversión completada correctamente');
                         } else {
                             console.log('⚠️ [ANULAR VERIFICACIÓN] Error revirtiendo:', resultadoRevertir.message);
+                            // Si no hay suficiente stock para revertir, retornar error
+                            return {
+                                success: false,
+                                message: resultadoRevertir.message,
+                                ingredientesConStockInsuficiente: resultadoRevertir.ingredientesConStockInsuficiente
+                            };
                         }
                         
                     } else if (diferencia > 0) {
@@ -730,6 +747,11 @@ class registrosProduccionDamabrava {
                             console.log('✅ [ANULAR VERIFICACIÓN] Reversión completada correctamente');
                         } else {
                             console.log('⚠️ [ANULAR VERIFICACIÓN] Error revirtiendo:', resultadoRevertir.message);
+                            // Si falla la reversión, retornar error y no continuar con la anulación
+                            return {
+                                success: false,
+                                message: resultadoRevertir.message
+                            };
                         }
                     }
                 } else {
