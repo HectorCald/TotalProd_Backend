@@ -157,7 +157,8 @@ class productsAcopio {
         quantity: productData.quantity !== undefined ? productData.quantity : 0,
         type_measure_id: productData.type_measure_id || null,
         category_id: productData.category_id || null,
-        empresa_id: empresaId
+        empresa_id: empresaId,
+        stock_minimo: productData.stock_minimo || 0
       };
 
       const { data: product, error: productError } = await supabase
@@ -332,7 +333,8 @@ class productsAcopio {
         description: productData.description || null,
         quantity: productData.quantity !== undefined ? productData.quantity : 0,
         type_measure_id: productData.type_measure_id || null,
-        category_id: productData.category_id || null
+        category_id: productData.category_id || null,
+        stock_minimo: productData.stock_minimo || 0
       };
 
       const { data, error } = await supabase

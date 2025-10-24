@@ -7,6 +7,7 @@ CREATE TABLE products_acopio (
     type_measure_id UUID NOT NULL,
     quantity NUMERIC NOT NULL,
     empresa_id UUID NOT NULL,
+    stock_minimo NUMERIC,
     CONSTRAINT products_acopio_type_measure_id_fkey 
         FOREIGN KEY (type_measure_id) REFERENCES type_measure (id),
     CONSTRAINT products_acopio_empresa_id_fkey 

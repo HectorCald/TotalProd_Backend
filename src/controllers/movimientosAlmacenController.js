@@ -7,7 +7,7 @@ class movimientosAlmacenController {
         
         try {
             const tValidationStart = Date.now();
-            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id } = req.body;
+            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento } = req.body;
             const user_id = req.user?.id;
             const userType = req.user?.type; // Verificar si es empleado o usuario normal
 
@@ -105,6 +105,8 @@ class movimientosAlmacenController {
                 productos,
                 restar_ingredientes: restar_ingredientes || false,
                 produccion_damabrava_id: produccion_damabrava_id || null,
+                descuento: parseFloat(descuento) || 0,
+                aumento: parseFloat(aumento) || 0,
                 ...(gasto_id ? { gasto_id } : {}),
                 ...(typeof agrupado !== 'undefined' ? { agrupado: !!agrupado } : {})
             };

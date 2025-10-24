@@ -17,6 +17,8 @@ CREATE TABLE movimientos_almacen (
     agrupado BOOLEAN NOT NULL DEFAULT FALSE,
     gasto_id UUID NULL,
     numero_orden INTEGER NULL,
+    descuento NUMERIC DEFAULT 0,
+    aumento NUMERIC DEFAULT 0,
     CONSTRAINT movimientos_almacen_cliente_id_fkey
         FOREIGN KEY (cliente_id) REFERENCES clients (id),
     CONSTRAINT movimientos_almacen_proveedor_id_fkey

@@ -15,7 +15,7 @@ class movimientosAlmacen {
     static async create(movimientoData) {
         
         try {
-            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id } = movimientoData;
+            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento } = movimientoData;
 
             // Crear timestamp en zona horaria de Bolivia (GMT-4) - OPTIMIZADO
             const ahora = new Date();
@@ -32,6 +32,8 @@ class movimientosAlmacen {
                 restar_ingredientes: restar_ingredientes || false,
                 produccion_damabrava_id: produccion_damabrava_id || null,
                 agrupado: !!agrupado,
+                descuento: parseFloat(descuento) || 0,
+                aumento: parseFloat(aumento) || 0,
                 fecha: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
                 estado: 'finalizado' // Estado por defecto
             };
@@ -55,7 +57,7 @@ class movimientosAlmacen {
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
                 .insert(insertData)
-                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado')
+                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento')
                 .single();
                 
 
@@ -253,7 +255,9 @@ class movimientosAlmacen {
                 proveedor_id: movimiento.proveedor_id,
                 restar_ingredientes: movimiento.restar_ingredientes,
                 produccion_damabrava_id: movimiento.produccion_damabrava_id,
-                agrupado: movimiento.agrupado
+                agrupado: movimiento.agrupado,
+                descuento: movimiento.descuento,
+                aumento: movimiento.aumento
             };
 
             // Usar productos con stock calculado (ya calculado arriba) o preparar fallback

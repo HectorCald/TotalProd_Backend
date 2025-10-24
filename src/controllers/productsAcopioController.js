@@ -35,7 +35,7 @@ class productsAcopioController {
   // Crear un producto
   static async create(req, res) {
     try {
-      const { name, description, quantity, type_measure_id, category_id, receta, empresa_id } = req.body;
+      const { name, description, quantity, type_measure_id, category_id, stock_minimo, receta, empresa_id } = req.body;
       const userType = req.user?.type;
 
       // Validaciones básicas
@@ -81,6 +81,7 @@ class productsAcopioController {
         quantity: quantity,
         type_measure_id: type_measure_id,
         category_id: category_id || null,
+        stock_minimo: stock_minimo || 0,
         receta: receta
       }, empresa_id);
 
@@ -147,7 +148,7 @@ class productsAcopioController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { name, description, quantity, type_measure_id, category_id, receta } = req.body;
+      const { name, description, quantity, type_measure_id, category_id, stock_minimo, receta } = req.body;
       const userType = req.user?.type;
 
       if (!id) {
@@ -177,6 +178,7 @@ class productsAcopioController {
         quantity: quantity,
         type_measure_id: type_measure_id,
         category_id: category_id || null,
+        stock_minimo: stock_minimo || 0,
         receta: receta
       }, null);
 
