@@ -17,6 +17,7 @@ class User {
     this.modules = data.plan?.modules || [];
     this.empresa_id = data.empresa_id || null;
     this.empresa = data.empresa || null;
+    this.logo_tipo = data.logo_tipo || null; // Logo de la empresa
   }
 
   // Método estático para crear un usuario
@@ -218,7 +219,8 @@ class User {
           empresas!empresas_propietario_id_fkey (
             id,
             name,
-            description
+            description,
+            logo_tipo
           )
         `)
         .eq('id', id)
@@ -282,10 +284,12 @@ class User {
       if (user.empresas && user.empresas.length > 0) {
         user.empresa = user.empresas[0]; // El usuario es propietario de una empresa
         user.empresa_id = user.empresas[0].id;
+        user.logo_tipo = user.empresas[0].logo_tipo; // Incluir el logo de la empresa
         delete user.empresas; // Limpiar datos innecesarios
       } else {
         user.empresa = null;
         user.empresa_id = null;
+        user.logo_tipo = null;
       }
       
       const userInstance = new User(user);

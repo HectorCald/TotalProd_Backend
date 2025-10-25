@@ -190,7 +190,8 @@ class UserController {
             plan: user.plan,
             modules: user.modules,
             empresa_id: user.empresa_id,
-            empresa: user.empresa
+            empresa: user.empresa,
+            logo_tipo: user.logo_tipo
           }
         }
       });
