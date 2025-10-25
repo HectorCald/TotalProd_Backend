@@ -26,7 +26,12 @@ class Personal {
           *,
           sucursales (
             id,
-            name
+            name,
+            empresas (
+              id,
+              name,
+              logo_tipo
+            )
           ),
           personal_modulo_permiso (
             sub_modulo_id,
@@ -78,10 +83,15 @@ class Personal {
           reemplazar: false
         };
 
-        // Procesar la sucursal
+        // Procesar la sucursal con información de la empresa
         const sucursal = personal.sucursales ? {
           id: personal.sucursales.id,
-          name: personal.sucursales.name
+          name: personal.sucursales.name,
+          empresas: personal.sucursales.empresas ? {
+            id: personal.sucursales.empresas.id,
+            name: personal.sucursales.empresas.name,
+            logo_tipo: personal.sucursales.empresas.logo_tipo
+          } : null
         } : null;
 
         return {
@@ -113,7 +123,12 @@ class Personal {
           *,
           sucursales (
             id,
-            name
+            name,
+            empresas (
+              id,
+              name,
+              logo_tipo
+            )
           ),
           personal_modulo_permiso (
             sub_modulo_id,
@@ -166,10 +181,15 @@ class Personal {
         reemplazar: false
       };
 
-      // Procesar la sucursal
+      // Procesar la sucursal con información de la empresa
       const sucursal = data.sucursales ? {
         id: data.sucursales.id,
-        name: data.sucursales.name
+        name: data.sucursales.name,
+        empresas: data.sucursales.empresas ? {
+          id: data.sucursales.empresas.id,
+          name: data.sucursales.empresas.name,
+          logo_tipo: data.sucursales.empresas.logo_tipo
+        } : null
       } : null;
       
       return {
