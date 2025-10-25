@@ -33,6 +33,25 @@ class pedidosAlmacen {
       const ahora = new Date();
       const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
 
+      // 1) PRIMERO: Incrementar total_pedidos de la sucursal y obtener el número
+      const incrementResult = await this.incrementarTotalPedidosSucursal(sucuId);
+      if (!incrementResult.success) {
+        throw new Error(`Error al incrementar contador de pedidos: ${incrementResult.message}`);
+      }
+
+      // 2) SEGUNDO: Obtener el total_pedidos actualizado de la sucursal
+      const { data: sucursalActualizada, error: sucursalError } = await supabase
+        .from('sucursales')
+        .select('total_pedidos')
+        .eq('id', sucuId)
+        .single();
+
+      if (sucursalError) {
+        throw new Error(`Error obteniendo total_pedidos actualizado: ${sucursalError.message}`);
+      }
+
+      const numeroPedido = sucursalActualizada?.total_pedidos || 0;
+
       // Crear el pedido principal
       const pedidoPrincipal = {
         empresa_id: empresaId,
@@ -42,7 +61,8 @@ class pedidosAlmacen {
         observaciones: pedidoData.observaciones || null,
         estado: 'Pendiente',
         fecha: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
-        agrupado: !!pedidoData.agrupado
+        agrupado: !!pedidoData.agrupado,
+        numero_pedido: numeroPedido
       };
 
       // Solo agregar user_id o personal_id si tienen valor
@@ -235,13 +255,11 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           cliente:cliente_id (
             id,
@@ -433,13 +451,11 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           cliente:cliente_id (
             id,
@@ -547,13 +563,11 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           cliente:cliente_id (
             id,
@@ -731,13 +745,11 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           precio:prices_types (
             id,
@@ -909,13 +921,11 @@ class pedidosAlmacen {
           ),
           sucursal:sucursal_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           sucursal_destino:sucursal_destino_id (
             id,
-            name,
-            total_pedidos
+            name
           ),
           precio:prices_types (
             id,
@@ -1003,7 +1013,7 @@ class pedidosAlmacen {
   }
 
   // Actualizar estado del pedido
-  static async updateEstado(pedidoId, nuevoEstado, movimientoSalidaId = null, deudaId = null) {
+  static async updateEstado(pedidoId, nuevoEstado, movimientoSalidaId = null, deudaId = null, movimientoEntradaId = null) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
@@ -1037,6 +1047,11 @@ class pedidosAlmacen {
         updateData.movimiento_salida_id = movimientoSalidaId;
       }
       
+      // Si se proporciona un movimiento_entrada_id, agregarlo
+      if (movimientoEntradaId) {
+        updateData.movimiento_entrada_id = movimientoEntradaId;
+      }
+      
       // Si se proporciona un deuda_id, agregarlo
       if (deudaId) {
         updateData.deuda_id = deudaId;
@@ -1046,13 +1061,17 @@ class pedidosAlmacen {
       if (movimientoSalidaId === null) {
         updateData.movimiento_salida_id = null;
       }
+      if (movimientoEntradaId === null) {
+        updateData.movimiento_entrada_id = null;
+      }
       if (deudaId === null) {
         updateData.deuda_id = null;
       }
       
-      // Si el estado es 'Pendiente', limpiar movimiento_salida_id y deuda_id
+      // Si el estado es 'Pendiente', limpiar movimiento_salida_id, movimiento_entrada_id y deuda_id
       if (nuevoEstado === 'Pendiente') {
         updateData.movimiento_salida_id = null;
+        updateData.movimiento_entrada_id = null;
         updateData.deuda_id = null;
       }
 
@@ -1116,7 +1135,10 @@ class pedidosAlmacen {
 
       if (fetchError) {
         console.error('Error al obtener total_pedidos actual:', fetchError);
-        return;
+        return {
+          success: false,
+          message: `Error al obtener total_pedidos actual: ${fetchError.message}`
+        };
       }
 
       // Incrementar el valor
@@ -1129,12 +1151,23 @@ class pedidosAlmacen {
 
       if (error) {
         console.error('Error al incrementar total_pedidos:', error);
-        // No lanzar error para no interrumpir el flujo principal
+        return {
+          success: false,
+          message: `Error al incrementar total_pedidos: ${error.message}`
+        };
       }
+
+      return {
+        success: true,
+        message: 'Total de pedidos incrementado correctamente'
+      };
 
     } catch (error) {
       console.error('Error en incrementarTotalPedidosSucursal:', error);
-      // No lanzar error para no interrumpir el flujo principal
+      return {
+        success: false,
+        message: `Error en incrementarTotalPedidosSucursal: ${error.message}`
+      };
     }
   }
 
@@ -1220,7 +1253,23 @@ class pedidosAlmacen {
         throw new Error('ID del pedido es requerido');
       }
 
-      // Primero eliminar los detalles del pedido
+      // 1) PRIMERO: Obtener la sucursal_id del pedido antes de eliminarlo
+      const { data: pedido, error: pedidoFetchError } = await supabase
+        .from('pedidos_almacen')
+        .select('sucursal_id')
+        .eq('id', pedidoId)
+        .single();
+
+      if (pedidoFetchError) {
+        if (pedidoFetchError.code === 'PGRST116') {
+          throw new Error('Pedido no encontrado');
+        }
+        throw new Error(`Error al obtener el pedido: ${pedidoFetchError.message}`);
+      }
+
+      const sucursalId = pedido.sucursal_id;
+
+      // 2) SEGUNDO: Eliminar los detalles del pedido
       const { error: detallesError } = await supabase
         .from('pedido_almacen_detalle')
         .delete()
@@ -1230,7 +1279,7 @@ class pedidosAlmacen {
         throw new Error(`Error al eliminar los detalles del pedido: ${detallesError.message}`);
       }
 
-      // Luego eliminar el pedido principal
+      // 3) TERCERO: Eliminar el pedido principal
       const { error: pedidoError } = await supabase
         .from('pedidos_almacen')
         .delete()
@@ -1241,6 +1290,11 @@ class pedidosAlmacen {
           throw new Error('Pedido no encontrado');
         }
         throw new Error(`Error al eliminar el pedido: ${pedidoError.message}`);
+      }
+
+      // 4) CUARTO: Decrementar total_pedidos de la sucursal
+      if (sucursalId) {
+        await this.decrementarTotalPedidosSucursal(sucursalId);
       }
 
       return {

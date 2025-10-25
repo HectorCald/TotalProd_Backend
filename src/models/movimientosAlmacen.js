@@ -1369,6 +1369,7 @@ class movimientosAlmacen {
                     cantidad,
                     precio_unitario,
                     subtotal,
+                    producto:products_almacen!inner(id, name, grup),
                     movimientos_almacen!inner(
                         id,
                         type,
@@ -1376,6 +1377,7 @@ class movimientosAlmacen {
                         observaciones,
                         metodo_pago,
                         estado,
+                        agrupado,
                         cliente:clients(id, name),
                         proveedor:proveedores(id, name),
                         precio:prices_types(id, name)
@@ -1399,6 +1401,7 @@ class movimientosAlmacen {
                     observaciones: item.movimientos_almacen.observaciones,
                     metodo_pago: item.movimientos_almacen.metodo_pago,
                     estado: item.movimientos_almacen.estado,
+                    agrupado: item.movimientos_almacen.agrupado,
                     cliente: item.movimientos_almacen.cliente,
                     proveedor: item.movimientos_almacen.proveedor,
                     precio: item.movimientos_almacen.precio,
@@ -1407,9 +1410,9 @@ class movimientosAlmacen {
                         precio_unitario: item.precio_unitario,
                         subtotal: item.subtotal,
                         producto: {
-                            id: productId,
-                            name: 'Producto', // Se puede obtener después si es necesario
-                            description: ''
+                            id: item.producto.id,
+                            name: item.producto.name,
+                            grup: item.producto.grup
                         }
                     }]
                 }))

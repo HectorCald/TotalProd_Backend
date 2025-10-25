@@ -15,6 +15,7 @@ CREATE TABLE pedidos_almacen (
     deuda_id UUID,
     cliente_id UUID,
     agrupado BOOLEAN NOT NULL DEFAULT FALSE,
+    numero_pedido INTEGER NULL DEFAULT 0,
     CONSTRAINT pedidos_almacen_empresa_id_fkey
         FOREIGN KEY (empresa_id) REFERENCES empresas (id),
     CONSTRAINT pedidos_almacen_sucursal_id_fkey

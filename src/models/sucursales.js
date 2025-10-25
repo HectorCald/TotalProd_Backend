@@ -10,6 +10,7 @@ const sucursales = {
                     id,
                     name,
                     almacen_sucursal_id,
+                    total_pedidos,
                     created_at,
                     empresas!inner (
                         id,
@@ -47,6 +48,7 @@ const sucursales = {
                     id,
                     name,
                     almacen_sucursal_id,
+                    total_pedidos,
                     created_at,
                     empresas!inner (
                         id,
@@ -85,6 +87,7 @@ const sucursales = {
                     id,
                     name,
                     almacen_sucursal_id,
+                    total_pedidos,
                     created_at,
                     empresas!inner (
                         id,
@@ -123,6 +126,7 @@ const sucursales = {
                     id,
                     name,
                     almacen_sucursal_id,
+                    total_pedidos,
                     created_at,
                     empresas!inner (
                         id,

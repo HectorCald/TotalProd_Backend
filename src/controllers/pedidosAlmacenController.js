@@ -292,7 +292,7 @@ class pedidosAlmacenController {
   static async updateEstado(req, res) {
     try {
       const { id } = req.params;
-      const { estado, movimiento_salida_id, deuda_id } = req.body;
+      const { estado, movimiento_salida_id, deuda_id, movimiento_entrada_id } = req.body;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -325,7 +325,7 @@ class pedidosAlmacenController {
         });
       }
 
-      const result = await pedidosAlmacen.updateEstado(id, estado, movimiento_salida_id, deuda_id);
+      const result = await pedidosAlmacen.updateEstado(id, estado, movimiento_salida_id, deuda_id, movimiento_entrada_id);
 
       if (result.success) {
         return res.status(200).json(result);
