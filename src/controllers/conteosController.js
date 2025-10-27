@@ -93,10 +93,15 @@ class ConteosController {
 	static async replaceStock(req, res) {
 		try {
 			const { id } = req.params;
+			const { empresa_id } = req.body;
 			const userType = req.user?.type;
 
 			if (!id) {
 				return res.status(400).json({ success: false, message: 'ID del conteo es requerido' });
+			}
+
+			if (!empresa_id) {
+				return res.status(400).json({ success: false, message: 'ID de la empresa es requerido' });
 			}
 
 			// Verificar permisos de reemplazo solo si es empleado
@@ -127,10 +132,15 @@ class ConteosController {
 	static async replaceStockAcopio(req, res) {
 		try {
 			const { id } = req.params;
+			const { empresa_id } = req.body;
 			const userType = req.user?.type;
 
 			if (!id) {
 				return res.status(400).json({ success: false, message: 'ID del conteo es requerido' });
+			}
+
+			if (!empresa_id) {
+				return res.status(400).json({ success: false, message: 'ID de la empresa es requerido' });
 			}
 
 			// Verificar permisos de reemplazo solo si es empleado
