@@ -83,6 +83,43 @@ class productsAlmacenController {
     }
   }
 
+  // Obtener múltiples productos por IDs con recetas
+  static async getByIds(req, res) {
+    try {
+      const empresaId = req.query.empresa_id;
+      
+      if (!empresaId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
+      // Obtener IDs de los parámetros de query
+      const ids = req.query.ids;
+      if (!ids || !Array.isArray(ids)) {
+        return res.status(400).json({
+          success: false,
+          message: 'IDs de productos son requeridos'
+        });
+      }
+
+      const products = await productsAlmacen.getByIds(ids, empresaId);
+      
+      res.status(200).json({
+        success: true,
+        message: 'Productos obtenidos exitosamente',
+        data: products
+      });
+    } catch (error) {
+      console.error('Error en productsAlmacenController.getByIds:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
   // Crear un producto
   static async create(req, res) {
     try {

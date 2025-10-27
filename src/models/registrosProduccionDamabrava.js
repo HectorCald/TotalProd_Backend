@@ -2,6 +2,16 @@ const { supabase } = require('../config/supabase');
 const productsAlmacen = require('./productsAlmacen');
 const movimientosAlmacen = require('./movimientosAlmacen');
 
+// Función helper para normalizar texto (quitar acentos)
+const normalizeText = (text) => {
+    if (!text) return '';
+    return text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+        .trim();
+};
+
 class registrosProduccionDamabrava {
     // Crear un nuevo registro de producción
     static async create(registroData) {
@@ -175,6 +185,7 @@ class registrosProduccionDamabrava {
         try {
             const offset = (page - 1) * limit;
 
+            // Si hay búsqueda, obtener todos los registros primero para filtrar
             let query = supabase
                 .from('registros_produccion_damabrava')
                 .select(`
@@ -218,19 +229,36 @@ class registrosProduccionDamabrava {
             const ascending = ordenamiento === 'fecha_asc';
             query = query.order('fecha', { ascending });
 
-            const { data: registros, error, count } = await query.range(offset, offset + limit - 1);
+            // Si hay búsqueda, obtener todos los registros para filtrar
+            let allRegistros, totalCount;
+            if (search && search.trim()) {
+                const { data: allData, error: allError, count } = await query;
+                
+                if (allError) {
+                    return { success: false, message: 'Error al obtener registros de producción', error: allError };
+                }
 
-            if (error) {
-                return { success: false, message: 'Error al obtener registros de producción', error };
+                allRegistros = allData || [];
+                totalCount = count || 0;
+            } else {
+                // Sin búsqueda, usar paginación normal
+                const { data: registros, error, count } = await query.range(offset, offset + limit - 1);
+                
+                if (error) {
+                    return { success: false, message: 'Error al obtener registros de producción', error };
+                }
+
+                allRegistros = registros || [];
+                totalCount = count || 0;
             }
 
             // Si no hay registros, retornar array vacío
-            if (!registros || registros.length === 0) {
+            if (!allRegistros || allRegistros.length === 0) {
                 return {
                     success: true,
                     data: [],
                     pagination: {
-                        total: count || 0,
+                        total: totalCount,
                         page,
                         limit,
                         hasNextPage: false
@@ -239,7 +267,7 @@ class registrosProduccionDamabrava {
             }
 
             // Procesar datos de usuario/personal (ya vienen en la consulta)
-            const registrosConUsuarios = registros.map(registro => {
+            const registrosConUsuarios = allRegistros.map(registro => {
                 let user = null;
                 let personal = null;
 
@@ -268,36 +296,46 @@ class registrosProduccionDamabrava {
 
             // Aplicar búsqueda por texto si se proporciona
             let registrosFiltrados = registrosConUsuarios;
+            let totalFiltrados = totalCount;
+            let hasNextPage = page < Math.ceil(totalCount / limit);
+
             if (search && search.trim()) {
-                const searchTerm = search.toLowerCase().trim();
+                const normalizedSearchTerm = normalizeText(search);
+                
+                // Filtrar todos los registros
                 registrosFiltrados = registrosConUsuarios.filter(registro => {
                     // Buscar en nombre del producto
-                    const nombreProducto = (registro.producto_almacen?.name || '').toLowerCase();
+                    const nombreProducto = normalizeText(registro.producto_almacen?.name || '');
                     
                     // Buscar en nombre del responsable (usuario o personal)
-                    const nombreResponsable = (registro.user?.name || registro.personal?.name || '').toLowerCase();
+                    const nombreResponsable = normalizeText(registro.user?.name || registro.personal?.name || '');
                     
                     // Buscar en lote (convertir a string)
-                    const lote = String(registro.lote || '').toLowerCase();
+                    const lote = normalizeText(String(registro.lote || ''));
                     
-                    return nombreProducto.includes(searchTerm) || 
-                           nombreResponsable.includes(searchTerm) || 
-                           lote.includes(searchTerm);
+                    return nombreProducto.includes(normalizedSearchTerm) || 
+                           nombreResponsable.includes(normalizedSearchTerm) || 
+                           lote.includes(normalizedSearchTerm);
                 });
-            }
 
-            // Recalcular paginación si hay búsqueda
-            const totalFiltrados = registrosFiltrados.length;
-            const hasNextPageFiltrado = search ? false : count > offset + limit; // Si hay búsqueda, no hay paginación
+                // Calcular paginación para resultados filtrados
+                totalFiltrados = registrosFiltrados.length;
+                hasNextPage = page < Math.ceil(totalFiltrados / limit);
+
+                // Aplicar paginación a los resultados filtrados
+                const startIndex = offset;
+                const endIndex = offset + limit;
+                registrosFiltrados = registrosFiltrados.slice(startIndex, endIndex);
+            }
 
             return {
                 success: true,
                 data: registrosFiltrados,
                 pagination: {
-                    total: search ? totalFiltrados : count,
+                    total: totalFiltrados,
                     page,
                     limit,
-                    hasNextPage: hasNextPageFiltrado
+                    hasNextPage: hasNextPage
                 }
             };
 
