@@ -765,22 +765,16 @@ class Personal {
         throw new Error('ID del personal, latitud y longitud son requeridos');
       }
 
-      console.log('🔄 Personal.updateLocation - ID:', id, 'Lat:', latitude, 'Lng:', longitude);
-
       // Verificar que el personal existe y tiene rastrear activado
       const personal = await this.getById(id);
       if (!personal) {
-        console.log('❌ Personal no encontrado');
         return {
           success: false,
           message: 'Personal no encontrado'
         };
       }
 
-      console.log('👤 Personal encontrado - Rastrear:', personal.rastrear);
-
       if (!personal.rastrear) {
-        console.log('❌ Rastreo no activado');
         return {
           success: false,
           message: 'El rastreo no está activado para este empleado'
@@ -789,7 +783,6 @@ class Personal {
 
       // Actualizar ubicación usando POINT - probar diferentes formatos
       const pointValue = `(${longitude},${latitude})`;
-      console.log('📍 Actualizando ubicación con:', pointValue);
       
       const { data, error } = await supabase
         .from('personal')
@@ -801,18 +794,16 @@ class Personal {
         .single();
 
       if (error) {
-        console.error('❌ Error de Supabase:', error);
         throw new Error('No se pudo actualizar la ubicación');
       }
 
-      console.log('✅ Ubicación actualizada exitosamente:', data);
       return {
         success: true,
         message: 'Ubicación actualizada exitosamente',
         data: data
       };
     } catch (error) {
-      console.error('❌ Error al actualizar ubicación:', error);
+      console.error('Error al actualizar ubicación:', error);
       return {
         success: false,
         message: error.message
