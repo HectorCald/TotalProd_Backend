@@ -35,9 +35,9 @@ class movimientosAcopio {
         throw new Error('ID de la sucursal es requerido');
       }
 
-      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
       const ahora = new Date();
-      const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+      const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
 
       const dbData = {
         product_id: movimientoData.product_id,

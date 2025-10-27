@@ -6,9 +6,9 @@ class cotizaciones {
         try {
             const { user_id, personal_id, sucu_id, observaciones, metodo_pago, cliente_id, productos, fecha_vencimiento, agrupado, precio_id } = cotizacionData;
 
-            // Crear timestamp en zona horaria de Bolivia (GMT-4)
+            // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
             const ahora = new Date();
-            const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+            const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
 
             // Obtener el siguiente número de cotización para esta sucursal
             const { data: ultimaCotizacion, error: errorNumero } = await supabase

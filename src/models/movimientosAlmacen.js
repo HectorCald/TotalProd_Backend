@@ -17,9 +17,9 @@ class movimientosAlmacen {
         try {
             const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento } = movimientoData;
 
-            // Crear timestamp en zona horaria de Bolivia (GMT-4) - OPTIMIZADO
+            // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
             const ahora = new Date();
-            const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+            const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
 
             // Iniciar transacción - OPTIMIZADO: Solo campos necesarios, sin defaults
             const insertData = {

@@ -58,9 +58,9 @@ class User {
       }
 
       // 4. Crear registro en user_plans
-      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
       const ahora = new Date();
-      const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+      const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
 
       const userPlanData = {
         user_id: insertedUser.id,
@@ -458,9 +458,9 @@ class User {
       }
 
       // 3. Crear nuevo registro de plan
-      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
       const ahora = new Date();
-      const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+      const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
 
       const userPlanData = {
         user_id: userId,

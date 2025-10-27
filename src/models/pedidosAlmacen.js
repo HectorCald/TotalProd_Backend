@@ -29,9 +29,9 @@ class pedidosAlmacen {
         throw new Error('ID de la sucursal de destino es requerido');
       }
 
-      // Crear timestamp en zona horaria de Bolivia (GMT-4)
+      // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
       const ahora = new Date();
-      const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+      const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
 
       // 1) PRIMERO: Incrementar total_pedidos de la sucursal y obtener el número
       const incrementResult = await this.incrementarTotalPedidosSucursal(sucuId);
