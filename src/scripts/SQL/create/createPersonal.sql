@@ -9,6 +9,8 @@ CREATE TABLE personal (
     password VARCHAR,  -- cambié "contraseña" a "password" para consistencia
     is_active BOOLEAN NOT NULL DEFAULT true,
     sucursal_id UUID,
+    ubicacion POINT,
+    rastrear BOOLEAN NOT NULL DEFAULT false,
     CONSTRAINT personal_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES empresa (id),
     CONSTRAINT personal_sucursal_id_fkey FOREIGN KEY (sucursal_id) REFERENCES sucursales (id)
 );

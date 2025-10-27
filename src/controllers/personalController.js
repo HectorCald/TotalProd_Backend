@@ -68,7 +68,7 @@ class PersonalController {
   // Crear personal
   static async create(req, res) {
     try {
-      const { first_name, last_name, codigo, sucursal_id, modules = [], permisos = {} } = req.body;
+      const { first_name, last_name, codigo, sucursal_id, modules = [], permisos = {}, ubicacion = null, rastrear = false } = req.body;
       const empresaId = req.body.empresa_id;
 
       // Validar campos requeridos
@@ -101,6 +101,8 @@ class PersonalController {
         codigo,
         empresa_id: empresaId,
         sucursal_id: sucursal_id || null,
+        ubicacion,
+        rastrear,
         modules,
         permisos
       };
@@ -126,7 +128,7 @@ class PersonalController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { first_name, last_name, codigo, is_active, sucursal_id, modules, permisos } = req.body;
+      const { first_name, last_name, codigo, is_active, sucursal_id, modules, permisos, ubicacion, rastrear } = req.body;
 
       if (!id) {
         return res.status(400).json({
@@ -157,6 +159,8 @@ class PersonalController {
       if (codigo) personalData.codigo = codigo;
       if (is_active !== undefined) personalData.is_active = is_active;
       if (sucursal_id !== undefined) personalData.sucursal_id = sucursal_id;
+      if (ubicacion !== undefined) personalData.ubicacion = ubicacion;
+      if (rastrear !== undefined) personalData.rastrear = rastrear;
       if (modules !== undefined) personalData.modules = modules;
       if (permisos !== undefined) personalData.permisos = permisos;
 
@@ -375,6 +379,63 @@ class PersonalController {
       res.status(200).json(result);
     } catch (error) {
       console.error('Error en resetPassword:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // Actualizar ubicación del empleado
+  static async updateLocation(req, res) {
+    try {
+      const { id } = req.params;
+      const { latitude, longitude } = req.body;
+
+      if (!id || !latitude || !longitude) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del personal, latitud y longitud son requeridos'
+        });
+      }
+
+      const result = await Personal.updateLocation(id, latitude, longitude);
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error) {
+      console.error('Error en updateLocation:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // Obtener ubicación del empleado
+  static async getLocation(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del personal es requerido'
+        });
+      }
+
+      const result = await Personal.getLocation(id);
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error) {
+      console.error('Error en getLocation:', error);
       res.status(500).json({
         success: false,
         message: error.message

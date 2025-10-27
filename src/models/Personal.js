@@ -239,7 +239,7 @@ class Personal {
   // Método para crear personal
   static async create(personalData) {
     try {
-      const { first_name, last_name, codigo, empresa_id, sucursal_id, modules = [], permisos = {} } = personalData;
+      const { first_name, last_name, codigo, empresa_id, sucursal_id, modules = [], permisos = {}, ubicacion = null, rastrear = false } = personalData;
 
       if (!first_name || !last_name || !codigo || !empresa_id) {
         throw new Error('Datos requeridos faltantes');
@@ -260,6 +260,8 @@ class Personal {
           codigo,
           empresa_id,
           sucursal_id: sucursal_id || null,
+          ubicacion: ubicacion,
+          rastrear: rastrear,
           is_active: true
         }])
         .select()
@@ -325,7 +327,7 @@ class Personal {
   // Método para actualizar personal
   static async update(id, personalData) {
     try {
-      const { first_name, last_name, codigo, is_active, sucursal_id, modules = [], permisos = {} } = personalData;
+      const { first_name, last_name, codigo, is_active, sucursal_id, modules = [], permisos = {}, ubicacion, rastrear } = personalData;
 
       if (!id) {
         throw new Error('ID del personal es requerido');
@@ -352,6 +354,8 @@ class Personal {
       if (codigo) updateData.codigo = codigo;
       if (is_active !== undefined) updateData.is_active = is_active;
       if (sucursal_id !== undefined) updateData.sucursal_id = sucursal_id;
+      if (ubicacion !== undefined) updateData.ubicacion = ubicacion;
+      if (rastrear !== undefined) updateData.rastrear = rastrear;
 
       const { data: updatedPersonal, error } = await supabase
         .from('personal')
@@ -634,6 +638,7 @@ class Personal {
             empresa_id: personal.empresa_id,
             sucursal_id: personal.sucursal_id,
             is_active: personal.is_active,
+            rastrear: personal.rastrear,
             modules: personal.modules
           },
           token: token
@@ -746,6 +751,101 @@ class Personal {
       };
     } catch (error) {
       console.error('Error al resetear contraseña:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Método para actualizar ubicación del empleado
+  static async updateLocation(id, latitude, longitude) {
+    try {
+      if (!id || !latitude || !longitude) {
+        throw new Error('ID del personal, latitud y longitud son requeridos');
+      }
+
+      console.log('🔄 Personal.updateLocation - ID:', id, 'Lat:', latitude, 'Lng:', longitude);
+
+      // Verificar que el personal existe y tiene rastrear activado
+      const personal = await this.getById(id);
+      if (!personal) {
+        console.log('❌ Personal no encontrado');
+        return {
+          success: false,
+          message: 'Personal no encontrado'
+        };
+      }
+
+      console.log('👤 Personal encontrado - Rastrear:', personal.rastrear);
+
+      if (!personal.rastrear) {
+        console.log('❌ Rastreo no activado');
+        return {
+          success: false,
+          message: 'El rastreo no está activado para este empleado'
+        };
+      }
+
+      // Actualizar ubicación usando POINT - probar diferentes formatos
+      const pointValue = `(${longitude},${latitude})`;
+      console.log('📍 Actualizando ubicación con:', pointValue);
+      
+      const { data, error } = await supabase
+        .from('personal')
+        .update({ 
+          ubicacion: pointValue
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error de Supabase:', error);
+        throw new Error('No se pudo actualizar la ubicación');
+      }
+
+      console.log('✅ Ubicación actualizada exitosamente:', data);
+      return {
+        success: true,
+        message: 'Ubicación actualizada exitosamente',
+        data: data
+      };
+    } catch (error) {
+      console.error('❌ Error al actualizar ubicación:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Método para obtener ubicación del empleado
+  static async getLocation(id) {
+    try {
+      if (!id) {
+        throw new Error('ID del personal es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('personal')
+        .select('ubicacion, rastrear')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        throw new Error('No se pudo obtener la ubicación');
+      }
+
+      return {
+        success: true,
+        data: {
+          ubicacion: data.ubicacion,
+          rastrear: data.rastrear
+        }
+      };
+    } catch (error) {
+      console.error('Error al obtener ubicación:', error);
       return {
         success: false,
         message: error.message

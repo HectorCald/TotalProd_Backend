@@ -16,6 +16,8 @@ router.use(requireAuth);
 
 // Rutas que requieren autenticación pero NO verificación de módulo
 router.post('/:id/reset-password', PersonalController.resetPassword);
+router.post('/:id/update-location', PersonalController.updateLocation);
+router.get('/:id/location', PersonalController.getLocation);
 
 // Aplicar middleware de acceso al módulo 'Personal' a las rutas restantes
 router.use(requireModuleAccess('Personal'));
