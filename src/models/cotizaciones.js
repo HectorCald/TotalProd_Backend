@@ -168,8 +168,8 @@ class cotizaciones {
         }
     }
 
-    // Obtener todas las cotizaciones
-    static async getAll() {
+    // Obtener todas las cotizaciones de una sucursal
+    static async getAll(sucuId) {
         try {
             const { data: cotizaciones, error } = await supabase
                 .from('cotizaciones')
@@ -206,6 +206,7 @@ class cotizaciones {
                         )
                     )
                 `)
+                .eq('sucu_id', sucuId)
                 .order('fecha', { ascending: false });
 
             if (error) {

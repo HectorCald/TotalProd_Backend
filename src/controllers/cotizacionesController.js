@@ -135,10 +135,20 @@ class cotizacionesController {
         }
     }
 
-    // Obtener todas las cotizaciones
+    // Obtener todas las cotizaciones de una sucursal
     static async getAll(req, res) {
         try {
-            const result = await cotizaciones.getAll();
+            // Obtener el sucu_id de la sucursal seleccionada
+            const sucuId = req.query.sucu_id;
+            
+            if (!sucuId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
+
+            const result = await cotizaciones.getAll(sucuId);
 
             if (!result.success) {
                 return res.status(400).json(result);
