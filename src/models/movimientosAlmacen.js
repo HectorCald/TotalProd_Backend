@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabase, processBatch, retryOperation, validateBatchResults } = require('../config/supabase');
 
 // Función helper para normalizar texto (quitar acentos)
 const normalizeText = (text) => {
@@ -127,20 +127,28 @@ class movimientosAlmacen {
                 const nuevasInserciones = [];
                 const productosConStockCalculado = [];
 
+                console.log(`📊 [STOCK CALCULATION] Calculando stocks para ${productos.length} productos (${type})`);
+
                 for (const producto of productos) {
                     const stockActual = stocksMap.get(producto.id);
                     const stockActualValue = stockActual ? stockActual.stock : 0;
                     const stockId = stockActual ? stockActual.id : null;
 
                     let nuevaCantidad;
+                    let operacion = '';
+                    
                     if (type === 'entrada') {
                         nuevaCantidad = stockActualValue + producto.cantidad;
+                        operacion = `${stockActualValue} + ${producto.cantidad} = ${nuevaCantidad}`;
                     } else if (type === 'salida') {
                         nuevaCantidad = stockActualValue - producto.cantidad;
+                        operacion = `${stockActualValue} - ${producto.cantidad} = ${nuevaCantidad}`;
                         
                         // Verificar que hay suficiente stock
                         if (nuevaCantidad < 0) {
-                            console.error(`Stock insuficiente para producto ${producto.id}. Stock actual: ${stockActualValue}, Cantidad requerida: ${producto.cantidad}`);
+                            console.error(`❌ [STOCK ERROR] Stock insuficiente para producto ${producto.id}. ${operacion} (NEGATIVO)`);
+                            console.error(`❌ [STOCK ERROR] El producto ${producto.id} tiene stock ${stockActualValue} pero se requiere ${producto.cantidad}`);
+                            
                             // Si falla, eliminar el movimiento y sus productos
                             await supabase
                                 .from('movimiento_almacen_producto')
@@ -152,9 +160,19 @@ class movimientosAlmacen {
                                 .delete()
                                 .eq('id', movimiento.id);
                             
-                            return { success: false, message: 'Stock insuficiente', error: 'Stock insuficiente' };
+                            return { 
+                                success: false, 
+                                message: `Stock insuficiente para producto ${producto.id}. Stock disponible: ${stockActualValue}, Cantidad requerida: ${producto.cantidad}`, 
+                                error: 'Stock insuficiente',
+                                productoId: producto.id,
+                                stockDisponible: stockActualValue,
+                                cantidadRequerida: producto.cantidad
+                            };
                         }
                     }
+
+                    // Log detallado de cada producto
+                    console.log(`📦 [PRODUCTO] ID: ${producto.id} | Stock: ${operacion} | Tipo: ${type}`);
 
                     // Guardar stock calculado para respuesta
                     productosConStockCalculado.push({
@@ -168,7 +186,9 @@ class movimientosAlmacen {
                         // Preparar actualización
                         actualizaciones.push({
                             id: stockId,
-                            stock: nuevaCantidad
+                            stock: nuevaCantidad,
+                            producto_id: producto.id,
+                            operacion: operacion
                         });
                     } else {
                         // Preparar nueva inserción
@@ -177,65 +197,125 @@ class movimientosAlmacen {
                                 sucursal_id: sucu_id,
                                 stock: nuevaCantidad
                         });
+                        console.log(`🆕 [NUEVO STOCK] Producto ${producto.id} | Stock inicial: ${nuevaCantidad}`);
                     }
                 }
 
-                // 4. Ejecutar actualizaciones en lote (ULTRA OPTIMIZADO)
+                // 4. Ejecutar actualizaciones en lote con control robusto de errores
                 if (actualizaciones.length > 0) {
+                    console.log(`🔄 [STOCK UPDATE] Procesando ${actualizaciones.length} actualizaciones de stock`);
                     
                     try {
                         // Intentar usar función RPC primero (más eficiente)
-                        const { error: rpcError } = await supabase.rpc('update_stocks_batch', {
-                            stock_updates: actualizaciones.map(a => ({
-                                id: a.id,
-                                stock: a.stock
-                            }))
+                        const rpcResult = await retryOperation(async () => {
+                            const { error: rpcError } = await supabase.rpc('update_stocks_batch', {
+                                stock_updates: actualizaciones.map(a => ({
+                                    id: a.id,
+                                    stock: a.stock
+                                }))
+                            });
+                            
+                            if (rpcError) {
+                                throw rpcError;
+                            }
+                            
+                            return { success: true };
                         });
                         
-
-                        if (rpcError) {
-                            throw rpcError;
-                        }
-                    } catch (rpcError) {
-                        console.warn('RPC no disponible, usando método paralelo:', rpcError.message);
+                        console.log('✅ [STOCK UPDATE] RPC completado exitosamente');
                         
-                        // Fallback: usar método paralelo
-                        const updatePromises = actualizaciones.map(actualizacion =>
-                            supabase
-                            .from('productos_sucursal')
-                                .update({ stock: actualizacion.stock })
-                                .eq('id', actualizacion.id)
-                                .select('id') // Solo retornar ID para verificar
+                    } catch (rpcError) {
+                        console.warn('⚠️ [STOCK UPDATE] RPC no disponible, usando método por lotes:', rpcError.message);
+                        
+                        // Fallback: usar método por lotes con control de concurrencia
+                        const updateOperations = actualizaciones.map(actualizacion => 
+                            retryOperation(async () => {
+                                console.log(`🔄 [ACTUALIZANDO] Producto ${actualizacion.producto_id} | ${actualizacion.operacion}`);
+                                
+                                const { data, error } = await supabase
+                                    .from('productos_sucursal')
+                                    .update({ stock: actualizacion.stock })
+                                    .eq('id', actualizacion.id)
+                                    .select('id');
+                                
+                                if (error) {
+                                    console.error(`❌ [ERROR ACTUALIZACIÓN] Producto ${actualizacion.producto_id} | ${actualizacion.operacion} | Error: ${error.message}`);
+                                    throw error;
+                                }
+                                
+                                console.log(`✅ [ACTUALIZADO] Producto ${actualizacion.producto_id} | ${actualizacion.operacion}`);
+                                return { data, error: null };
+                            })
                         );
                         
-                        const updateResults = await Promise.allSettled(updatePromises);
-
-                        // Verificar errores en actualizaciones
-                        const errores = updateResults
-                            .filter(result => result.status === 'rejected' || result.value?.error)
-                            .map(result => result.status === 'rejected' ? result.reason : result.value?.error);
-                            
-                        if (errores.length > 0) {
-                            console.error('Errores en actualizaciones de stock:', errores);
+                        // Procesar en lotes de máximo 50 operaciones
+                        const { results, errors } = await processBatch(updateOperations, 50);
+                        
+                        // Validar que todas las operaciones fueron exitosas
+                        try {
+                            validateBatchResults(results);
+                            console.log('✅ [STOCK UPDATE] Todas las actualizaciones completadas exitosamente');
+                        } catch (validationError) {
+                            console.error('❌ [STOCK UPDATE] Error en validación de resultados:', validationError.message);
                             // Limpieza optimizada
                             await this.cleanupMovimiento(movimiento.id);
-                            return { success: false, message: 'Error al actualizar stocks', error: errores };
+                            return { 
+                                success: false, 
+                                message: 'Error al actualizar stocks: ' + validationError.message, 
+                                error: validationError 
+                            };
+                        }
+                        
+                        // Si hay errores en el procesamiento por lotes, fallar completamente
+                        if (errors.length > 0) {
+                            console.error('❌ [STOCK UPDATE] Errores en procesamiento por lotes:', errors);
+                            await this.cleanupMovimiento(movimiento.id);
+                            return { 
+                                success: false, 
+                                message: 'Error al procesar actualizaciones de stock', 
+                                error: errors 
+                            };
                         }
                     }
                 }
 
-                // 5. Ejecutar inserciones en lote
+                // 5. Ejecutar inserciones en lote con control robusto de errores
                 if (nuevasInserciones.length > 0) {
-                    const { error: insertError } = await supabase
-                        .from('productos_sucursal')
-                        .insert(nuevasInserciones);
-
-                        if (insertError) {
-                            console.error('Error insertando stocks:', insertError);
-                            // Limpieza optimizada
-                            await this.cleanupMovimiento(movimiento.id);
-                            return { success: false, message: 'Error al crear stocks', error: insertError };
-                        }
+                    console.log(`🔄 [STOCK INSERT] Procesando ${nuevasInserciones.length} inserciones de stock`);
+                    
+                    try {
+                        const insertResult = await retryOperation(async () => {
+                            console.log(`🆕 [INSERTANDO] ${nuevasInserciones.length} nuevos stocks:`);
+                            nuevasInserciones.forEach(insercion => {
+                                console.log(`   📦 Producto ${insercion.producto_id} | Stock inicial: ${insercion.stock}`);
+                            });
+                            
+                            const { data, error } = await supabase
+                                .from('productos_sucursal')
+                                .insert(nuevasInserciones)
+                                .select('id');
+                            
+                            if (error) {
+                                console.error(`❌ [ERROR INSERCIÓN] Error: ${error.message}`);
+                                throw error;
+                            }
+                            
+                            console.log('✅ [INSERTADOS] Todos los nuevos stocks creados exitosamente');
+                            return { data, error: null };
+                        });
+                        
+                        console.log('✅ [STOCK INSERT] Inserciones completadas exitosamente');
+                        
+                    } catch (insertError) {
+                        console.error('❌ [STOCK INSERT] Error insertando stocks:', insertError);
+                        // Limpieza optimizada
+                        await this.cleanupMovimiento(movimiento.id);
+                        return { 
+                            success: false, 
+                            message: 'Error al crear stocks: ' + insertError.message, 
+                            error: insertError 
+                        };
+                    }
                 }
                 
             }
@@ -264,7 +344,7 @@ class movimientosAlmacen {
             let productosConStock;
             if (productos && productos.length > 0) {
                 // Si se procesaron productos, usar el stock calculado
-                if (typeof productosConStockCalculado !== 'undefined' && productosConStockCalculado) {
+                if (typeof productosConStockCalculado !== 'undefined' && productosConStockCalculado && productosConStockCalculado.length > 0) {
                     productosConStock = productosConStockCalculado;
                 } else {
                     // Fallback: crear array con stock 0
@@ -316,6 +396,7 @@ class movimientosAlmacen {
                     console.error('Error procesando numero_orden:', error);
                 }
             }
+
 
             return { 
                 success: true, 
@@ -1058,6 +1139,8 @@ class movimientosAlmacen {
 
             // Preparar actualizaciones de reversión
             const actualizacionesReversion = [];
+            console.log(`🔄 [ANULAR] Preparando reversión de ${movimiento.productos.length} productos (${movimiento.type})`);
+            
             for (const productoMovimiento of movimiento.productos) {
                 const cantidadMovimiento = parseFloat(productoMovimiento.cantidad);
                 const stockActual = stocksMap.get(productoMovimiento.producto_almacen_id);
@@ -1065,16 +1148,24 @@ class movimientosAlmacen {
                 const stockId = stockActual ? stockActual.id : null;
 
                 let nuevaCantidad;
+                let operacionReversion = '';
+                
                 if (movimiento.type === 'entrada') {
                     nuevaCantidad = stockActualValue - cantidadMovimiento;
+                    operacionReversion = `${stockActualValue} - ${cantidadMovimiento} = ${nuevaCantidad}`;
                 } else {
                     nuevaCantidad = stockActualValue + cantidadMovimiento;
+                    operacionReversion = `${stockActualValue} + ${cantidadMovimiento} = ${nuevaCantidad}`;
                 }
+
+                console.log(`🔄 [REVERSIÓN] Producto ${productoMovimiento.producto_almacen_id} | ${operacionReversion}`);
 
                 if (stockId) {
                     actualizacionesReversion.push({
                         id: stockId,
-                        stock: nuevaCantidad
+                        stock: nuevaCantidad,
+                        producto_id: productoMovimiento.producto_almacen_id,
+                        operacion: operacionReversion
                     });
                 }
             }
@@ -1083,32 +1174,45 @@ class movimientosAlmacen {
             let rpcSuccess = false;
             
             try {
-                const { error: rpcError } = await supabase.rpc('anular_movimiento_batch', {
-                    movimiento_id: movimientoId,
-                    stock_updates: actualizacionesReversion
-                });
+                const rpcResult = await retryOperation(async () => {
+                    const { error: rpcError } = await supabase.rpc('anular_movimiento_batch', {
+                        movimiento_id: movimientoId,
+                        stock_updates: actualizacionesReversion
+                    });
 
-                if (rpcError) {
-                    throw rpcError;
-                }
+                    if (rpcError) {
+                        throw rpcError;
+                    }
+                    
+                    return { success: true };
+                });
                 
                 rpcSuccess = true;
                 console.log(`✅ [MODEL ANULAR] RPC completado exitosamente - NO se necesita reversión manual`);
                 
             } catch (rpcError) {
-                console.warn('RPC anular_movimiento_batch no disponible, usando método tradicional:', rpcError.message);
+                console.warn('⚠️ [MODEL ANULAR] RPC anular_movimiento_batch no disponible, usando método tradicional:', rpcError.message);
                 
                 // Fallback: método tradicional (solo actualizar estado)
-                const { error: updateError } = await supabase
+                try {
+                    const updateResult = await retryOperation(async () => {
+                        const { error: updateError } = await supabase
                             .from('movimientos_almacen')
-                    .update({ estado: 'anulado' })
-                    .eq('id', movimientoId)
-                    .select('id')
-                    .single();
+                            .update({ estado: 'anulado' })
+                            .eq('id', movimientoId)
+                            .select('id')
+                            .single();
 
-                if (updateError) {
-                    console.error('Error actualizando estado:', updateError);
-                    return { success: false, message: 'Error al anular el movimiento' };
+                        if (updateError) {
+                            throw updateError;
+                        }
+                        
+                        return { success: true };
+                    });
+                    
+                } catch (updateError) {
+                    console.error('❌ [MODEL ANULAR] Error actualizando estado:', updateError);
+                    return { success: false, message: 'Error al anular el movimiento: ' + updateError.message };
                 }
                 
                 rpcSuccess = false;
@@ -1116,44 +1220,82 @@ class movimientosAlmacen {
 
             // Solo hacer reversión manual si el RPC falló
             if (!rpcSuccess && actualizacionesReversion.length > 0) {
+                console.log(`🔄 [MODEL ANULAR] Realizando reversión manual de ${actualizacionesReversion.length} stocks`);
                 
                 try {
                     // Usar función RPC para actualizaciones en lote
-                    const { error: rpcError } = await supabase.rpc('update_stocks_batch', {
-                        stock_updates: actualizacionesReversion
+                    const rpcResult = await retryOperation(async () => {
+                        const { error: rpcError } = await supabase.rpc('update_stocks_batch', {
+                            stock_updates: actualizacionesReversion
+                        });
+
+                        if (rpcError) {
+                            throw rpcError;
+                        }
+                        
+                        return { success: true };
                     });
-
-                    if (rpcError) {
-                        throw rpcError;
-                    }
-
+                    
+                    console.log('✅ [MODEL ANULAR] Reversión RPC completada exitosamente');
 
                 } catch (rpcError) {
-                    console.warn('RPC no disponible para reversión manual, usando método paralelo:', rpcError.message);
+                    console.warn('⚠️ [MODEL ANULAR] RPC no disponible para reversión manual, usando método por lotes:', rpcError.message);
                     
-                    // Fallback: usar método paralelo
-                    const updatePromises = actualizacionesReversion.map(actualizacion =>
-                        supabase
-                            .from('productos_sucursal')
-                            .update({ stock: actualizacion.stock })
-                            .eq('id', actualizacion.id)
+                    // Fallback: usar método por lotes con control de concurrencia
+                    const updateOperations = actualizacionesReversion.map(actualizacion => 
+                        retryOperation(async () => {
+                            console.log(`🔄 [REVIRTIENDO] Producto ${actualizacion.producto_id} | ${actualizacion.operacion}`);
+                            
+                            const { data, error } = await supabase
+                                .from('productos_sucursal')
+                                .update({ stock: actualizacion.stock })
+                                .eq('id', actualizacion.id)
+                                .select('id');
+                            
+                            if (error) {
+                                console.error(`❌ [ERROR REVERSIÓN] Producto ${actualizacion.producto_id} | ${actualizacion.operacion} | Error: ${error.message}`);
+                                throw error;
+                            }
+                            
+                            console.log(`✅ [REVERTIDO] Producto ${actualizacion.producto_id} | ${actualizacion.operacion}`);
+                            return { data, error: null };
+                        })
                     );
 
-                    const updateResults = await Promise.allSettled(updatePromises);
-
-                    // Verificar errores
-                    const errores = updateResults
-                        .filter(result => result.status === 'rejected' || result.value?.error)
-                        .map(result => result.status === 'rejected' ? result.reason : result.value?.error);
-                        
-                    if (errores.length > 0) {
-                        console.error('Errores en reversión manual de stocks:', errores);
+                    // Procesar en lotes de máximo 50 operaciones
+                    const { results, errors } = await processBatch(updateOperations, 50);
+                    
+                    // Validar que todas las operaciones fueron exitosas
+                    try {
+                        validateBatchResults(results);
+                        console.log('✅ [MODEL ANULAR] Reversión manual completada exitosamente');
+                    } catch (validationError) {
+                        console.error('❌ [MODEL ANULAR] Error en reversión manual:', validationError.message);
                         // Revertir el estado del movimiento
                         await supabase
                             .from('movimientos_almacen')
                             .update({ estado: 'finalizado' })
                             .eq('id', movimientoId);
-                        return { success: false, message: 'Error al revertir stocks manualmente', error: errores };
+                        return { 
+                            success: false, 
+                            message: 'Error al revertir stocks manualmente: ' + validationError.message, 
+                            error: validationError 
+                        };
+                    }
+                    
+                    // Si hay errores en el procesamiento por lotes, fallar completamente
+                    if (errors.length > 0) {
+                        console.error('❌ [MODEL ANULAR] Errores en procesamiento por lotes:', errors);
+                        // Revertir el estado del movimiento
+                        await supabase
+                            .from('movimientos_almacen')
+                            .update({ estado: 'finalizado' })
+                            .eq('id', movimientoId);
+                        return { 
+                            success: false, 
+                            message: 'Error al procesar reversión de stocks', 
+                            error: errors 
+                        };
                     }
                 }
             } else if (rpcSuccess) {
@@ -1806,5 +1948,6 @@ class movimientosAlmacen {
 }
 
 module.exports = movimientosAlmacen;
+
 
 
