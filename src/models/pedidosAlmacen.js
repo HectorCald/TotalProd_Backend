@@ -1057,7 +1057,8 @@ class pedidosAlmacen {
         updateData.deuda_id = deudaId;
       }
       
-      // Si se pasa null explícitamente, limpiar los campos
+      // Solo limpiar los campos si se pasa null explícitamente (no undefined)
+      // undefined significa que no se quiere modificar ese campo
       if (movimientoSalidaId === null) {
         updateData.movimiento_salida_id = null;
       }
