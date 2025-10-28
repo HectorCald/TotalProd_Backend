@@ -768,7 +768,7 @@ class movimientosAcopio {
           if (cantidadARestar > 0) {
             // Crear timestamp en zona horaria de Bolivia (GMT-4)
             const ahora = new Date();
-            const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+            const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
 
             const movimientoSalida = {
               product_id: ingrediente.products_acopio.id,
