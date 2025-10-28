@@ -76,12 +76,12 @@ class User {
 
       if (userPlanError) {
         console.error('❌ Error al crear user_plan:', userPlanError);
-        // No lanzar error aquí, solo log
+        throw new Error(`Error al asignar plan Free: ${userPlanError.message}`);
       }
 
-      // 5. Crear empresa para el usuario
+      // 5. Crear empresa para el usuario (OBLIGATORIO)
       const empresaData = {
-        name: userData.nameStore || 'Mi Empresa',
+        name: userData.nameStore, // Ya validado en frontend, no necesita fallback
         description: null, // Siempre null según nueva estructura
         propietario_id: insertedUser.id
       };
@@ -94,40 +94,42 @@ class User {
 
       if (empresaError) {
         console.error('❌ Error al crear empresa:', empresaError);
-        // No lanzar error aquí, solo log
+        throw new Error(`Error al crear empresa: ${empresaError.message}`);
       }
 
-      // 6. Crear sucursal "Casa Matriz" para la empresa
-      if (insertedEmpresa) {
-        const sucursalData = {
-          empresa_id: insertedEmpresa.id,
-          name: 'Casa Matriz'
-        };
+      if (!insertedEmpresa) {
+        throw new Error('No se pudo crear la empresa');
+      }
 
-        const { error: sucursalError } = await supabase
-          .from('sucursales')
-          .insert([sucursalData]);
+      // 6. Crear sucursal "Casa Matriz" para la empresa (OBLIGATORIO)
+      const sucursalData = {
+        empresa_id: insertedEmpresa.id,
+        name: 'Casa Matriz'
+      };
 
-        if (sucursalError) {
-          console.error('❌ Error al crear sucursal:', sucursalError);
-          // No lanzar error aquí, solo log
-        }
+      const { error: sucursalError } = await supabase
+        .from('sucursales')
+        .insert([sucursalData]);
 
-        // 7. Crear tipo de precio por defecto "Principal" para la empresa
-        const precioTypeData = {
-          empresa_id: insertedEmpresa.id,
-          name: 'Principal',
-          description: 'Precio principal del producto'
-        };
+      if (sucursalError) {
+        console.error('❌ Error al crear sucursal:', sucursalError);
+        throw new Error(`Error al crear sucursal Casa Matriz: ${sucursalError.message}`);
+      }
 
-        const { error: precioTypeError } = await supabase
-          .from('prices_types')
-          .insert([precioTypeData]);
+      // 7. Crear tipo de precio por defecto "Principal" para la empresa (OBLIGATORIO)
+      const precioTypeData = {
+        empresa_id: insertedEmpresa.id,
+        name: 'Principal',
+        description: 'Precio principal del producto'
+      };
 
-        if (precioTypeError) {
-          console.error('❌ Error al crear tipo de precio por defecto:', precioTypeError);
-          // No lanzar error aquí, solo log
-        }
+      const { error: precioTypeError } = await supabase
+        .from('prices_types')
+        .insert([precioTypeData]);
+
+      if (precioTypeError) {
+        console.error('❌ Error al crear tipo de precio por defecto:', precioTypeError);
+        throw new Error(`Error al crear tipo de precio Principal: ${precioTypeError.message}`);
       }
 
       // 8. Retornar instancia del modelo User
