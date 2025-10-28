@@ -55,6 +55,10 @@ class pricesTypes {
 
       if (error) {
         console.error('Error de Supabase al crear tipo de precio:', error);
+        // Manejar específicamente el error de duplicación por empresa
+        if (error.code === '23505' && error.constraint === 'prices_types_empresa_name_unique') {
+          throw new Error(`Ya existe un tipo de precio con el nombre "${priceTypeData.name}" en esta empresa`);
+        }
         throw new Error('No se pudo crear el tipo de precio');
       }
 
@@ -84,6 +88,10 @@ class pricesTypes {
 
       if (error) {
         console.error('Error de Supabase:', error);
+        // Manejar específicamente el error de duplicación por empresa
+        if (error.code === '23505' && error.constraint === 'prices_types_empresa_name_unique') {
+          throw new Error(`Ya existe un tipo de precio con el nombre "${priceTypeData.name}" en esta empresa`);
+        }
         throw new Error('No se pudo actualizar el tipo de precio');
       }
 
