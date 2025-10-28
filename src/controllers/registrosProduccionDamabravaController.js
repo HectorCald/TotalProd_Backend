@@ -78,8 +78,11 @@ class registrosProduccionDamabravaController {
             }
 
             // Validar que la fecha no sea anterior al mes actual
+            console.log('[ProduccionCtrl] vencimiento recibido (YYYY-MM):', vencimiento);
             const [año, mes] = vencimiento.split('-');
+            console.log('[ProduccionCtrl] partes parseadas año/mes:', { año, mes });
             const fechaSeleccionada = new Date(parseInt(año), parseInt(mes) - 1);
+            console.log('[ProduccionCtrl] fechaSeleccionada Date:', fechaSeleccionada.toISOString());
             const hoy = new Date();
             const mesActual = new Date(hoy.getFullYear(), hoy.getMonth());
 
@@ -150,6 +153,7 @@ class registrosProduccionDamabravaController {
                 observaciones: observaciones || null,
                 empresa_id: empresaId // Usar el empresa_id obtenido
             };
+            console.log('[ProduccionCtrl] registroData.vencimiento final:', registroData.vencimiento);
 
             console.log('🔍 [CONTROLADOR] Datos del registro:', {
                 producto_almacen_id,
