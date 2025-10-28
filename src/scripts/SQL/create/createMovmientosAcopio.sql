@@ -13,7 +13,7 @@ CREATE TABLE movimientos_acopio (
     metodo_pago TEXT,
     gasto_id UUID,
     restar_ingredientes BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT movimientos_acopio_product_id_fkey 
         FOREIGN KEY (product_id) REFERENCES products_acopio (id),
     CONSTRAINT movimientos_acopio_proveedor_id_fkey 
