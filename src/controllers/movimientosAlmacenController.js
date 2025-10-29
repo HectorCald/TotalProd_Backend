@@ -530,6 +530,47 @@ class movimientosAlmacenController {
         }
     }
 
+    // Obtener movimientos por producción Damabrava
+    static async getByProduccionDamabrava(req, res) {
+        try {
+            const { produccionId } = req.params;
+            const sucu_id = req.query.sucu_id;
+
+            if (!sucu_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
+
+            if (!produccionId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la producción es requerido'
+                });
+            }
+
+            const result = await movimientosAlmacen.getByProduccionDamabrava(produccionId, sucu_id);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json({
+                success: true,
+                data: result.data
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.getByProduccionDamabrava:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
     // Actualizar un movimiento
     static async update(req, res) {
         try {

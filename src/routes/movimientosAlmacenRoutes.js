@@ -24,6 +24,9 @@ router.get('/product/:productId', movimientosAlmacenController.getByProduct);
 // Obtener movimientos por cliente
 router.get('/cliente/:clienteId', movimientosAlmacenController.getByCliente);
 
+// Obtener movimientos por producción Damabrava
+router.get('/produccion-damabrava/:produccionId', movimientosAlmacenController.getByProduccionDamabrava);
+
 // Obtener un movimiento específico por ID
 router.get('/:id', movimientosAlmacenController.getById);
 
