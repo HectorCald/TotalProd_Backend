@@ -16,6 +16,13 @@ const sucursales = {
                         id,
                         name,
                         propietario_id
+                    ),
+                    sucursal_precios (
+                        precio_id,
+                        prices_types:precio_id (
+                            id,
+                            name
+                        )
                     )
                 `)
                 .eq('empresa_id', empresaId)
@@ -25,9 +32,21 @@ const sucursales = {
                 throw error;
             }
 
+            // Mapear los datos para incluir los nombres de precios de forma más accesible
+            const dataMapeada = (data || []).map(sucursal => {
+                const precios = (sucursal.sucursal_precios || [])
+                    .map(sp => sp.prices_types)
+                    .filter(Boolean);
+                
+                return {
+                    ...sucursal,
+                    precios: precios
+                };
+            });
+
             return {
                 success: true,
-                data: data || []
+                data: dataMapeada
             };
         } catch (error) {
             console.error('Error en sucursales.getByEmpresaId:', error);
@@ -54,6 +73,13 @@ const sucursales = {
                         id,
                         name,
                         propietario_id
+                    ),
+                    sucursal_precios (
+                        precio_id,
+                        prices_types:precio_id (
+                            id,
+                            name
+                        )
                     )
                 `)
                 .eq('id', id)
@@ -63,9 +89,19 @@ const sucursales = {
                 throw error;
             }
 
+            // Mapear los datos para incluir los nombres de precios de forma más accesible
+            const precios = (data.sucursal_precios || [])
+                .map(sp => sp.prices_types)
+                .filter(Boolean);
+
+            const dataMapeada = {
+                ...data,
+                precios: precios
+            };
+
             return {
                 success: true,
-                data: data
+                data: dataMapeada
             };
         } catch (error) {
             console.error('Error en sucursales.getById:', error);
@@ -150,9 +186,16 @@ const sucursales = {
                 await this.syncPreciosSucursal(data.id, precios);
             }
 
+            // Obtener los precios actualizados para devolverlos en la respuesta
+            const preciosResult = await this.getPreciosBySucursalId(data.id);
+            const preciosActualizados = preciosResult.success ? preciosResult.data : [];
+
             return {
                 success: true,
-                data: data
+                data: {
+                    ...data,
+                    precios: preciosActualizados
+                }
             };
         } catch (error) {
             console.error('Error en sucursales.update:', error);
