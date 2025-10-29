@@ -62,7 +62,7 @@ const sucursalesController = {
     // Crear nueva sucursal
     async create(req, res) {
         try {
-            const { name, almacen_sucursal_id } = req.body;
+            const { name, almacen_sucursal_id, precios } = req.body;
             const userId = req.user.id;
             
             if (!name || !name.trim()) {
@@ -90,7 +90,7 @@ const sucursalesController = {
                 ...(almacen_sucursal_id ? { almacen_sucursal_id } : {})
             };
 
-            const result = await sucursales.create(sucursalData);
+            const result = await sucursales.create(sucursalData, precios);
             if (result.success) {
                 res.status(201).json(result);
             } else {
@@ -106,7 +106,7 @@ const sucursalesController = {
     async update(req, res) {
         try {
             const { id } = req.params;
-            const { name, almacen_sucursal_id } = req.body;
+            const { name, almacen_sucursal_id, precios } = req.body;
             
             if (!name || !name.trim()) {
                 return res.status(400).json({
@@ -129,7 +129,7 @@ const sucursalesController = {
                 ...(typeof almacen_sucursal_id !== 'undefined' ? { almacen_sucursal_id } : {})
             };
 
-            const result = await sucursales.update(id, sucursalData);
+            const result = await sucursales.update(id, sucursalData, precios);
             if (result.success) {
                 res.json(result);
             } else {
@@ -189,6 +189,35 @@ const sucursalesController = {
                 success: false, 
                 message: 'Error interno del servidor al eliminar la sucursal', 
                 error: error.message 
+            });
+        }
+    },
+
+    // Obtener precios por sucursal
+    async getPreciosBySucursalId(req, res) {
+        try {
+            const { id } = req.params;
+            
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de sucursal es requerido'
+                });
+            }
+
+            const result = await sucursales.getPreciosBySucursalId(id);
+            
+            if (result.success) {
+                res.json(result);
+            } else {
+                res.status(500).json(result);
+            }
+        } catch (error) {
+            console.error('Error en sucursalesController.getPreciosBySucursalId:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
             });
         }
     }

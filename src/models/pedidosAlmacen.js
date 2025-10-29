@@ -1013,7 +1013,7 @@ class pedidosAlmacen {
   }
 
   // Actualizar estado del pedido
-  static async updateEstado(pedidoId, nuevoEstado, movimientoSalidaId = null, deudaId = null, movimientoEntradaId = null) {
+  static async updateEstado(pedidoId, nuevoEstado, movimientoSalidaId = undefined, deudaId = undefined, movimientoEntradaId = undefined) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
@@ -1042,34 +1042,23 @@ class pedidosAlmacen {
 
       const updateData = { estado: nuevoEstado };
       
-      // Si se proporciona un movimiento_salida_id, agregarlo
-      if (movimientoSalidaId) {
+      // Si se proporciona un movimiento_salida_id (no undefined), agregarlo o limpiarlo
+      if (movimientoSalidaId !== undefined) {
         updateData.movimiento_salida_id = movimientoSalidaId;
       }
       
-      // Si se proporciona un movimiento_entrada_id, agregarlo
-      if (movimientoEntradaId) {
+      // Si se proporciona un movimiento_entrada_id (no undefined), agregarlo o limpiarlo
+      if (movimientoEntradaId !== undefined) {
         updateData.movimiento_entrada_id = movimientoEntradaId;
       }
       
-      // Si se proporciona un deuda_id, agregarlo
-      if (deudaId) {
+      // Si se proporciona un deuda_id (no undefined), agregarlo o limpiarlo
+      if (deudaId !== undefined) {
         updateData.deuda_id = deudaId;
       }
       
-      // Solo limpiar los campos si se pasa null explícitamente (no undefined)
-      // undefined significa que no se quiere modificar ese campo
-      if (movimientoSalidaId === null) {
-        updateData.movimiento_salida_id = null;
-      }
-      if (movimientoEntradaId === null) {
-        updateData.movimiento_entrada_id = null;
-      }
-      if (deudaId === null) {
-        updateData.deuda_id = null;
-      }
-      
-      // Si el estado es 'Pendiente', limpiar movimiento_salida_id, movimiento_entrada_id y deuda_id
+      // SOLO limpiar los campos si el estado es 'Pendiente' (anulación)
+      // Cuando se ingresa un pedido (estado 'Completado'), NO se deben limpiar los campos existentes
       if (nuevoEstado === 'Pendiente') {
         updateData.movimiento_salida_id = null;
         updateData.movimiento_entrada_id = null;

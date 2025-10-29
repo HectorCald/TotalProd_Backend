@@ -8,6 +8,7 @@ router.use(requireAuth);
 
 // Rutas que NO requieren módulo (solo lectura)
 router.get('/empresa/:empresaId', sucursalesController.getByEmpresaId);
+router.get('/:id/precios', sucursalesController.getPreciosBySucursalId);
 router.get('/:id', sucursalesController.getById);
 
 // Rutas que SÍ requieren módulo (escritura)

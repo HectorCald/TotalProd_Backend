@@ -166,6 +166,40 @@ class pricesTypes {
       throw error;
     }
   }
+
+  // Obtener precios por sucursal
+  static async getBySucursalId(sucursalId) {
+    try {
+      if (!sucursalId) {
+        throw new Error('ID de la sucursal es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('sucursal_precios')
+        .select(`
+          precio_id,
+          prices_types:precio_id (
+            id,
+            name,
+            description
+          )
+        `)
+        .eq('sucursal_id', sucursalId);
+
+      if (error) {
+        console.error('Error de Supabase:', error);
+        throw new Error('No se pudo obtener los precios de la sucursal');
+      }
+
+      // Mapear los resultados para devolver solo los datos del precio
+      const precios = (data || []).map(item => item.prices_types).filter(Boolean);
+
+      return precios;
+    } catch (error) {
+      console.error('Error al obtener los precios de la sucursal:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = pricesTypes;

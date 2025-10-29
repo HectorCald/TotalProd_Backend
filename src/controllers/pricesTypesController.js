@@ -7,6 +7,7 @@ class pricesTypesController {
   static async getAll(req, res) {
     try {
       const empresaId = req.query.empresa_id;
+      const sucursalId = req.query.sucursal_id;
       
       if (!empresaId) {
         return res.status(400).json({
@@ -15,7 +16,29 @@ class pricesTypesController {
         });
       }
 
-      const priceTypes = await pricesTypes.getAll(empresaId);
+      let priceTypes;
+
+      // Si se proporciona sucursal_id, verificar si es "Casa Matriz"
+      if (sucursalId) {
+        const sucursales = require('../models/sucursales');
+        const sucursalResult = await sucursales.getById(sucursalId);
+        
+        if (sucursalResult.success && sucursalResult.data) {
+          // Si es "Casa Matriz", cargar todos los precios normalmente
+          if (sucursalResult.data.name === 'Casa Matriz') {
+            priceTypes = await pricesTypes.getAll(empresaId);
+          } else {
+            // Si no es "Casa Matriz", cargar solo los precios asignados a esa sucursal
+            priceTypes = await pricesTypes.getBySucursalId(sucursalId);
+          }
+        } else {
+          // Si no se encuentra la sucursal, cargar todos los precios por defecto
+          priceTypes = await pricesTypes.getAll(empresaId);
+        }
+      } else {
+        // Si no se proporciona sucursal_id, cargar todos los precios normalmente
+        priceTypes = await pricesTypes.getAll(empresaId);
+      }
       
       res.status(200).json({
         success: true,

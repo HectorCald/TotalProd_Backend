@@ -78,7 +78,7 @@ const sucursales = {
     },
 
     // Crear nueva sucursal
-    async create(sucursalData) {
+    async create(sucursalData, precios = []) {
         try {
             const { data, error } = await supabase
                 .from('sucursales')
@@ -101,6 +101,11 @@ const sucursales = {
                 throw error;
             }
 
+            // Si hay precios para asignar, insertarlos en la tabla intermedia
+            if (precios && Array.isArray(precios) && precios.length > 0 && data.id) {
+                await this.syncPreciosSucursal(data.id, precios);
+            }
+
             return {
                 success: true,
                 data: data
@@ -116,7 +121,7 @@ const sucursales = {
     },
 
     // Actualizar sucursal
-    async update(id, sucursalData) {
+    async update(id, sucursalData, precios = null) {
         try {
             const { data, error } = await supabase
                 .from('sucursales')
@@ -138,6 +143,11 @@ const sucursales = {
 
             if (error) {
                 throw error;
+            }
+
+            // Si se proporcionaron precios (incluso si es un array vacío), sincronizar
+            if (precios !== null && Array.isArray(precios) && data.id) {
+                await this.syncPreciosSucursal(data.id, precios);
             }
 
             return {
@@ -293,6 +303,104 @@ const sucursales = {
             return {
                 success: false,
                 message: `Error inesperado al eliminar la sucursal: ${error.message}`,
+                error: error.message
+            };
+        }
+    },
+
+    // Sincronizar precios de una sucursal (insertar/eliminar según corresponda)
+    async syncPreciosSucursal(sucursalId, nuevosPreciosIds) {
+        try {
+            // Obtener precios actuales de la sucursal
+            const { data: preciosActuales, error: errorActuales } = await supabase
+                .from('sucursal_precios')
+                .select('precio_id')
+                .eq('sucursal_id', sucursalId);
+
+            if (errorActuales) {
+                throw errorActuales;
+            }
+
+            const preciosActualesIds = (preciosActuales || []).map(p => p.precio_id);
+            const nuevosPreciosIdsSet = new Set(nuevosPreciosIds || []);
+
+            // Encontrar precios a eliminar (están en actuales pero no en nuevos)
+            const preciosAEliminar = preciosActualesIds.filter(id => !nuevosPreciosIdsSet.has(id));
+
+            // Encontrar precios a agregar (están en nuevos pero no en actuales)
+            const preciosAAgregar = nuevosPreciosIds.filter(id => !preciosActualesIds.includes(id));
+
+            // Eliminar precios que ya no están asignados
+            if (preciosAEliminar.length > 0) {
+                const { error: errorEliminar } = await supabase
+                    .from('sucursal_precios')
+                    .delete()
+                    .eq('sucursal_id', sucursalId)
+                    .in('precio_id', preciosAEliminar);
+
+                if (errorEliminar) {
+                    throw errorEliminar;
+                }
+            }
+
+            // Agregar nuevos precios
+            if (preciosAAgregar.length > 0) {
+                const relacionesAAgregar = preciosAAgregar.map(precioId => ({
+                    sucursal_id: sucursalId,
+                    precio_id: precioId
+                }));
+
+                const { error: errorAgregar } = await supabase
+                    .from('sucursal_precios')
+                    .insert(relacionesAAgregar);
+
+                if (errorAgregar) {
+                    throw errorAgregar;
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error en syncPreciosSucursal:', error);
+            throw error;
+        }
+    },
+
+    // Obtener precios por sucursal
+    async getPreciosBySucursalId(sucursalId) {
+        try {
+            if (!sucursalId) {
+                throw new Error('ID de sucursal es requerido');
+            }
+
+            const { data, error } = await supabase
+                .from('sucursal_precios')
+                .select(`
+                    precio_id,
+                    prices_types:precio_id (
+                        id,
+                        name,
+                        description
+                    )
+                `)
+                .eq('sucursal_id', sucursalId);
+
+            if (error) {
+                throw error;
+            }
+
+            // Mapear los resultados para devolver solo los datos del precio
+            const precios = (data || []).map(item => item.prices_types).filter(Boolean);
+
+            return {
+                success: true,
+                data: precios
+            };
+        } catch (error) {
+            console.error('Error en sucursales.getPreciosBySucursalId:', error);
+            return {
+                success: false,
+                message: 'Error al obtener los precios de la sucursal',
                 error: error.message
             };
         }
