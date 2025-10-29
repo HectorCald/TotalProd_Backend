@@ -30,7 +30,9 @@ class productsAcopio {
           type_measure:type_measure_id (
             id,
             name,
-            code
+            code,
+            code_menor,
+            value
           ),
           recetas_acopio (
             id,
@@ -45,7 +47,9 @@ class productsAcopio {
                 type_measure:type_measure_id (
                   id,
                   name,
-                  code
+                  code,
+                  code_menor,
+                  value
                 )
               )
             )
@@ -86,7 +90,9 @@ class productsAcopio {
           type_measure:type_measure_id (
             id,
             name,
-            code
+            code,
+            code_menor,
+            value
           ),
           recetas_acopio (
             id,
@@ -439,7 +445,9 @@ class productsAcopio {
           type_measure:type_measure_id (
             id,
             name,
-            code
+            code,
+            code_menor,
+            value
           ),
           category:category_id (
             id,

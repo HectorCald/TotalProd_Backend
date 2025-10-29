@@ -48,7 +48,14 @@ class productsAlmacen {
               products_acopio:producto_acopio_id (
                 id,
                 name,
-                quantity
+                quantity,
+                type_measure:type_measure_id (
+                  id,
+                  name,
+                  code,
+                  code_menor,
+                  value
+                )
               )
             )
           ),
@@ -119,7 +126,14 @@ class productsAlmacen {
               products_acopio:producto_acopio_id (
                 id,
                 name,
-                quantity
+                quantity,
+                type_measure:type_measure_id (
+                  id,
+                  name,
+                  code,
+                  code_menor,
+                  value
+                )
               )
             )
           )
@@ -183,7 +197,14 @@ class productsAlmacen {
               products_acopio:producto_acopio_id (
                 id,
                 name,
-                quantity
+                quantity,
+                type_measure:type_measure_id (
+                  id,
+                  name,
+                  code,
+                  code_menor,
+                  value
+                )
               )
             )
           ),
@@ -633,7 +654,7 @@ class productsAlmacen {
               // Obtener información del producto de acopio
               const { data: productoAcopio } = await supabase
                 .from('products_acopio')
-                .select('id, name, type_measure(id, name, code)')
+                .select('id, name, type_measure(id, name, code, code_menor, value)')
                 .eq('id', prod.producto_acopio_id)
                 .single();
 
