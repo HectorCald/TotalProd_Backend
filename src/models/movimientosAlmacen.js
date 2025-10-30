@@ -1,4 +1,5 @@
 const { supabase, processBatch, retryOperation, validateBatchResults } = require('../config/supabase');
+const deudas = require('./deudas');
 
 // Función helper para normalizar texto (quitar acentos)
 const normalizeText = (text) => {
@@ -1302,6 +1303,17 @@ class movimientosAlmacen {
                 console.log(`✅ [MODEL ANULAR] RPC exitoso - Saltando reversión manual redundante`);
             }
 
+            // Eliminar deudas asociadas a este movimiento (si las hubiera)
+            try {
+                const deleteDeudasResult = await deudas.deleteByMovimientoSalidaId(movimientoId);
+                if (!deleteDeudasResult.success) {
+                    console.warn('⚠️ [ANULAR] No se pudieron eliminar deudas asociadas:', deleteDeudasResult.message);
+                    // No abortar la anulación por esto, solo advertir
+                }
+            } catch (e) {
+                console.warn('⚠️ [ANULAR] Error eliminando deudas asociadas al movimiento:', e.message);
+            }
+
             // Si es entrada, tiene receta Y restar_ingredientes es true, devolver ingredientes consumidos
             if (movimiento.type === 'entrada' && movimiento.restar_ingredientes) {
                 console.log('🔄 [MODEL ANULAR] Devolviendo ingredientes para movimiento de entrada con restar_ingredientes=true');
@@ -1404,6 +1416,17 @@ class movimientosAlmacen {
                 return { success: false, message: 'Solo se pueden eliminar movimientos anulados' };
             }
 
+            // Eliminar deudas asociadas primero
+            try {
+                const deleteDeudas = await deudas.deleteByMovimientoSalidaId(movimientoId);
+                if (!deleteDeudas.success) {
+                    console.warn('⚠️ [ELIMINAR] No se pudieron eliminar deudas asociadas:', deleteDeudas.message);
+                    // Continuar con la eliminación del movimiento
+                }
+            } catch (e) {
+                console.warn('⚠️ [ELIMINAR] Error eliminando deudas asociadas al movimiento:', e.message);
+                // Continuar con la eliminación del movimiento
+            }
 
             // Usar función RPC para eliminación atómica
             try {
