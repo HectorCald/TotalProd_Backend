@@ -142,13 +142,7 @@ class deudasController {
         });
       }
 
-      // Registrar SIEMPRE el movimiento de salida asociado
-      if (!movimiento_salida_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'El movimiento_salida_id es obligatorio para registrar la deuda'
-        });
-      }
+      // El movimiento de salida asociado es opcional
 
       const deudaData = {
         user_id: finalUserId,
@@ -436,6 +430,74 @@ class deudasController {
         success: false,
         message: error.message || 'Error al obtener las deudas vencidas'
       });
+    }
+  }
+
+  // Crear pago parcial
+  static async createPagoParcial(req, res) {
+    try {
+      const { id } = req.params; // deuda id
+      const { monto, fecha } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ success: false, message: 'ID de la deuda es requerido' });
+      }
+      if (!monto || monto <= 0) {
+        return res.status(400).json({ success: false, message: 'El monto es obligatorio y debe ser mayor a 0' });
+      }
+
+      const userType = req.user?.type;
+      const user_id = userType === 'employee' ? null : req.user?.id;
+      const personal_id = userType === 'employee' ? req.user?.id : null;
+
+      const result = await deudas.createPagoParcial({ deuda_id: id, monto: parseFloat(monto), fecha, user_id, personal_id });
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.status(201).json(result);
+    } catch (error) {
+      console.error('Error en createPagoParcial:', error);
+      res.status(500).json({ success: false, message: error.message || 'Error al registrar el pago parcial' });
+    }
+  }
+
+  // Listar pagos parciales de una deuda
+  static async getPagosParciales(req, res) {
+    try {
+      const { id } = req.params; // deuda id
+      if (!id) {
+        return res.status(400).json({ success: false, message: 'ID de la deuda es requerido' });
+      }
+
+      const result = await deudas.getPagosParciales(id);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      console.error('Error en getPagosParciales:', error);
+      res.status(500).json({ success: false, message: error.message || 'Error al obtener los pagos parciales' });
+    }
+  }
+
+  // Eliminar un pago parcial
+  static async deletePagoParcial(req, res) {
+    try {
+      const { id, pago_id } = req.params; // deuda id y pago id
+      if (!id || !pago_id) {
+        return res.status(400).json({ success: false, message: 'IDs requeridos' });
+      }
+
+      const result = await deudas.deletePagoParcial(id, pago_id);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      console.error('Error en deletePagoParcial:', error);
+      res.status(500).json({ success: false, message: error.message || 'Error al eliminar el pago parcial' });
     }
   }
 }

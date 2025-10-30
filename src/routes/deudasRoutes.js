@@ -8,6 +8,11 @@ const router = express.Router();
 // Aplicar middleware de autenticación a todas las rutas
 router.use(requireAuth);
 
+// Pagos parciales
+router.get('/:id/pagos-parciales', deudasController.getPagosParciales);
+router.post('/:id/pagos-parciales', deudasController.createPagoParcial);
+router.delete('/:id/pagos-parciales/:pago_id', deudasController.deletePagoParcial);
+
 // Aplicar middleware de acceso al módulo 'Deudas' a todas las rutas
 router.use(requireModuleAccess('Deudas'));
 
@@ -20,6 +25,7 @@ router.get('/:id', deudasController.getById);
 router.post('/', deudasController.create);
 router.put('/:id', deudasController.update);
 router.put('/:id/estado', deudasController.updateEstado);
+
 // Importante: colocar esta ruta ANTES de '/:id' para evitar colisiones
 router.delete('/movimiento/:movimiento_salida_id', deudasController.deleteByMovimientoSalidaId);
 router.delete('/:id', deudasController.delete);

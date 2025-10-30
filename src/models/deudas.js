@@ -50,6 +50,16 @@ class deudas {
                     cliente:cliente_id (
                         id,
                         name
+                    ),
+                    user:user_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id (
+                        id,
+                        first_name,
+                        last_name
                     )
                 `)
                 .single();
@@ -59,9 +69,24 @@ class deudas {
                 throw new Error('Error al crear la deuda');
             }
 
+            // Procesar nombres de user/personal si existen
+            const processed = { ...data };
+            if (data?.user) {
+                processed.user = {
+                    ...data.user,
+                    name: `${data.user.first_name} ${data.user.last_name}`.trim()
+                };
+            }
+            if (data?.personal) {
+                processed.personal = {
+                    ...data.personal,
+                    name: `${data.personal.first_name} ${data.personal.last_name}`.trim()
+                };
+            }
+
             return {
                 success: true,
-                data: data,
+                data: processed,
                 message: 'Deuda creada correctamente'
             };
 
@@ -415,17 +440,13 @@ class deudas {
                 cliente_id: cliente_id || null
             };
 
-            // Si viene una fecha específica, convertirla
+            // No aplicar conversiones de zona horaria: persistir tal cual viene (YYYY-MM-DD para columnas DATE)
             if (fecha_deuda) {
-                const fechaOriginal = new Date(fecha_deuda);
-                const fechaDeudaBolivia = new Date(fechaOriginal.getTime() - (4 * 60 * 60 * 1000));
-                dbData.fecha_deuda = fechaDeudaBolivia.toISOString();
+                dbData.fecha_deuda = fecha_deuda;
             }
 
             if (fecha_vencimiento) {
-                const fechaOriginal = new Date(fecha_vencimiento);
-                const fechaVencimientoBolivia = new Date(fechaOriginal.getTime() - (4 * 60 * 60 * 1000));
-                dbData.fecha_vencimiento = fechaVencimientoBolivia.toISOString();
+                dbData.fecha_vencimiento = fecha_vencimiento;
             }
 
             if (monto_total !== undefined) {
@@ -450,6 +471,16 @@ class deudas {
                         id,
                         name
                     ),
+                    user:user_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
                     sucursal_destino:destino_sucursal_id (
                         id,
                         name
@@ -462,9 +493,24 @@ class deudas {
                 throw new Error('Error al actualizar la deuda');
             }
 
+            // Procesar nombres de user/personal si existen
+            const processed = { ...data };
+            if (data?.user) {
+                processed.user = {
+                    ...data.user,
+                    name: `${data.user.first_name} ${data.user.last_name}`.trim()
+                };
+            }
+            if (data?.personal) {
+                processed.personal = {
+                    ...data.personal,
+                    name: `${data.personal.first_name} ${data.personal.last_name}`.trim()
+                };
+            }
+
             return {
                 success: true,
-                data: data,
+                data: processed,
                 message: 'Deuda actualizada correctamente'
             };
 
@@ -655,6 +701,217 @@ class deudas {
                 success: false,
                 message: error.message || 'Error al obtener las deudas vencidas'
             };
+        }
+    }
+
+    // Registrar pago parcial y actualizar saldo/estado
+    static async createPagoParcial({ deuda_id, monto, fecha, user_id = null, personal_id = null }) {
+        try {
+            // Obtener deuda actual
+            const { data: deudaActual, error: deudaError } = await supabase
+                .from('deudas')
+                .select('*')
+                .eq('id', deuda_id)
+                .single();
+
+            if (deudaError || !deudaActual) {
+                console.error('Error obteniendo deuda para pago parcial:', deudaError);
+                throw new Error('Deuda no encontrada');
+            }
+
+            const saldoAnterior = parseFloat(deudaActual.saldo_pendiente || 0);
+            const montoPago = parseFloat(monto);
+            const nuevoSaldo = Math.max(0, saldoAnterior - montoPago);
+
+            // Insertar pago parcial
+            const pagoData = {
+                deuda_id,
+                monto: montoPago,
+                user_id: user_id || null,
+                personal_id: personal_id || null
+            };
+            if (fecha) {
+                // Guardar como timestamp o date según la columna; la tabla usa TIMESTAMPTZ
+                pagoData.fecha = fecha;
+            }
+
+            const { data: pagoInsertado, error: pagoError } = await supabase
+                .from('deuda_pagos_parciales')
+                .insert([pagoData])
+                .select()
+                .single();
+
+            if (pagoError) {
+                console.error('Error insertando pago parcial:', pagoError);
+                throw new Error('Error al registrar el pago parcial');
+            }
+
+            // Actualizar deuda con nuevo saldo y estado si corresponde
+            const updateData = {
+                saldo_pendiente: nuevoSaldo,
+                estado: nuevoSaldo === 0 ? 'pagada' : deudaActual.estado
+            };
+
+            const { data: deudaActualizada, error: deudaUpdateError } = await supabase
+                .from('deudas')
+                .update(updateData)
+                .eq('id', deuda_id)
+                .select(`
+                    *,
+                    cliente:cliente_id (id, name),
+                    user:user_id (id, first_name, last_name),
+                    personal:personal_id (id, first_name, last_name)
+                `)
+                .single();
+
+            if (deudaUpdateError) {
+                console.error('Error actualizando deuda tras pago parcial:', deudaUpdateError);
+                throw new Error('Error al actualizar la deuda');
+            }
+
+            // Procesar nombres
+            const processedDeuda = { ...deudaActualizada };
+            if (processedDeuda?.user) {
+                processedDeuda.user = {
+                    ...processedDeuda.user,
+                    name: `${processedDeuda.user.first_name} ${processedDeuda.user.last_name}`.trim()
+                };
+            }
+            if (processedDeuda?.personal) {
+                processedDeuda.personal = {
+                    ...processedDeuda.personal,
+                    name: `${processedDeuda.personal.first_name} ${processedDeuda.personal.last_name}`.trim()
+                };
+            }
+
+            return {
+                success: true,
+                data: {
+                    deuda: processedDeuda,
+                    pago: pagoInsertado
+                },
+                message: 'Pago parcial registrado correctamente'
+            };
+
+        } catch (error) {
+            console.error('Error en createPagoParcial:', error);
+            return { success: false, message: error.message || 'Error al registrar el pago parcial' };
+        }
+    }
+
+    // Listar pagos parciales de una deuda
+    static async getPagosParciales(deuda_id) {
+        try {
+            const { data, error } = await supabase
+                .from('deuda_pagos_parciales')
+                .select('*')
+                .eq('deuda_id', deuda_id)
+                .order('fecha', { ascending: false });
+
+            if (error) {
+                console.error('Error listando pagos parciales:', error);
+                throw new Error('Error al obtener los pagos parciales');
+            }
+
+            return { success: true, data: data || [] };
+        } catch (error) {
+            console.error('Error en getPagosParciales:', error);
+            return { success: false, message: error.message || 'Error al obtener los pagos parciales' };
+        }
+    }
+
+    // Eliminar pago parcial y revertir saldo/estado si corresponde
+    static async deletePagoParcial(deuda_id, pago_id) {
+        try {
+            // Obtener pago
+            const { data: pago, error: pagoGetError } = await supabase
+                .from('deuda_pagos_parciales')
+                .select('*')
+                .eq('id', pago_id)
+                .single();
+
+            if (pagoGetError || !pago) {
+                console.error('Error obteniendo pago parcial:', pagoGetError);
+                throw new Error('Pago parcial no encontrado');
+            }
+
+            if (pago.deuda_id !== deuda_id) {
+                throw new Error('El pago no corresponde a la deuda indicada');
+            }
+
+            // Obtener deuda actual
+            const { data: deudaActual, error: deudaError } = await supabase
+                .from('deudas')
+                .select('*')
+                .eq('id', deuda_id)
+                .single();
+
+            if (deudaError || !deudaActual) {
+                console.error('Error obteniendo deuda para revertir pago parcial:', deudaError);
+                throw new Error('Deuda no encontrada');
+            }
+
+            const saldoAnterior = parseFloat(deudaActual.saldo_pendiente || 0);
+            const montoPago = parseFloat(pago.monto || 0);
+            const nuevoSaldo = saldoAnterior + montoPago;
+
+            // Eliminar pago
+            const { error: deleteError } = await supabase
+                .from('deuda_pagos_parciales')
+                .delete()
+                .eq('id', pago_id);
+
+            if (deleteError) {
+                console.error('Error eliminando pago parcial:', deleteError);
+                throw new Error('Error al eliminar el pago parcial');
+            }
+
+            // Actualizar deuda con nuevo saldo y estado según regla
+            const updateData = {
+                saldo_pendiente: nuevoSaldo,
+                estado: nuevoSaldo > 0 ? 'pendiente' : 'pagada'
+            };
+
+            const { data: deudaActualizada, error: deudaUpdateError } = await supabase
+                .from('deudas')
+                .update(updateData)
+                .eq('id', deuda_id)
+                .select(`
+                    *,
+                    cliente:cliente_id (id, name),
+                    user:user_id (id, first_name, last_name),
+                    personal:personal_id (id, first_name, last_name)
+                `)
+                .single();
+
+            if (deudaUpdateError) {
+                console.error('Error actualizando deuda tras eliminar pago parcial:', deudaUpdateError);
+                throw new Error('Error al actualizar la deuda');
+            }
+
+            // Procesar nombres
+            const processedDeuda = { ...deudaActualizada };
+            if (processedDeuda?.user) {
+                processedDeuda.user = {
+                    ...processedDeuda.user,
+                    name: `${processedDeuda.user.first_name} ${processedDeuda.user.last_name}`.trim()
+                };
+            }
+            if (processedDeuda?.personal) {
+                processedDeuda.personal = {
+                    ...processedDeuda.personal,
+                    name: `${processedDeuda.personal.first_name} ${processedDeuda.personal.last_name}`.trim()
+                };
+            }
+
+            return {
+                success: true,
+                data: processedDeuda,
+                message: 'Pago parcial eliminado y deuda actualizada'
+            };
+        } catch (error) {
+            console.error('Error en deletePagoParcial:', error);
+            return { success: false, message: error.message || 'Error al eliminar el pago parcial' };
         }
     }
 }
