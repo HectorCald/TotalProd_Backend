@@ -71,6 +71,7 @@ class gastosController {
   static async getById(req, res) {
     try {
       const { id } = req.params;
+      const { empresa_id } = req.query;
 
       if (!id) {
         return res.status(400).json({
@@ -79,6 +80,9 @@ class gastosController {
         });
       }
 
+      // El empresa_id se usa por el middleware requireModuleAccess para verificar permisos
+      // No es necesario pasarlo al modelo, solo validar que existe si se requiere
+      
       const result = await gastos.getById(id);
       
       if (!result.success) {

@@ -5,5 +5,6 @@ CREATE TABLE empresas (
     description VARCHAR,
     propietario_id UUID NOT NULL,
     logo_tipo TEXT NULL,
+    tipo TEXT NULL,
     CONSTRAINT empresas_propietario_id_fkey FOREIGN KEY (propietario_id) REFERENCES users (id)
 );

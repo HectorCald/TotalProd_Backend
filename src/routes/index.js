@@ -26,6 +26,7 @@ const registrosProduccionDamabravaRoutes = require('./registrosProduccionDamabra
 const conteosRoutes = require('./conteosRoutes');
 const cotizacionesRoutes = require('./cotizacionesRoutes');
 const empresaImagenRoutes = require('./empresaImagenRoutes');
+const empresaRoutes = require('./empresaRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -120,5 +121,8 @@ router.use('/cotizaciones', cotizacionesRoutes);
 
 // Rutas de imágenes de empresa
 router.use('/empresa-imagen', empresaImagenRoutes);
+
+// Rutas de empresa
+router.use('/empresas', empresaRoutes);
 
 module.exports = router;

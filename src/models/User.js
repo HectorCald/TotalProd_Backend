@@ -83,7 +83,8 @@ class User {
       const empresaData = {
         name: userData.nameStore, // Ya validado en frontend, no necesita fallback
         description: null, // Siempre null según nueva estructura
-        propietario_id: insertedUser.id
+        propietario_id: insertedUser.id,
+        tipo: null // Tipo inicial null, se seleccionará después
       };
 
       const { data: insertedEmpresa, error: empresaError } = await supabase
@@ -222,7 +223,8 @@ class User {
             id,
             name,
             description,
-            logo_tipo
+            logo_tipo,
+            tipo
           )
         `)
         .eq('id', id)
@@ -287,6 +289,7 @@ class User {
         user.empresa = user.empresas[0]; // El usuario es propietario de una empresa
         user.empresa_id = user.empresas[0].id;
         user.logo_tipo = user.empresas[0].logo_tipo; // Incluir el logo de la empresa
+        user.empresa.tipo = user.empresas[0].tipo; // Incluir el tipo de la empresa
         delete user.empresas; // Limpiar datos innecesarios
       } else {
         user.empresa = null;

@@ -191,7 +191,8 @@ class UserController {
             modules: user.modules,
             empresa_id: user.empresa_id,
             empresa: user.empresa,
-            logo_tipo: user.logo_tipo
+            logo_tipo: user.logo_tipo,
+            empresa_tipo: user.empresa?.tipo || null
           }
         }
       });

@@ -467,7 +467,7 @@ class pedidosAcopio {
   }
 
   // Entregar pedido
-  static async entregar(pedidoId, entregaData, userId) {
+  static async entregar(pedidoId, entregaData, userId, personalId = null) {
     try {
       if (!pedidoId) {
         throw new Error('ID del pedido es requerido');
@@ -477,8 +477,8 @@ class pedidosAcopio {
         throw new Error('Datos de entrega son requeridos');
       }
 
-      if (!userId) {
-        throw new Error('ID del usuario es requerido');
+      if (!userId && !personalId) {
+        throw new Error('ID del usuario o personal es requerido');
       }
 
       // Obtener el pedido primero para validar que existe (optimizado - solo campos necesarios)
@@ -516,10 +516,22 @@ class pedidosAcopio {
       const nombreProducto = productoData?.name || 'Producto';
       const concepto = `${nombreProducto} - ${entregaData.cantidadEntregada} ${entregaData.unidadEntregada}`;
       
-      // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
+      // Crear fecha en zona horaria de Bolivia (GMT-4) - CORREGIDO
+      // Usar Intl.DateTimeFormat para obtener la fecha correcta sin problemas de zona horaria
       const ahora = new Date();
-      const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
-      const fechaBolivia = ahoraBolivia.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/La_Paz',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      
+      const partes = formatter.formatToParts(ahora);
+      const año = partes.find(p => p.type === 'year').value;
+      const mes = partes.find(p => p.type === 'month').value;
+      const dia = partes.find(p => p.type === 'day').value;
+      
+      const fechaBolivia = `${año}-${mes}-${dia}`; // Formato YYYY-MM-DD
 
       const gastoData = {
         concepto: concepto,
@@ -530,11 +542,20 @@ class pedidosAcopio {
         fecha_gasto: fechaBolivia // Usar fecha en zona horaria de Bolivia
       };
 
-      const gastoResult = await gastosModel.create({
+      // Determinar si usar user_id o personal_id basado en qué ID está disponible
+      const gastoDataConUsuario = {
         ...gastoData,
-        user_id: userId,
         sucu_id: pedidoExistente.sucu_id  // Usar sucu_id ya obtenido
-      });
+      };
+
+      // Solo agregar user_id o personal_id si tienen valor
+      if (personalId && personalId !== null) {
+        gastoDataConUsuario.personal_id = personalId;
+      } else if (userId && userId !== null) {
+        gastoDataConUsuario.user_id = userId;
+      }
+
+      const gastoResult = await gastosModel.create(gastoDataConUsuario);
 
       if (!gastoResult.success) {
         throw new Error(`Error al crear el gasto: ${gastoResult.message}`);
@@ -544,12 +565,13 @@ class pedidosAcopio {
       console.log('Gasto ID:', gastoResult.data.id);
 
       // Actualizar el pedido con los datos de entrega (optimizado - sin embedded relations)
+      // NOTA: entregado_por es un texto (nombre de la persona), NO un ID, por lo que no se hace JOIN
       const { data: pedidoActualizado, error: updateError } = await supabase
         .from('pedidos_acopio')
         .update({
           estado: 'Entregado',
           fecha_entregado: entregaData.fecha_entregado,
-          entregado_por: entregaData.entregado_por,
+          entregado_por: entregaData.entregado_por, // Nombre directo, no ID
           cantidad_entregada: parseFloat(entregaData.cantidadEntregada),
           cantidad_entregada_ud: parseInt(entregaData.cantidadUD),
           estado_entrega: entregaData.estado_entrega,

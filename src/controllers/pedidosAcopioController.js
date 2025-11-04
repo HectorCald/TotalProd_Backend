@@ -229,12 +229,16 @@ class pedidosAcopioController {
         metodo_pago, 
         estado_entrega, 
         observaciones,
-        entregado_por 
+        entregado_por // Nombre directo de la persona, NO un ID
       } = req.body;
       
       console.log('entregado_por desde frontend:', entregado_por);
 
-      if (!userId) {
+      // Si es empleado, usar personal_id; si es usuario normal, usar user_id
+      const finalUserId = userType === 'employee' ? null : userId;
+      const finalPersonalId = userType === 'employee' ? userId : null;
+
+      if (!finalUserId && !finalPersonalId) {
         return res.status(401).json({ success: false, message: 'Usuario no autenticado' });
       }
 
@@ -277,11 +281,11 @@ class pedidosAcopioController {
         metodo_pago,
         estado_entrega,
         observaciones: observaciones || null,
-        entregado_por: entregado_por || userName,
+        entregado_por: entregado_por || userName, // Nombre directo, no ID - se guarda como texto
         fecha_entregado: new Date().toISOString().split('T')[0] // Formato YYYY-MM-DD
       };
 
-      const result = await pedidosAcopio.entregar(id, entregaData, userId);
+      const result = await pedidosAcopio.entregar(id, entregaData, finalUserId, finalPersonalId);
 
       if (result.success) {
         return res.status(200).json(result);

@@ -15,7 +15,8 @@ const sucursales = {
                     empresas!inner (
                         id,
                         name,
-                        propietario_id
+                        propietario_id,
+                        tipo
                     ),
                     sucursal_precios (
                         precio_id,
@@ -72,7 +73,8 @@ const sucursales = {
                     empresas!inner (
                         id,
                         name,
-                        propietario_id
+                        propietario_id,
+                        tipo
                     ),
                     sucursal_precios (
                         precio_id,

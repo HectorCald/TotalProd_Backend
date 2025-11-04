@@ -13,11 +13,20 @@ class gastos {
                 fechaFinal = fecha_gasto;
             } else {
                 // Si no viene fecha, usar la actual en formato YYYY-MM-DD en zona horaria de Bolivia
+                // Usar Intl.DateTimeFormat para obtener la fecha correcta sin problemas de zona horaria
                 const ahora = new Date();
-                const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
-                const año = ahoraBolivia.getFullYear();
-                const mes = String(ahoraBolivia.getMonth() + 1).padStart(2, '0');
-                const dia = String(ahoraBolivia.getDate()).padStart(2, '0');
+                const formatter = new Intl.DateTimeFormat('en-US', {
+                    timeZone: 'America/La_Paz',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+                
+                const partes = formatter.formatToParts(ahora);
+                const año = partes.find(p => p.type === 'year').value;
+                const mes = partes.find(p => p.type === 'month').value;
+                const dia = partes.find(p => p.type === 'day').value;
+                
                 fechaFinal = `${año}-${mes}-${dia}`;
             }
 
