@@ -12,20 +12,11 @@ class gastos {
                 // Si viene una fecha específica, usarla directamente
                 fechaFinal = fecha_gasto;
             } else {
-                // Si no viene fecha, usar la actual en formato YYYY-MM-DD en zona horaria de Bolivia
-                // Usar Intl.DateTimeFormat para obtener la fecha correcta sin problemas de zona horaria
+                // Si no viene fecha, usar la actual - CORREGIDO (igual que movimientosAlmacen.js)
                 const ahora = new Date();
-                const formatter = new Intl.DateTimeFormat('en-US', {
-                    timeZone: 'America/La_Paz',
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                });
-                
-                const partes = formatter.formatToParts(ahora);
-                const año = partes.find(p => p.type === 'year').value;
-                const mes = partes.find(p => p.type === 'month').value;
-                const dia = partes.find(p => p.type === 'day').value;
+                const año = ahora.getFullYear();
+                const mes = String(ahora.getMonth() + 1).padStart(2, '0');
+                const dia = String(ahora.getDate()).padStart(2, '0');
                 
                 fechaFinal = `${año}-${mes}-${dia}`;
             }

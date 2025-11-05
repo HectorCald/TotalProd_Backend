@@ -555,20 +555,61 @@ class pedidosAcopio {
         gastoDataConUsuario.user_id = userId;
       }
 
-      const gastoResult = await gastosModel.create(gastoDataConUsuario);
+      // Variables para almacenar IDs de gastos creados (para rollback si falla)
+      let gastoIdCreado = null;
+      let gastoOtrosIdCreado = null;
 
-      if (!gastoResult.success) {
-        throw new Error(`Error al crear el gasto: ${gastoResult.message}`);
-      }
+      try {
+        const gastoResult = await gastosModel.create(gastoDataConUsuario);
 
-      console.log('Gasto creado:', gastoResult.data);
-      console.log('Gasto ID:', gastoResult.data.id);
+        if (!gastoResult.success) {
+          throw new Error(`Error al crear el gasto: ${gastoResult.message}`);
+        }
 
-      // Actualizar el pedido con los datos de entrega (optimizado - sin embedded relations)
-      // NOTA: entregado_por es un texto (nombre de la persona), NO un ID, por lo que no se hace JOIN
-      const { data: pedidoActualizado, error: updateError } = await supabase
-        .from('pedidos_acopio')
-        .update({
+        gastoIdCreado = gastoResult.data.id;
+        console.log('Gasto creado:', gastoResult.data);
+        console.log('Gasto ID:', gastoIdCreado);
+
+        // Crear el segundo gasto de transporte/otros si existe
+        let gastoOtrosResult = null;
+        if (entregaData.transporte_otros !== undefined && entregaData.transporte_otros !== null && entregaData.transporte_otros !== '' && parseFloat(entregaData.transporte_otros) > 0) {
+          const conceptoGastoOtros = `Transporte y/o otros (Compra '${nombreProducto}')`;
+          
+          const gastoOtrosData = {
+            concepto: conceptoGastoOtros,
+            valor: parseFloat(entregaData.transporte_otros),
+            metodo_pago: entregaData.metodo_pago, // Usar el mismo método de pago
+            proveedor_id: entregaData.proveedor_id, // Usar el mismo proveedor
+            observaciones: entregaData.observaciones || null,
+            fecha_gasto: fechaBolivia
+          };
+
+          const gastoOtrosDataConUsuario = {
+            ...gastoOtrosData,
+            sucu_id: pedidoExistente.sucu_id
+          };
+
+          // Solo agregar user_id o personal_id si tienen valor
+          if (personalId && personalId !== null) {
+            gastoOtrosDataConUsuario.personal_id = personalId;
+          } else if (userId && userId !== null) {
+            gastoOtrosDataConUsuario.user_id = userId;
+          }
+
+          gastoOtrosResult = await gastosModel.create(gastoOtrosDataConUsuario);
+
+          if (!gastoOtrosResult.success) {
+            throw new Error(`Error al crear el gasto de transporte/otros: ${gastoOtrosResult.message}`);
+          }
+
+          gastoOtrosIdCreado = gastoOtrosResult.data.id;
+          console.log('Gasto transporte/otros creado:', gastoOtrosResult.data);
+          console.log('Gasto transporte/otros ID:', gastoOtrosIdCreado);
+        }
+
+        // Actualizar el pedido con los datos de entrega (optimizado - sin embedded relations)
+        // NOTA: entregado_por es un texto (nombre de la persona), NO un ID, por lo que no se hace JOIN
+        const updateData = {
           estado: 'Entregado',
           fecha_entregado: entregaData.fecha_entregado,
           entregado_por: entregaData.entregado_por, // Nombre directo, no ID
@@ -576,37 +617,74 @@ class pedidosAcopio {
           cantidad_entregada_ud: parseInt(entregaData.cantidadUD),
           estado_entrega: entregaData.estado_entrega,
           observaciones_entrega: entregaData.observaciones || null,
-          gasto_id: gastoResult.data.id
-        })
-        .eq('id', pedidoId)
-        .select('*')
-        .single();
+          gasto_id: gastoIdCreado
+        };
 
-      if (updateError) {
-        throw new Error(`Error al actualizar el pedido: ${updateError.message}`);
-      }
-
-      // Construir respuesta con datos relacionados (sin embedded relations)
-      const responseData = {
-        ...pedidoActualizado,
-        producto_acopio: {
-          id: pedidoExistente.producto_acopio_id,
-          name: nombreProducto
-        },
-        gasto: {
-          id: gastoResult.data.id,
-          concepto: gastoData.concepto,
-          valor: gastoData.valor,
-          metodo_pago: gastoData.metodo_pago,
-          fecha_gasto: gastoData.fecha_gasto
+        // Solo agregar gasto_otros_id si tiene valor (el valor de transporte_otros ya está guardado en el gasto)
+        if (gastoOtrosIdCreado) {
+          updateData.gasto_otros_id = gastoOtrosIdCreado;
         }
-      };
 
-      return {
-        success: true,
-        message: 'Pedido entregado exitosamente',
-        data: responseData
-      };
+        const { data: pedidoActualizado, error: updateError } = await supabase
+          .from('pedidos_acopio')
+          .update(updateData)
+          .eq('id', pedidoId)
+          .select('*')
+          .single();
+
+        if (updateError) {
+          throw new Error(`Error al actualizar el pedido: ${updateError.message}`);
+        }
+
+        // Si llegamos aquí, todo fue exitoso - construir respuesta
+        const responseData = {
+          ...pedidoActualizado,
+          producto_acopio: {
+            id: pedidoExistente.producto_acopio_id,
+            name: nombreProducto
+          },
+          gasto: {
+            id: gastoIdCreado,
+            concepto: gastoData.concepto,
+            valor: gastoData.valor,
+            metodo_pago: gastoData.metodo_pago,
+            fecha_gasto: gastoData.fecha_gasto
+          }
+        };
+
+        return {
+          success: true,
+          message: 'Pedido entregado exitosamente',
+          data: responseData
+        };
+
+      } catch (error) {
+        // ROLLBACK: Si algo falla después de crear los gastos, eliminarlos
+        console.error('Error durante la entrega, realizando rollback de gastos...', error);
+        
+        if (gastoOtrosIdCreado) {
+          try {
+            console.log('Eliminando gasto transporte/otros creado:', gastoOtrosIdCreado);
+            await gastosModel.delete(gastoOtrosIdCreado);
+            console.log('Gasto transporte/otros eliminado correctamente');
+          } catch (rollbackError) {
+            console.error('Error al eliminar gasto transporte/otros durante rollback:', rollbackError);
+          }
+        }
+
+        if (gastoIdCreado) {
+          try {
+            console.log('Eliminando gasto principal creado:', gastoIdCreado);
+            await gastosModel.delete(gastoIdCreado);
+            console.log('Gasto principal eliminado correctamente');
+          } catch (rollbackError) {
+            console.error('Error al eliminar gasto principal durante rollback:', rollbackError);
+          }
+        }
+
+        // Re-lanzar el error original
+        throw error;
+      }
 
     } catch (error) {
       console.error('Error en pedidosAcopio.entregar:', error);
@@ -631,7 +709,7 @@ class pedidosAcopio {
       // Obtener el pedido para validar que existe y tiene gasto_id
       const { data: pedidoExistente, error: pedidoError } = await supabase
         .from('pedidos_acopio')
-        .select('id, estado, gasto_id')
+        .select('id, estado, gasto_id, gasto_otros_id')
         .eq('id', pedidoId)
         .single();
 
@@ -650,7 +728,7 @@ class pedidosAcopio {
         throw new Error('El pedido no tiene un gasto asociado');
       }
 
-      // Primero limpiar todos los campos de entrega del pedido (incluyendo gasto_id)
+      // Primero limpiar todos los campos de entrega del pedido (incluyendo gasto_id y gasto_otros_id)
       const { data: pedidoActualizado, error: updateError } = await supabase
         .from('pedidos_acopio')
         .update({
@@ -661,7 +739,8 @@ class pedidosAcopio {
           cantidad_entregada_ud: null,
           estado_entrega: null,
           observaciones_entrega: null,
-          gasto_id: null
+          gasto_id: null,
+          gasto_otros_id: null
         })
         .eq('id', pedidoId)
         .select(`
@@ -678,15 +757,26 @@ class pedidosAcopio {
         throw new Error(`Error al limpiar los datos de entrega: ${updateError.message}`);
       }
 
-      // Ahora eliminar el gasto (ya no hay referencia en el pedido)
+      // Ahora eliminar los gastos (ya no hay referencia en el pedido)
       const gastosModel = require('./gastos');
-      const gastoResult = await gastosModel.delete(pedidoExistente.gasto_id);
-
-      if (!gastoResult.success) {
-        throw new Error(`Error al eliminar el gasto: ${gastoResult.message}`);
+      
+      // Eliminar el gasto principal
+      if (pedidoExistente.gasto_id) {
+        const gastoResult = await gastosModel.delete(pedidoExistente.gasto_id);
+        if (!gastoResult.success) {
+          throw new Error(`Error al eliminar el gasto: ${gastoResult.message}`);
+        }
+        console.log('Gasto eliminado:', gastoResult.message);
       }
 
-      console.log('Gasto eliminado:', gastoResult.message);
+      // Eliminar el gasto de transporte/otros si existe
+      if (pedidoExistente.gasto_otros_id) {
+        const gastoOtrosResult = await gastosModel.delete(pedidoExistente.gasto_otros_id);
+        if (!gastoOtrosResult.success) {
+          throw new Error(`Error al eliminar el gasto de transporte/otros: ${gastoOtrosResult.message}`);
+        }
+        console.log('Gasto transporte/otros eliminado:', gastoOtrosResult.message);
+      }
 
       return {
         success: true,

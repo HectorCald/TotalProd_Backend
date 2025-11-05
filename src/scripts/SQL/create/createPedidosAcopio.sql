@@ -19,6 +19,9 @@ CREATE TABLE pedidos_acopio (
     observaciones_entrega TEXT NULL,
     movimiento_entrada_id UUID NULL,
     gasto_id UUID NULL,
+    gasto_otros_id UUID NULL,
+    CONSTRAINT pedidos_acopio_gasto_otros_id_fkey 
+        FOREIGN KEY (gasto_otros_id) REFERENCES gastos (id),
     CONSTRAINT pedidos_acopio_empresa_id_fkey 
         FOREIGN KEY (empresa_id) REFERENCES empresas (id),
     CONSTRAINT pedidos_acopio_movimento_entrada_id_fkey 

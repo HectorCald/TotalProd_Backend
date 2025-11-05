@@ -96,8 +96,40 @@ class productsAlmacenController {
       }
 
       // Obtener IDs de los parámetros de query
-      const ids = req.query.ids;
-      if (!ids || !Array.isArray(ids)) {
+      // Express puede recibir múltiples valores del mismo nombre de diferentes formas:
+      // - Como array si está configurado para hacerlo
+      // - Como string único si solo hay un valor
+      // - Como string con múltiples valores separados (dependiendo del parser)
+      let ids = req.query.ids || req.query['ids[]'];
+      
+      // Si ids es undefined o null
+      if (!ids) {
+        return res.status(400).json({
+          success: false,
+          message: 'IDs de productos son requeridos'
+        });
+      }
+      
+      // Si ids es un string, puede ser un solo ID o múltiples separados por comas
+      if (typeof ids === 'string') {
+        // Si contiene comas, separar por comas
+        if (ids.includes(',')) {
+          ids = ids.split(',').map(id => id.trim());
+        } else {
+          // Es un solo ID
+          ids = [ids];
+        }
+      }
+      
+      // Asegurar que es un array
+      if (!Array.isArray(ids)) {
+        ids = [ids];
+      }
+      
+      // Filtrar valores vacíos, null o undefined
+      ids = ids.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
+      
+      if (ids.length === 0) {
         return res.status(400).json({
           success: false,
           message: 'IDs de productos son requeridos'
