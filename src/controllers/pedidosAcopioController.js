@@ -1,4 +1,5 @@
 const pedidosAcopio = require('../models/pedidosAcopio');
+const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
 
 class pedidosAcopioController {
   // Crear un pedido
@@ -181,6 +182,20 @@ class pedidosAcopioController {
     try {
       const { id } = req.params;
       const userId = req.user?.id;
+      const userType = req.user?.type;
+
+      // Verificar permisos de eliminación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkDeletePermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para eliminar pedidos'
+          });
+        }
+      }
 
       if (!userId) {
         return res.status(401).json({ success: false, message: 'Usuario no autenticado' });
@@ -306,6 +321,21 @@ class pedidosAcopioController {
     try {
       const { id } = req.params;
       const userId = req.user?.id;
+      const userType = req.user?.type;
+
+      // Verificar permisos de anulación solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+
+        const hasPermission = await checkAnularPermission(personal_id);
+        
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para anular entregas de pedidos'
+          });
+        }
+      }
 
       if (!userId) {
         return res.status(401).json({ success: false, message: 'Usuario no autenticado' });
