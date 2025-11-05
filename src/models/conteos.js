@@ -80,13 +80,20 @@ class ConteosModel {
 				return { success: false, message: 'ID de la sucursal es requerido' };
 			}
 
+			// sucursal_id es un UUID, mantenerlo como string
+			const sucursalId = String(sucursal_id).trim();
+
+			// Construir query con filtro OBLIGATORIO por sucursal_id
 			let query = supabase
 				.from('conteos')
-				.select('*')
-				.eq('sucursal_id', sucursal_id)
-				.order('fecha', { ascending: false });
+				.select(`
+					*,
+					user:user_id(id, first_name, last_name),
+					personal:personal_id(id, first_name, last_name)
+				`)
+				.eq('sucursal_id', sucursalId);
 
-
+			// Aplicar filtro de tipo SI existe
 			if (tipo) {
 				const t = (tipo || '').toString().trim().toLowerCase();
 				if (t === 'almacen' || t === 'almacén') {
@@ -98,6 +105,9 @@ class ConteosModel {
 				}
 			}
 
+			// Aplicar ordenamiento al final
+			query = query.order('fecha', { ascending: false });
+
 			const { data: headers, error } = await query;
 			if (error) {
 				return { success: false, message: 'Error al obtener conteos', error };
@@ -108,6 +118,12 @@ class ConteosModel {
 			}
 
 			const conteoIds = headers.map(h => h.id);
+			
+			// Si no hay conteos, retornar array vacío
+			if (conteoIds.length === 0) {
+				return { success: true, data: [] };
+			}
+
 			const { data: detalles, error: detalleError } = await supabase
 				.from('conteo_detalle')
 				.select(`
@@ -146,10 +162,25 @@ class ConteosModel {
 				detallesPorConteo.set(d.conteo_id, arr);
 			});
 
-			const resultado = headers.map(h => ({
-				...h,
-				detalles: detallesPorConteo.get(h.id) || []
-			}));
+			const resultado = headers.map(h => {
+				// Construir el campo name para user y personal
+				const user = h.user ? {
+					id: h.user.id,
+					name: `${h.user.first_name || ''} ${h.user.last_name || ''}`.trim()
+				} : null;
+				
+				const personal = h.personal ? {
+					id: h.personal.id,
+					name: `${h.personal.first_name || ''} ${h.personal.last_name || ''}`.trim()
+				} : null;
+
+				return {
+					...h,
+					user,
+					personal,
+					detalles: detallesPorConteo.get(h.id) || []
+				};
+			});
 
 			return { success: true, data: resultado };
 		} catch (error) {

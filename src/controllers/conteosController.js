@@ -39,12 +39,14 @@ class ConteosController {
 			const sucu_id = req.query.sucu_id;
 			const tipo = req.query.tipo || null; // 'acopio' | 'almacen' | null
 
-
 			if (!sucu_id) {
 				return res.status(400).json({ success: false, message: 'ID de la sucursal es requerido' });
 			}
 
-			const result = await ConteosModel.getAll({ sucursal_id: sucu_id, tipo });
+			// sucu_id es un UUID, mantenerlo como string
+			const sucursal_id = sucu_id;
+
+			const result = await ConteosModel.getAll({ sucursal_id, tipo });
 			if (!result.success) {
 				return res.status(400).json(result);
 			}
