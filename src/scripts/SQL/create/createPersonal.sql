@@ -11,6 +11,7 @@ CREATE TABLE personal (
     sucursal_id UUID,
     ubicacion POINT,
     rastrear BOOLEAN NOT NULL DEFAULT false,
+    cargo TEXT NULL,
     CONSTRAINT personal_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES empresa (id),
     CONSTRAINT personal_sucursal_id_fkey FOREIGN KEY (sucursal_id) REFERENCES sucursales (id)
 );

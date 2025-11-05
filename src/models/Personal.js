@@ -243,9 +243,9 @@ class Personal {
   // Método para crear personal
   static async create(personalData) {
     try {
-      const { first_name, last_name, codigo, empresa_id, sucursal_id, modules = [], permisos = {}, ubicacion = null, rastrear = false } = personalData;
+      const { first_name, last_name, codigo, cargo, empresa_id, sucursal_id, modules = [], permisos = {}, ubicacion = null, rastrear = false } = personalData;
 
-      if (!first_name || !last_name || !codigo || !empresa_id) {
+      if (!first_name || !last_name || !codigo || !cargo || !empresa_id) {
         throw new Error('Datos requeridos faltantes');
       }
 
@@ -262,6 +262,7 @@ class Personal {
           first_name,
           last_name,
           codigo,
+          cargo,
           empresa_id,
           sucursal_id: sucursal_id || null,
           ubicacion: ubicacion,
@@ -332,7 +333,7 @@ class Personal {
   // Método para actualizar personal
   static async update(id, personalData) {
     try {
-      const { first_name, last_name, codigo, is_active, sucursal_id, modules = [], permisos = {}, ubicacion, rastrear } = personalData;
+      const { first_name, last_name, codigo, cargo, is_active, sucursal_id, modules = [], permisos = {}, ubicacion, rastrear } = personalData;
 
       if (!id) {
         throw new Error('ID del personal es requerido');
@@ -357,6 +358,7 @@ class Personal {
       if (first_name) updateData.first_name = first_name;
       if (last_name) updateData.last_name = last_name;
       if (codigo) updateData.codigo = codigo;
+      if (cargo !== undefined) updateData.cargo = cargo;
       if (is_active !== undefined) updateData.is_active = is_active;
       if (sucursal_id !== undefined) updateData.sucursal_id = sucursal_id;
       if (ubicacion !== undefined) updateData.ubicacion = ubicacion;
@@ -641,6 +643,7 @@ class Personal {
             codigo: personal.codigo,
             first_name: personal.first_name,
             last_name: personal.last_name,
+            cargo: personal.cargo,
             empresa_id: personal.empresa_id,
             sucursal_id: personal.sucursal_id,
             is_active: personal.is_active,

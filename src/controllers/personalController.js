@@ -68,14 +68,14 @@ class PersonalController {
   // Crear personal
   static async create(req, res) {
     try {
-      const { first_name, last_name, codigo, sucursal_id, modules = [], permisos = {}, ubicacion = null, rastrear = false } = req.body;
+      const { first_name, last_name, codigo, cargo, sucursal_id, modules = [], permisos = {}, ubicacion = null, rastrear = false } = req.body;
       const empresaId = req.body.empresa_id;
 
       // Validar campos requeridos
-      if (!first_name || !last_name || !codigo || !empresaId) {
+      if (!first_name || !last_name || !codigo || !cargo || !empresaId) {
         return res.status(400).json({
           success: false,
-          message: 'Nombre, apellido, código y empresa son requeridos'
+          message: 'Nombre, apellido, código, cargo y empresa son requeridos'
         });
       }
 
@@ -99,6 +99,7 @@ class PersonalController {
         first_name,
         last_name,
         codigo,
+        cargo,
         empresa_id: empresaId,
         sucursal_id: sucursal_id || null,
         ubicacion,
@@ -128,7 +129,7 @@ class PersonalController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { first_name, last_name, codigo, is_active, sucursal_id, modules, permisos, ubicacion, rastrear } = req.body;
+      const { first_name, last_name, codigo, cargo, is_active, sucursal_id, modules, permisos, ubicacion, rastrear } = req.body;
 
       if (!id) {
         return res.status(400).json({
@@ -157,6 +158,7 @@ class PersonalController {
       if (first_name) personalData.first_name = first_name;
       if (last_name) personalData.last_name = last_name;
       if (codigo) personalData.codigo = codigo;
+      if (cargo !== undefined) personalData.cargo = cargo;
       if (is_active !== undefined) personalData.is_active = is_active;
       if (sucursal_id !== undefined) personalData.sucursal_id = sucursal_id;
       if (ubicacion !== undefined) personalData.ubicacion = ubicacion;
