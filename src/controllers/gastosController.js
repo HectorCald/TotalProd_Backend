@@ -1,5 +1,5 @@
 const gastos = require('../models/gastos');
-const { checkDeletePermission, checkUpdatePermission } = require('../utils/permissionsHelper');
+const { checkDeletePermission, checkUpdatePermission, checkInfoPermission } = require('../utils/permissionsHelper');
 
 class gastosController {
 
@@ -72,12 +72,26 @@ class gastosController {
     try {
       const { id } = req.params;
       const { empresa_id } = req.query;
+      const userType = req.user?.type;
 
       if (!id) {
         return res.status(400).json({
           success: false,
           message: 'ID del gasto es requerido'
         });
+      }
+
+      // Verificar permisos de información solo si es empleado
+      if (userType === 'employee') {
+        const personal_id = req.user.id; // El personal_id viene del token
+        
+        const hasPermission = await checkInfoPermission(personal_id);
+        if (!hasPermission) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permisos para ver información de gastos'
+          });
+        }
       }
 
       // El empresa_id se usa por el middleware requireModuleAccess para verificar permisos

@@ -1,7 +1,6 @@
 const movimientosAcopio = require('../models/movimientosAcopio');
 const productsAcopio = require('../models/productsAcopio');
 const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
-const { supabase } = require('../config/supabase');
 
 class movimientosAcopioController {
   // Crear un movimiento
@@ -29,72 +28,36 @@ class movimientosAcopioController {
         });
       }
 
-      // Obtener producto con receta e ingredientes ANTES de crear el movimiento para validación
-      let producto = null;
-      let receta = null;
+      // VALIDAR INGREDIENTES ANTES de crear el movimiento si es entrada con restar_materia_prima
+      console.log('🔍 DEBUG - Validando ingredientes acopio:', { type, restar_materia_prima, product_id });
       if (type === 'entrada' && restar_materia_prima) {
         try {
-          producto = await productsAcopio.getById(product_id, req.user.empresa_id);
+          // Obtener producto con receta e ingredientes
+          const producto = await productsAcopio.getById(product_id, req.user.empresa_id);
           
           if (producto && producto.recetas_acopio && producto.recetas_acopio.length > 0) {
-            receta = producto.recetas_acopio[0];
+            const receta = producto.recetas_acopio[0];
             
             if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
-              // VALIDAR stock de ingredientes ANTES de crear el movimiento (solo validación, no ejecuta)
-              // Llamamos a restarIngredientes con un flag de solo validación o mejor, creamos una función separada
-              // Por ahora, validamos llamando a restarIngredientes pero esto necesita ajuste
-              // Mejor: crear el movimiento primero y luego ejecutar restarIngredientes con el ID
-              // Por simplicidad, validamos stock primero
-              const ingredienteIds = receta.recetas_acopio_detalle
-                .filter(ing => ing.products_acopio && ing.products_acopio.id)
-                .map(ing => ing.products_acopio.id);
+              // VALIDAR stock de ingredientes ANTES de crear el movimiento
+              const validacionIngredientes = await movimientosAcopio.restarIngredientes(
+                producto, 
+                parseFloat(quantity), 
+                receta.recetas_acopio_detalle,
+                req.user.empresa_id,
+                ingredientes_cantidades_personalizadas,
+                sucu_id,
+                finalUserId,
+                finalPersonalId
+              );
               
-              if (ingredienteIds.length > 0) {
-                const { data: productosActuales, error: fetchError } = await supabase
-                  .from('products_acopio')
-                  .select('id, quantity, name')
-                  .in('id', ingredienteIds);
-                
-                if (!fetchError && productosActuales) {
-                  const stocksActuales = {};
-                  productosActuales.forEach(p => { stocksActuales[p.id] = p.quantity; });
-                  
-                  const ingredientesConStockInsuficiente = [];
-                  for (let i = 0; i < receta.recetas_acopio_detalle.length; i++) {
-                    const detalle = receta.recetas_acopio_detalle[i];
-                    if (!detalle.products_acopio || !detalle.products_acopio.id) continue;
-                    
-                    let cantidadARestar;
-                    // Verificar si hay cantidad personalizada (las keys pueden ser strings o números)
-                    const cantidadPersonalizada = ingredientes_cantidades_personalizadas?.[i] ?? ingredientes_cantidades_personalizadas?.[String(i)];
-                    if (cantidadPersonalizada !== undefined && cantidadPersonalizada !== null) {
-                      cantidadARestar = parseFloat(cantidadPersonalizada);
-                    } else {
-                      cantidadARestar = detalle.cantidad * parseFloat(quantity);
-                    }
-                    
-                    const cantidadActual = stocksActuales[detalle.products_acopio.id] || 0;
-                    if (cantidadActual < cantidadARestar) {
-                      ingredientesConStockInsuficiente.push({
-                        nombre: productosActuales.find(p => p.id === detalle.products_acopio.id)?.name || 'Desconocido',
-                        stockActual: cantidadActual,
-                        requerido: cantidadARestar
-                      });
-                    }
-                  }
-                  
-                  if (ingredientesConStockInsuficiente.length > 0) {
-                    const mensajeError = ingredientesConStockInsuficiente.map(ing => 
-                      `${ing.nombre}: Stock actual ${ing.stockActual}, requerido ${ing.requerido}`
-                    ).join('; ');
-                    
-                    return res.status(400).json({
-                      success: false,
-                      message: `Stock insuficiente de ingredientes: ${mensajeError}`,
-                      ingredientesConStockInsuficiente
-                    });
-                  }
-                }
+              // Si la validación falla, retornar error sin crear el movimiento
+              if (!validacionIngredientes.success) {
+                return res.status(400).json({
+                  success: false,
+                  message: validacionIngredientes.message,
+                  ingredientesConStockInsuficiente: validacionIngredientes.ingredientesConStockInsuficiente
+                });
               }
             }
           }
@@ -107,7 +70,7 @@ class movimientosAcopioController {
         }
       }
 
-      // Crear el movimiento principal PRIMERO (para tener el ID)
+      // Crear el movimiento principal (solo si la validación de ingredientes pasó)
       const newMovimiento = await movimientosAcopio.create({
         product_id,
         type,
@@ -121,52 +84,6 @@ class movimientosAcopioController {
         restar_ingredientes: restar_ingredientes || false,
         sucu_id
       }, finalUserId, finalPersonalId);
-
-      // EJECUTAR restarIngredientes DESPUÉS de crear el movimiento (para tener el ID)
-      if (type === 'entrada' && restar_materia_prima && producto && receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
-        try {
-          const resultadoIngredientes = await movimientosAcopio.restarIngredientes(
-            producto, 
-            parseFloat(quantity), 
-            receta.recetas_acopio_detalle,
-            req.user.empresa_id,
-            ingredientes_cantidades_personalizadas,
-            sucu_id,
-            finalUserId,
-            finalPersonalId,
-            newMovimiento.id // Pasar el ID del movimiento de entrada recién creado
-          );
-          
-          // Si falla al ejecutar (aunque ya validamos antes), hacer rollback
-          if (!resultadoIngredientes.success) {
-            // Intentar eliminar el movimiento creado
-            try {
-              await movimientosAcopio.eliminar(newMovimiento.id);
-            } catch (rollbackError) {
-              console.error('Error en rollback del movimiento:', rollbackError);
-            }
-            
-            return res.status(400).json({
-              success: false,
-              message: resultadoIngredientes.message,
-              ingredientesConStockInsuficiente: resultadoIngredientes.ingredientesConStockInsuficiente
-            });
-          }
-        } catch (error) {
-          console.error('Error ejecutando restarIngredientes:', error);
-          // Intentar rollback
-          try {
-            await movimientosAcopio.eliminar(newMovimiento.id);
-          } catch (rollbackError) {
-            console.error('Error en rollback del movimiento:', rollbackError);
-          }
-          
-          return res.status(400).json({
-            success: false,
-            message: 'Error al procesar ingredientes: ' + error.message
-          });
-        }
-      }
 
       res.status(201).json({
         success: true,
@@ -332,8 +249,7 @@ class movimientosAcopioController {
         success: true,
         message: result.message,
         data: result.data,
-        pedidoActualizado: result.pedidoActualizado,
-        salidasEliminadas: result.salidasEliminadas || null
+        pedidoActualizado: result.pedidoActualizado
       });
     } catch (error) {
       console.error('Error en anular:', error);

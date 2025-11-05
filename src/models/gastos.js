@@ -491,7 +491,7 @@ class gastos {
                 .eq('sucu_id', sucuId)
                 .gte('fecha_gasto', fechaInicio)
                 .lte('fecha_gasto', fechaFin)
-                .order('fecha_gasto', { ascending: false });
+                .order('fecha_gasto', { ascending: true });
 
             if (error) {
                 console.error('Error al obtener gastos por rango de fechas:', error);

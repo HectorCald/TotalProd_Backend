@@ -50,7 +50,8 @@ class Personal {
             can_delete,
             can_update,
             can_anular,
-            can_replace
+            can_replace,
+            can_info
           )
         `)
         .eq('empresa_id', empresaId)
@@ -74,13 +75,15 @@ class Personal {
           eliminar: personal.personal_permisos[0].can_delete,
           editar: personal.personal_permisos[0].can_update,
           anular: personal.personal_permisos[0].can_anular,
-          reemplazar: personal.personal_permisos[0].can_replace
+          reemplazar: personal.personal_permisos[0].can_replace,
+          info: personal.personal_permisos[0].can_info
         } : {
           crear: false,
           eliminar: false,
           editar: false,
           anular: false,
-          reemplazar: false
+          reemplazar: false,
+          info: false
         };
 
         // Procesar la sucursal con información de la empresa
@@ -147,7 +150,8 @@ class Personal {
             can_delete,
             can_update,
             can_anular,
-            can_replace
+            can_replace,
+            can_info
           )
         `)
         .eq('id', id)
@@ -291,7 +295,8 @@ class Personal {
             can_create: permisos.crear || false,
             can_update: permisos.editar || false,
             can_anular: permisos.anular || false,
-            can_replace: permisos.reemplazar || false
+            can_replace: permisos.reemplazar || false,
+            can_info: permisos.info || false
           }]);
 
         if (permisosError) {
@@ -389,7 +394,8 @@ class Personal {
             can_create: permisos.crear || false,
             can_update: permisos.editar || false,
             can_anular: permisos.anular || false,
-            can_replace: permisos.reemplazar || false
+            can_replace: permisos.reemplazar || false,
+            can_info: permisos.info || false
           }]);
 
         if (permisosError) {
