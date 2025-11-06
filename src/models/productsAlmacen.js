@@ -285,7 +285,8 @@ class productsAlmacen {
         description: productData.description || null,
         empresa_id: empresaId,
         grup: productData.grup || null,
-        stock_minimo: productData.stock_minimo || 0
+        stock_minimo: productData.stock_minimo || 0,
+        costo_produccion: productData.costo_produccion || null
       };
 
       const { data: product, error: productError } = await supabase
@@ -465,7 +466,8 @@ class productsAlmacen {
         category_id: productData.category_id || null,
         description: productData.description || null,
         grup: productData.grup || null,
-        stock_minimo: productData.stock_minimo || 0
+        stock_minimo: productData.stock_minimo || 0,
+        costo_produccion: productData.costo_produccion || null
       };
 
       // Actualizar el producto principal

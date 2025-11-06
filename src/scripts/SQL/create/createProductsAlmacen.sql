@@ -8,8 +8,9 @@ CREATE TABLE products_almacen (
     empresa_id UUID NOT NULL,
     grup NUMERIC,
     stock_minimo NUMERIC,
-    CONSTRAINT products_almacen_category_id_fkey 
+    costo_produccion NUMERIC,
+    CONSTRAINT products_almacen_category_id_fkey
         FOREIGN KEY (category_id) REFERENCES category_almacen (id) ON DELETE SET NULL,
-    CONSTRAINT products_almacen_empresa_id_fkey 
+    CONSTRAINT products_almacen_empresa_id_fkey
         FOREIGN KEY (empresa_id) REFERENCES empresas (id)
 );
