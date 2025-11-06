@@ -1,6 +1,7 @@
 const movimientosAcopio = require('../models/movimientosAcopio');
 const productsAcopio = require('../models/productsAcopio');
 const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
+const { supabase } = require('../config/supabase');
 
 class movimientosAcopioController {
   // Crear un movimiento
@@ -30,25 +31,23 @@ class movimientosAcopioController {
 
       // VALIDAR INGREDIENTES ANTES de crear el movimiento si es entrada con restar_materia_prima
       console.log('🔍 DEBUG - Validando ingredientes acopio:', { type, restar_materia_prima, product_id });
+      let producto = null;
+      let receta = null;
+      
       if (type === 'entrada' && restar_materia_prima) {
         try {
           // Obtener producto con receta e ingredientes
-          const producto = await productsAcopio.getById(product_id, req.user.empresa_id);
+          producto = await productsAcopio.getById(product_id, req.user.empresa_id);
           
           if (producto && producto.recetas_acopio && producto.recetas_acopio.length > 0) {
-            const receta = producto.recetas_acopio[0];
+            receta = producto.recetas_acopio[0];
             
             if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
-              // VALIDAR stock de ingredientes ANTES de crear el movimiento
-              const validacionIngredientes = await movimientosAcopio.restarIngredientes(
-                producto, 
+              // VALIDAR stock de ingredientes ANTES de crear el movimiento (solo validación, no resta)
+              const validacionIngredientes = await movimientosAcopio.validarStockIngredientes(
                 parseFloat(quantity), 
                 receta.recetas_acopio_detalle,
-                req.user.empresa_id,
-                ingredientes_cantidades_personalizadas,
-                sucu_id,
-                finalUserId,
-                finalPersonalId
+                ingredientes_cantidades_personalizadas
               );
               
               // Si la validación falla, retornar error sin crear el movimiento
@@ -70,7 +69,7 @@ class movimientosAcopioController {
         }
       }
 
-      // Crear el movimiento principal (solo si la validación de ingredientes pasó)
+      // Crear el movimiento principal PRIMERO (solo si la validación de ingredientes pasó)
       const newMovimiento = await movimientosAcopio.create({
         product_id,
         type,
@@ -84,6 +83,58 @@ class movimientosAcopioController {
         restar_ingredientes: restar_ingredientes || false,
         sucu_id
       }, finalUserId, finalPersonalId);
+
+      // DESPUÉS de crear el movimiento, restar ingredientes y crear salidas asociadas
+      if (type === 'entrada' && restar_materia_prima && producto && receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
+        try {
+          const resultadoRestar = await movimientosAcopio.restarIngredientes(
+            producto, 
+            parseFloat(quantity), 
+            receta.recetas_acopio_detalle,
+            req.user.empresa_id,
+            ingredientes_cantidades_personalizadas,
+            sucu_id,
+            finalUserId,
+            finalPersonalId,
+            newMovimiento.id // Pasar el ID del movimiento de entrada creado
+          );
+          
+          // Si falla al restar ingredientes, intentar revertir el movimiento creado
+          if (!resultadoRestar.success) {
+            // Intentar eliminar el movimiento creado
+            try {
+              await supabase
+                .from('movimientos_acopio')
+                .delete()
+                .eq('id', newMovimiento.id);
+            } catch (deleteError) {
+              console.error('Error al revertir movimiento después de fallo en restar ingredientes:', deleteError);
+            }
+            
+            return res.status(400).json({
+              success: false,
+              message: resultadoRestar.message,
+              ingredientesConStockInsuficiente: resultadoRestar.ingredientesConStockInsuficiente
+            });
+          }
+        } catch (error) {
+          console.error('Error al restar ingredientes después de crear movimiento:', error);
+          // Intentar revertir el movimiento creado
+          try {
+            await supabase
+              .from('movimientos_acopio')
+              .delete()
+              .eq('id', newMovimiento.id);
+          } catch (deleteError) {
+            console.error('Error al revertir movimiento después de error en restar ingredientes:', deleteError);
+          }
+          
+          return res.status(400).json({
+            success: false,
+            message: 'Error al restar ingredientes: ' + error.message
+          });
+        }
+      }
 
       res.status(201).json({
         success: true,
@@ -249,7 +300,8 @@ class movimientosAcopioController {
         success: true,
         message: result.message,
         data: result.data,
-        pedidoActualizado: result.pedidoActualizado
+        pedidoActualizado: result.pedidoActualizado,
+        salidasEliminadas: result.salidasEliminadas || []
       });
     } catch (error) {
       console.error('Error en anular:', error);

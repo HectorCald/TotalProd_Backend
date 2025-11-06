@@ -628,8 +628,90 @@ class movimientosAcopio {
     }
   }
 
+  // Método para validar stock de ingredientes sin restar (solo validación)
+  static async validarStockIngredientes(cantidadEntrada, ingredientes, cantidadesPersonalizadas = null) {
+    try {
+      // Preparar datos de ingredientes válidos
+      const ingredientesValidos = ingredientes.filter(ingrediente => 
+        ingrediente.products_acopio && ingrediente.products_acopio.id
+      );
+
+      if (ingredientesValidos.length === 0) {
+        return { success: true, message: 'No hay ingredientes válidos para procesar' };
+      }
+
+      // Obtener IDs de ingredientes para consulta bulk
+      const ingredienteIds = ingredientesValidos.map(ingrediente => ingrediente.products_acopio.id);
+
+      // Consulta bulk para obtener stocks actuales
+      const { data: productosActuales, error: fetchError } = await supabase
+        .from('products_acopio')
+        .select('id, quantity')
+        .in('id', ingredienteIds);
+
+      if (fetchError) {
+        console.error('Error obteniendo stocks de ingredientes:', fetchError);
+        throw new Error('Error al obtener stocks de ingredientes');
+      }
+
+      // Crear mapa de stocks actuales para acceso rápido
+      const stocksActuales = {};
+      productosActuales.forEach(producto => {
+        stocksActuales[producto.id] = producto.quantity;
+      });
+
+      // Validar stock sin restar
+      const ingredientesConStockInsuficiente = [];
+
+      for (let i = 0; i < ingredientesValidos.length; i++) {
+        const ingrediente = ingredientesValidos[i];
+        
+        // Usar cantidad personalizada si existe, sino usar la calculada
+        let cantidadARestar;
+        if (cantidadesPersonalizadas && cantidadesPersonalizadas[i] !== undefined) {
+          cantidadARestar = parseFloat(cantidadesPersonalizadas[i]);
+        } else {
+          cantidadARestar = ingrediente.cantidad * cantidadEntrada;
+        }
+        
+        const cantidadActual = stocksActuales[ingrediente.products_acopio.id] || 0;
+        const nuevaCantidad = cantidadActual - cantidadARestar;
+        
+        // Verificar stock suficiente
+        if (nuevaCantidad < 0) {
+          ingredientesConStockInsuficiente.push({
+            nombre: ingrediente.products_acopio.name,
+            stockActual: cantidadActual,
+            requerido: cantidadARestar
+          });
+        }
+      }
+
+      // Si hay ingredientes con stock insuficiente, retornar error
+      if (ingredientesConStockInsuficiente.length > 0) {
+        const mensajeError = ingredientesConStockInsuficiente.map(ing => 
+          `${ing.nombre}: Stock actual ${ing.stockActual}, requerido ${ing.requerido}`
+        ).join('; ');
+        
+        return { 
+          success: false, 
+          message: `Stock insuficiente de ingredientes: ${mensajeError}`,
+          ingredientesConStockInsuficiente: ingredientesConStockInsuficiente
+        };
+      }
+
+      return { 
+        success: true, 
+        message: 'Stock de ingredientes suficiente'
+      };
+    } catch (error) {
+      console.error('Error en validarStockIngredientes:', error);
+      throw new Error('Error al validar stock de ingredientes');
+    }
+  }
+
   // Método para restar ingredientes del stock cuando se hace una entrada con receta
-  static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, empresaId, cantidadesPersonalizadas = null, sucuId = null, userId = null, personalId = null) {
+  static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, empresaId, cantidadesPersonalizadas = null, sucuId = null, userId = null, personalId = null, movimientoEntradaId = null) {
     try {
       // Preparar datos de ingredientes válidos
       const ingredientesValidos = ingredientes.filter(ingrediente => 
@@ -779,7 +861,9 @@ class movimientosAcopio {
               date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
               // No incluir proveedor_id ni cliente_id para movimientos de salida por receta
               proveedor_id: null,
-              cliente_id: null
+              cliente_id: null,
+              // Asociar con el movimiento de entrada si se proporciona
+              movimiento_entrada_id: movimientoEntradaId || null
             };
 
             // Agregar user_id o personal_id según corresponda
@@ -950,52 +1034,93 @@ class movimientosAcopio {
         return { success: false, message: 'Error al actualizar el stock' };
       }
 
-      // Si es entrada, tiene receta Y restar_ingredientes es true, devolver ingredientes consumidos
+      // Si es entrada con restar_ingredientes, buscar y procesar salidas relacionadas
       if (movimiento.type === 'entrada' && movimiento.restar_ingredientes) {
-        // Obtener recetas solo cuando sea necesario
-        const { data: recetas, error: recetasError } = await supabase
-          .from('recetas_acopio')
-          .select(`
-            id,
-            recetas_acopio_detalle (
-              id,
-              cantidad,
-              products_acopio:producto_acopio_id (
-                id,
-                name,
-                quantity
-              )
-            )
-          `)
-          .eq('producto_acopio_id', movimiento.product_id)
-          .limit(1);
-        
-        if (!recetasError && recetas && recetas.length > 0) {
-          const receta = recetas[0];
+        // Buscar todas las salidas relacionadas con este movimiento de entrada
+        const { data: salidasRelacionadas, error: salidasError } = await supabase
+          .from('movimientos_acopio')
+          .select('id, product_id, quantity, estado')
+          .eq('movimiento_entrada_id', movimientoId)
+          .eq('type', 'salida');
+
+        if (salidasError) {
+          console.error('Error buscando salidas relacionadas:', salidasError);
+          // Continuar con la anulación aunque haya error buscando salidas
+        } else if (salidasRelacionadas && salidasRelacionadas.length > 0) {
+          // Guardar IDs de salidas eliminadas para retornarlos (todos los IDs, sin importar si falla)
+          const salidasEliminadasIds = salidasRelacionadas.map(s => s.id);
           
-          if (receta && receta.recetas_acopio_detalle && receta.recetas_acopio_detalle.length > 0) {
-            // Devolver ingredientes (sumar al stock)
-            for (const ingrediente of receta.recetas_acopio_detalle) {
-              if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
-                continue;
+          // Obtener todos los productos únicos de las salidas en una sola consulta
+          const productIds = [...new Set(salidasRelacionadas.map(s => s.product_id))];
+          const { data: productosSalidas, error: productosError } = await supabase
+            .from('products_acopio')
+            .select('id, quantity')
+            .in('id', productIds);
+
+          if (!productosError && productosSalidas) {
+            // Crear mapa de productos para acceso rápido
+            const productosMap = {};
+            productosSalidas.forEach(p => {
+              productosMap[p.id] = p.quantity;
+            });
+
+            // Calcular nuevas cantidades para cada producto (puede haber múltiples salidas del mismo producto)
+            const actualizacionesStock = {};
+            salidasRelacionadas.forEach(salida => {
+              const cantidadSalida = parseFloat(salida.quantity);
+              const cantidadActual = productosMap[salida.product_id] || 0;
+              
+              if (!actualizacionesStock[salida.product_id]) {
+                actualizacionesStock[salida.product_id] = cantidadActual;
               }
+              actualizacionesStock[salida.product_id] += cantidadSalida;
+            });
 
-              const cantidadADevolver = ingrediente.cantidad * cantidadMovimiento;
-              const cantidadActual = ingrediente.products_acopio.quantity;
-              const nuevaCantidadIngrediente = cantidadActual + cantidadADevolver;
-
-              const { error: ingredienteError } = await supabase
+            // Actualizar stocks en batch (paralelo)
+            const updatePromises = Object.entries(actualizacionesStock).map(([productId, nuevaCantidad]) =>
+              supabase
                 .from('products_acopio')
-                .update({ quantity: nuevaCantidadIngrediente })
-                .eq('id', ingrediente.products_acopio.id);
+                .update({ quantity: nuevaCantidad })
+                .eq('id', productId)
+            );
 
-              if (ingredienteError) {
-                console.error(`Error devolviendo ingrediente ${ingrediente.products_acopio.name}:`, ingredienteError);
-                // Continuar con el siguiente ingrediente
-              }
-            }
+            await Promise.all(updatePromises);
           }
+
+          // Anular todas las salidas que no estén ya anuladas en batch
+          const salidasParaAnular = salidasRelacionadas.filter(s => s.estado !== 'anulado');
+          if (salidasParaAnular.length > 0) {
+            const salidasIdsParaAnular = salidasParaAnular.map(s => s.id);
+            await supabase
+              .from('movimientos_acopio')
+              .update({ estado: 'anulado' })
+              .in('id', salidasIdsParaAnular);
+          }
+
+          // Eliminar todas las salidas directamente (sin llamar al método eliminar que es lento)
+          await supabase
+            .from('movimientos_acopio')
+            .delete()
+            .in('id', salidasEliminadasIds);
+
+          console.log(`Procesadas ${salidasRelacionadas.length} salidas relacionadas al anular entrada ${movimientoId}`);
+          
+          // Retornar los IDs de las salidas eliminadas
+          return { 
+            success: true, 
+            message: pedidosAcopioRelacionados 
+              ? 'Movimiento anulado correctamente. El pedido relacionado ha sido actualizado a estado "Entregado"'
+              : 'Movimiento anulado correctamente',
+            data: { ...movimiento, estado: 'anulado' },
+            pedidoActualizado: pedidosAcopioRelacionados ? {
+              id: pedidosAcopioRelacionados.id,
+              estadoAnterior: pedidosAcopioRelacionados.estado,
+              estadoNuevo: 'Entregado'
+            } : null,
+            salidasEliminadas: salidasEliminadasIds
+          };
         }
+        // NO devolver ingredientes aquí porque ya se devolvieron al procesar las salidas
       }
 
       return { 
@@ -1008,7 +1133,8 @@ class movimientosAcopio {
           id: pedidosAcopioRelacionados.id,
           estadoAnterior: pedidosAcopioRelacionados.estado,
           estadoNuevo: 'Entregado'
-        } : null
+        } : null,
+        salidasEliminadas: [] // Array vacío si no hay salidas relacionadas
       };
 
     } catch (error) {
