@@ -199,6 +199,7 @@ class movimientosAlmacenController {
             const estado = req.query.estado || null;
             const ordenamiento = req.query.ordenamiento || 'fecha_desc';
             const search = req.query.search || null;
+            const cliente = req.query.cliente || null;
 
             if (!sucu_id) {
                 return res.status(400).json({
@@ -207,7 +208,7 @@ class movimientosAlmacenController {
                 });
             }
 
-            const result = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, estado, ordenamiento, search);
+            const result = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, estado, ordenamiento, search, cliente);
 
             if (!result.success) {
                 return res.status(400).json(result);
