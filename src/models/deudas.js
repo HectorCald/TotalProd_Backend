@@ -1,5 +1,27 @@
 const { supabase } = require('../config/supabase');
 
+const formatDateInput = (value, { keepTime = false } = {}) => {
+    if (!value) return null;
+
+    if (value instanceof Date) {
+        return keepTime ? value.toISOString() : value.toISOString().split('T')[0];
+    }
+
+    if (typeof value === 'string') {
+        // Para dates sin tiempo (YYYY-MM-DD)
+        if (!keepTime && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return value;
+        }
+
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+            return keepTime ? parsed.toISOString() : parsed.toISOString().split('T')[0];
+        }
+    }
+
+    return null;
+};
+
 class deudas {
     // Crear una nueva deuda
     static async create(deudaData) {
@@ -8,8 +30,10 @@ class deudas {
 
             // Usar la fecha proporcionada directamente (formato YYYY-MM-DD)
             let fechaDeudaFinal;
-            if (fecha_deuda) {
-                fechaDeudaFinal = fecha_deuda;
+            const fechaDeudaNormalizada = formatDateInput(fecha_deuda);
+
+            if (fechaDeudaNormalizada) {
+                fechaDeudaFinal = fechaDeudaNormalizada;
             } else {
                 // Si no viene fecha, usar la actual en formato YYYY-MM-DD
                 const ahora = new Date();
@@ -19,9 +43,14 @@ class deudas {
                 fechaDeudaFinal = `${año}-${mes}-${dia}`;
             }
 
+            const fechaVencimientoFinal = formatDateInput(fecha_vencimiento);
+            if (fecha_vencimiento && !fechaVencimientoFinal) {
+                throw new Error('Fecha de vencimiento inválida');
+            }
+
             const dbData = {
                 fecha_deuda: fechaDeudaFinal,
-                fecha_vencimiento,
+                fecha_vencimiento: fechaVencimientoFinal || null,
                 monto_total,
                 saldo_pendiente: monto_total, // Inicialmente el saldo pendiente es igual al monto total
                 concepto,
@@ -435,22 +464,39 @@ class deudas {
         try {
             const { fecha_deuda, fecha_vencimiento, monto_total, saldo_pendiente, concepto, estado, cliente_id } = updateData;
 
-            const dbData = {
-                concepto,
-                cliente_id: cliente_id || null
-            };
+            const dbData = {};
+
+            if (concepto !== undefined) {
+                dbData.concepto = concepto;
+            }
+
+            if (cliente_id !== undefined) {
+                dbData.cliente_id = cliente_id || null;
+            }
 
             // No aplicar conversiones de zona horaria: persistir tal cual viene (YYYY-MM-DD para columnas DATE)
             if (fecha_deuda) {
-                dbData.fecha_deuda = fecha_deuda;
+                const fechaNormalizada = formatDateInput(fecha_deuda);
+                if (fechaNormalizada) {
+                    dbData.fecha_deuda = fechaNormalizada;
+                }
             }
 
             if (fecha_vencimiento) {
-                dbData.fecha_vencimiento = fecha_vencimiento;
+                const vencimientoNormalizado = formatDateInput(fecha_vencimiento);
+                if (!vencimientoNormalizado) {
+                    throw new Error('Fecha de vencimiento inválida');
+                }
+                if (vencimientoNormalizado) {
+                    dbData.fecha_vencimiento = vencimientoNormalizado;
+                }
             }
 
             if (monto_total !== undefined) {
                 dbData.monto_total = monto_total;
+                if (saldo_pendiente === undefined) {
+                    dbData.saldo_pendiente = monto_total;
+                }
             }
 
             if (saldo_pendiente !== undefined) {

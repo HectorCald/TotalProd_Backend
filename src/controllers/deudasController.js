@@ -148,7 +148,6 @@ class deudasController {
         user_id: finalUserId,
         personal_id: finalPersonalId,
         sucu_id,
-        fecha_deuda,
         fecha_vencimiento,
         monto_total: parseFloat(monto_total),
         concepto: concepto.trim(),
@@ -156,6 +155,10 @@ class deudasController {
         movimiento_salida_id,
         destino_sucursal_id: destino_sucursal_id || null
       };
+
+      if (fecha_deuda) {
+        deudaData.fecha_deuda = fecha_deuda;
+      }
 
       const result = await deudas.create(deudaData);
       
@@ -209,14 +212,21 @@ class deudasController {
       }
 
       const updateData = {
-        fecha_deuda,
         fecha_vencimiento,
-        monto_total: monto_total ? parseFloat(monto_total) : undefined,
+        monto_total: monto_total !== undefined ? parseFloat(monto_total) : undefined,
         saldo_pendiente: saldo_pendiente !== undefined ? parseFloat(saldo_pendiente) : undefined,
-        concepto: concepto ? concepto.trim() : undefined,
+        concepto: concepto !== undefined ? concepto.trim() : undefined,
         estado,
-        cliente_id: cliente_id || null
+        cliente_id: cliente_id !== undefined ? (cliente_id || null) : undefined
       };
+
+      if (fecha_deuda !== undefined) {
+        updateData.fecha_deuda = fecha_deuda;
+      }
+
+      if (updateData.monto_total !== undefined && updateData.saldo_pendiente === undefined) {
+        updateData.saldo_pendiente = updateData.monto_total;
+      }
 
       // Verificar permisos de actualización solo si es empleado
       const userType = req.user?.type;

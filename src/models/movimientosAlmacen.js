@@ -16,11 +16,20 @@ class movimientosAlmacen {
     static async create(movimientoData) {
         
         try {
-            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento } = movimientoData;
+            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha } = movimientoData;
 
-            // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
-            const ahora = new Date();
-            const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
+            // Determinar timestamp para el movimiento
+            const fechaActual = new Date();
+            let fechaMovimiento = fechaActual;
+
+            if (fecha) {
+                const fechaProporcionada = new Date(fecha);
+                if (!isNaN(fechaProporcionada.getTime())) {
+                    fechaMovimiento = fechaProporcionada;
+                }
+            }
+
+            const fechaMovimientoISO = fechaMovimiento.toISOString();
 
             // Iniciar transacción - OPTIMIZADO: Solo campos necesarios, sin defaults
             const insertData = {
@@ -35,7 +44,7 @@ class movimientosAlmacen {
                 agrupado: !!agrupado,
                 descuento: parseFloat(descuento) || 0,
                 aumento: parseFloat(aumento) || 0,
-                fecha: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
+                fecha: fechaMovimientoISO,
                 estado: 'finalizado' // Estado por defecto
             };
 
@@ -991,7 +1000,7 @@ class movimientosAlmacen {
             // Obtener el movimiento con datos mínimos (ULTRA OPTIMIZADO)
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
-                .select('id, sucu_id, type, estado, restar_ingredientes, produccion_damabrava_id, cliente_id')
+                .select('id, sucu_id, type, estado, restar_ingredientes, produccion_damabrava_id, cliente_id, deuda_id')
                 .eq('id', movimientoId)
                 .maybeSingle(); // Usar maybeSingle para mejor performance
 
@@ -1310,10 +1319,23 @@ class movimientosAlmacen {
 
             // Eliminar deudas asociadas a este movimiento (si las hubiera)
             try {
+                if (movimiento.deuda_id) {
+                    const { error: limpiarDeudaIdError } = await supabase
+                        .from('movimientos_almacen')
+                        .update({ deuda_id: null })
+                        .eq('id', movimientoId);
+
+                    if (limpiarDeudaIdError) {
+                        console.error('Error limpiando deuda_id antes de eliminar deuda:', limpiarDeudaIdError);
+                    }
+                }
+
                 const deleteDeudasResult = await deudas.deleteByMovimientoSalidaId(movimientoId);
-                if (!deleteDeudasResult.success) {
-                    console.warn('⚠️ [ANULAR] No se pudieron eliminar deudas asociadas:', deleteDeudasResult.message);
-                    // No abortar la anulación por esto, solo advertir
+                if (!deleteDeudasResult.success && movimiento.deuda_id) {
+                    const deleteDeudaDirecto = await deudas.delete(movimiento.deuda_id);
+                    if (!deleteDeudaDirecto.success) {
+                        console.warn('⚠️ [ANULAR] No se pudieron eliminar deudas asociadas:', deleteDeudaDirecto.message);
+                    }
                 }
             } catch (e) {
                 console.warn('⚠️ [ANULAR] Error eliminando deudas asociadas al movimiento:', e.message);
@@ -1403,7 +1425,7 @@ class movimientosAlmacen {
             // Verificar que el movimiento existe
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
-                .select('id, estado')
+                .select('id, estado, deuda_id')
                 .eq('id', movimientoId)
                 .maybeSingle();
 
@@ -1423,10 +1445,23 @@ class movimientosAlmacen {
 
             // Eliminar deudas asociadas primero
             try {
+                if (movimiento.deuda_id) {
+                    const { error: limpiarDeudaIdError } = await supabase
+                        .from('movimientos_almacen')
+                        .update({ deuda_id: null })
+                        .eq('id', movimientoId);
+
+                    if (limpiarDeudaIdError) {
+                        console.error('Error limpiando deuda_id antes de eliminar el movimiento:', limpiarDeudaIdError);
+                    }
+                }
+
                 const deleteDeudas = await deudas.deleteByMovimientoSalidaId(movimientoId);
-                if (!deleteDeudas.success) {
-                    console.warn('⚠️ [ELIMINAR] No se pudieron eliminar deudas asociadas:', deleteDeudas.message);
-                    // Continuar con la eliminación del movimiento
+                if (!deleteDeudas.success && movimiento.deuda_id) {
+                    const deleteDeudaDirecto = await deudas.delete(movimiento.deuda_id);
+                    if (!deleteDeudaDirecto.success) {
+                        console.warn('⚠️ [ELIMINAR] No se pudieron eliminar deudas asociadas:', deleteDeudaDirecto.message);
+                    }
                 }
             } catch (e) {
                 console.warn('⚠️ [ELIMINAR] Error eliminando deudas asociadas al movimiento:', e.message);

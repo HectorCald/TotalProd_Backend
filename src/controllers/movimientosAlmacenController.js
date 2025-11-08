@@ -7,7 +7,7 @@ class movimientosAlmacenController {
         
         try {
             const tValidationStart = Date.now();
-            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento } = req.body;
+            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha } = req.body;
             const user_id = req.user?.id;
             const userType = req.user?.type; // Verificar si es empleado o usuario normal
 
@@ -108,7 +108,8 @@ class movimientosAlmacenController {
                 descuento: parseFloat(descuento) || 0,
                 aumento: parseFloat(aumento) || 0,
                 ...(gasto_id ? { gasto_id } : {}),
-                ...(typeof agrupado !== 'undefined' ? { agrupado: !!agrupado } : {})
+                ...(typeof agrupado !== 'undefined' ? { agrupado: !!agrupado } : {}),
+                ...(fecha ? { fecha } : {})
             };
 
             // VALIDAR INGREDIENTES ANTES de crear el movimiento si es entrada con restar_ingredientes
