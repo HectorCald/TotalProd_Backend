@@ -151,7 +151,7 @@ class movimientosAcopio {
   }
 
   // Obtener movimientos por producto
-  static async getByProduct(productId, sucuId) {
+  static async getByProduct(productId, sucuId, limit = 10) {
     try {
       if (!productId) {
         throw new Error('ID del producto es requerido');
@@ -161,7 +161,7 @@ class movimientosAcopio {
         throw new Error('ID de la sucursal es requerido');
       }
 
-      const { data, error } = await supabase
+      const { data: movimientos, error } = await supabase
         .from('movimientos_acopio')
         .select(`
           *,
@@ -189,60 +189,93 @@ class movimientosAcopio {
         `)
         .eq('product_id', productId)
         .eq('sucu_id', sucuId)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .limit(limit);
 
       if (error) {
         console.error('Error de Supabase:', error);
         throw new Error('No se pudo obtener los movimientos');
       }
 
-      // Obtener nombres de usuarios y personal para cada movimiento
-      const movimientosConNombres = await Promise.all(
-        (data || []).map(async (movimiento) => {
-          let user = null;
-          let personal = null;
+      if (!movimientos || movimientos.length === 0) {
+        return [];
+      }
 
-          // Si tiene user_id, obtener el usuario
-          if (movimiento.user_id) {
-            const { data: userData, error: userError } = await supabase
-              .from('users')
-              .select('id, first_name, last_name')
-              .eq('id', movimiento.user_id)
-              .single();
-            
-            if (!userError && userData) {
-              user = {
-                id: userData.id,
-                name: `${userData.first_name} ${userData.last_name}`.trim()
-              };
+      const userIds = Array.from(new Set(movimientos.map(m => m.user_id).filter(Boolean)));
+      const personalIds = Array.from(new Set(movimientos.map(m => m.personal_id).filter(Boolean)));
+
+      const usersMap = new Map();
+      if (userIds.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .in('id', userIds);
+
+        if (usersError) {
+          console.warn('Error obteniendo usuarios para movimientos de acopio:', usersError);
+        } else if (usersData) {
+          usersData.forEach(user => {
+            usersMap.set(user.id, {
+              id: user.id,
+              name: `${user.first_name || ''} ${user.last_name || ''}`.trim()
+            });
+          });
+        }
+      }
+
+      const personalMap = new Map();
+      if (personalIds.length > 0) {
+        const { data: personalData, error: personalError } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .in('id', personalIds);
+
+        if (personalError) {
+          console.warn('Error obteniendo personal para movimientos de acopio:', personalError);
+        } else if (personalData) {
+          personalData.forEach(persona => {
+            personalMap.set(persona.id, {
+              id: persona.id,
+              name: `${persona.first_name || ''} ${persona.last_name || ''}`.trim()
+            });
+          });
+        }
+      }
+
+      const movimientoIds = movimientos.map(mov => mov.id);
+
+      let pedidosMap = new Map();
+      if (movimientoIds.length > 0) {
+        const { data: pedidosRelacionados, error: pedidosError } = await supabase
+          .from('pedidos_acopio')
+          .select('movimiento_entrada_id')
+          .in('movimiento_entrada_id', movimientoIds);
+
+        if (pedidosError) {
+          console.warn('Error obteniendo pedidos de acopio relacionados:', pedidosError);
+        } else if (pedidosRelacionados) {
+          pedidosMap = pedidosRelacionados.reduce((map, pedido) => {
+            if (pedido.movimiento_entrada_id) {
+              map.set(pedido.movimiento_entrada_id, true);
             }
-          }
+            return map;
+          }, new Map());
+        }
+      }
 
-          // Si tiene personal_id, obtener el personal
-          if (movimiento.personal_id) {
-            const { data: personalData, error: personalError } = await supabase
-              .from('personal')
-              .select('id, first_name, last_name')
-              .eq('id', movimiento.personal_id)
-              .single();
-            
-            if (!personalError && personalData) {
-              personal = {
-                id: personalData.id,
-                name: `${personalData.first_name} ${personalData.last_name}`.trim()
-              };
-            }
-          }
+      const movimientosFormateados = movimientos.map(movimiento => {
+        const user = movimiento.user_id ? (usersMap.get(movimiento.user_id) || null) : null;
+        const personal = movimiento.personal_id ? (personalMap.get(movimiento.personal_id) || null) : null;
 
-          return {
-            ...movimiento,
-            user,
-            personal
-          };
-        })
-      );
+        return {
+          ...movimiento,
+          user,
+          personal,
+          tiene_pedido_relacionado: pedidosMap.get(movimiento.id) || false
+        };
+      });
 
-      return movimientosConNombres;
+      return movimientosFormateados;
     } catch (error) {
       console.error('Error al obtener movimientos por producto:', error);
       throw error;

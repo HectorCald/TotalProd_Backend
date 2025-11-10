@@ -1565,68 +1565,112 @@ class movimientosAlmacen {
                 throw new Error('ID de la sucursal es requerido');
             }
 
-            // OPTIMIZACIÓN: Obtener directamente los movimientos que contienen el producto
-            // usando JOIN en lugar de N+1 queries
-            const { data: movimientosConProducto, error } = await supabase
-                .from('movimiento_almacen_producto')
+            const { data: movimientos, error: movimientosError } = await supabase
+                .from('movimientos_almacen')
                 .select(`
-                    movimiento_almacen_id,
-                    cantidad,
-                    precio_unitario,
-                    subtotal,
-                    producto:products_almacen!inner(id, name, grup),
-                    movimientos_almacen!inner(
-                        id,
-                        type,
-                        fecha,
-                        observaciones,
-                        metodo_pago,
-                        estado,
-                        agrupado,
-                        cliente:clients(id, name),
-                        proveedor:proveedores(id, name),
-                        precio:prices_types(id, name)
+                    *,
+                    cliente:clients(id, name, total_orders),
+                    proveedor:proveedores(id, name, total_orders),
+                    precio:prices_types(id, name),
+                    sucursal:sucu_id(id, name),
+                    user:user_id(id, first_name, last_name),
+                    personal:personal_id(id, first_name, last_name),
+                    productos:movimiento_almacen_producto!inner(
+                        movimiento_almacen_id,
+                        producto_almacen_id,
+                        cantidad,
+                        precio_unitario,
+                        subtotal,
+                        producto:producto_almacen_id(
+                            id,
+                            name,
+                            description,
+                            grup
+                        )
                     )
                 `)
-                .eq('producto_almacen_id', productId)
-                .eq('movimientos_almacen.sucu_id', sucuId)
+                .eq('sucu_id', sucuId)
+                .eq('movimiento_almacen_producto.producto_almacen_id', productId)
+                .order('fecha', { ascending: false })
                 .limit(limit);
 
-            if (error) {
-                console.error('Error obteniendo movimientos por producto:', error);
-                return { success: false, message: 'Error al obtener movimientos', error };
+            if (movimientosError) {
+                console.error('Error obteniendo movimientos:', movimientosError);
+                return { success: false, message: 'Error al obtener movimientos', error: movimientosError };
             }
 
-            // Transformar la respuesta para mantener la estructura esperada
-            const movimientosTransformados = movimientosConProducto
-                .map(item => ({
-                    id: item.movimientos_almacen.id,
-                    type: item.movimientos_almacen.type,
-                    fecha: item.movimientos_almacen.fecha,
-                    observaciones: item.movimientos_almacen.observaciones,
-                    metodo_pago: item.movimientos_almacen.metodo_pago,
-                    estado: item.movimientos_almacen.estado,
-                    agrupado: item.movimientos_almacen.agrupado,
-                    cliente: item.movimientos_almacen.cliente,
-                    proveedor: item.movimientos_almacen.proveedor,
-                    precio: item.movimientos_almacen.precio,
-                    productos: [{
-                        cantidad: item.cantidad,
-                        precio_unitario: item.precio_unitario,
-                        subtotal: item.subtotal,
-                        producto: {
-                            id: item.producto.id,
-                            name: item.producto.name,
-                            grup: item.producto.grup
-                        }
-                    }]
-                }))
-                // Ordenar por fecha descendente (más reciente primero)
+            let pedidosMap = new Map();
+            if (movimientos && movimientos.length > 0) {
+                const idsList = movimientos.map(m => m.id).join(',');
+                if (idsList) {
+                    const orFilters = [
+                        `movimiento_salida_id.in.(${idsList})`,
+                        `movimiento_entrada_id.in.(${idsList})`
+                    ].join(',');
+
+                    const { data: pedidosRelacionados, error: pedidosError } = await supabase
+                        .from('pedidos_almacen')
+                        .select('movimiento_salida_id, movimiento_entrada_id')
+                        .or(orFilters);
+
+                    if (pedidosError) {
+                        console.warn('Error obteniendo pedidos relacionados:', pedidosError);
+                    } else if (pedidosRelacionados) {
+                        pedidosMap = pedidosRelacionados.reduce((map, pedido) => {
+                            if (pedido.movimiento_salida_id) {
+                                map.set(pedido.movimiento_salida_id, true);
+                            }
+                            if (pedido.movimiento_entrada_id) {
+                                map.set(pedido.movimiento_entrada_id, true);
+                            }
+                            return map;
+                        }, new Map());
+                    }
+                }
+            }
+
+            const movimientosMap = new Map();
+
+            (movimientos || []).forEach(movimiento => {
+                const { productos = [], user: userRaw, personal: personalRaw, ...restoMovimiento } = movimiento;
+
+                const user = userRaw
+                    ? {
+                        id: userRaw.id,
+                        name: `${userRaw.first_name || ''} ${userRaw.last_name || ''}`.trim()
+                    }
+                    : null;
+
+                const personal = personalRaw
+                    ? {
+                        id: personalRaw.id,
+                        name: `${personalRaw.first_name || ''} ${personalRaw.last_name || ''}`.trim()
+                    }
+                    : null;
+
+                const existente = movimientosMap.get(movimiento.id);
+                if (existente) {
+                    movimientosMap.set(movimiento.id, {
+                        ...existente,
+                        productos: [...existente.productos, ...productos]
+                    });
+                } else {
+                    movimientosMap.set(movimiento.id, {
+                        ...restoMovimiento,
+                        user,
+                        personal,
+                        productos: productos || [],
+                        tiene_pedido_relacionado: pedidosMap.get(movimiento.id) || false
+                    });
+                }
+            });
+
+            const movimientosOrdenados = Array.from(movimientosMap.values())
                 .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
             return {
                 success: true,
-                data: movimientosTransformados
+                data: movimientosOrdenados
             };
 
         } catch (error) {
