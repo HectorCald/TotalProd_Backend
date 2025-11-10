@@ -6,7 +6,7 @@ class gastosController {
   // Obtener todos los gastos con paginación
   static async getAll(req, res) {
     try {
-      const { page = 1, limit = 10, search = '', metodo_pago = null, proveedor_id = null, ordenamiento = 'fecha_desc', sucu_id } = req.query;
+      const { page = 1, limit = 30, search = '', metodo_pago = null, proveedor_id = null, ordenamiento = 'fecha_desc', sucu_id } = req.query;
       
       if (!sucu_id) {
         return res.status(400).json({
@@ -17,7 +17,7 @@ class gastosController {
 
       const result = await gastos.getAll(
         parseInt(page), 
-        parseInt(limit), 
+        parseInt(limit, 10), 
         search,
         metodo_pago,
         proveedor_id,

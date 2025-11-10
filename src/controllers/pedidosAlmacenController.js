@@ -107,6 +107,7 @@ class pedidosAlmacenController {
       const searchQuery = req.query.search || null;
       const estado = req.query.estado || null;
       const ordenamiento = req.query.ordenamiento || 'fecha_desc';
+      const responsableId = req.query.responsable_id || null;
 
       if (!sucu_id) {
         return res.status(400).json({
@@ -115,7 +116,7 @@ class pedidosAlmacenController {
         });
       }
 
-      const result = await pedidosAlmacen.getAll(sucu_id, page, limit, searchQuery, estado, ordenamiento);
+      const result = await pedidosAlmacen.getAll(sucu_id, page, limit, searchQuery, estado, ordenamiento, responsableId);
 
       if (result.success) {
         return res.status(200).json(result);

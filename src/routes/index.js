@@ -27,6 +27,7 @@ const conteosRoutes = require('./conteosRoutes');
 const cotizacionesRoutes = require('./cotizacionesRoutes');
 const empresaImagenRoutes = require('./empresaImagenRoutes');
 const empresaRoutes = require('./empresaRoutes');
+const historialRoutes = require('./historialRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -106,6 +107,9 @@ router.use('/comentarios', comentariosRoutes);
 
 // Rutas de gastos
 router.use('/gastos', gastosRoutes);
+
+// Rutas de historial
+router.use('/historial', historialRoutes);
 
 // Rutas de deudas
 router.use('/deudas', deudasRoutes);

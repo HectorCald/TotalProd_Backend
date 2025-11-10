@@ -186,11 +186,41 @@ const checkInfoPermission = async (personalId) => {
   }
 };
 
+/**
+ * Verifica si un empleado tiene permisos para administrar sucursales
+ * @param {string} personalId - ID del personal
+ * @returns {Promise<boolean>} - true si tiene permisos, false si no
+ */
+const checkSucursalesPermission = async (personalId) => {
+  try {
+    if (!personalId) {
+      return false;
+    }
+
+    const { data, error } = await supabase
+      .from('personal_permisos')
+      .select('can_sucursales')
+      .eq('personal_id', personalId)
+      .single();
+
+    if (error) {
+      console.error('Error al verificar permisos de sucursales:', error);
+      return false;
+    }
+
+    return data?.can_sucursales === true;
+  } catch (error) {
+    console.error('Error en checkSucursalesPermission:', error);
+    return false;
+  }
+};
+
 module.exports = {
   checkDeletePermission,
   checkAnularPermission,
   checkUpdatePermission,
   checkCreatePermission,
   checkReplacePermission,
-  checkInfoPermission
+  checkInfoPermission,
+  checkSucursalesPermission
 };

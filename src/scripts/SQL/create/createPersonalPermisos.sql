@@ -7,6 +7,7 @@ CREATE TABLE personal_permisos (
     can_anular BOOLEAN NOT NULL,
     can_replace BOOLEAN NOT NULL,
     can_info BOOLEAN NOT NULL,
+    can_sucursales BOOLEAN NOT NULL,
     CONSTRAINT personal_permisos_personal_id_fkey 
         FOREIGN KEY (personal_id) REFERENCES personal (id)
 );

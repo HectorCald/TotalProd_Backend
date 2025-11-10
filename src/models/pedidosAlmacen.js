@@ -205,7 +205,7 @@ class pedidosAlmacen {
   }
 
   // Obtener todos los pedidos de la sucursal (pedidos que hizo o que están destinados a esta sucursal)
-  static async getAll(sucuId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc') {
+  static async getAll(sucuId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc', responsableId = null) {
     try {
       
       if (!sucuId) {
@@ -274,6 +274,12 @@ class pedidosAlmacen {
         .order(orderBy, { ascending: ascending })
         .range(offset, offset + limit - 1);
 
+      let normalizedResponsableId = null;
+      if (responsableId && responsableId !== 'null' && responsableId !== 'undefined') {
+        const parsedResponsable = parseInt(responsableId, 10);
+        normalizedResponsableId = Number.isNaN(parsedResponsable) ? responsableId : parsedResponsable;
+      }
+
       // Si hay búsqueda, primero obtener IDs de productos por nombre, luego IDs de pedidos por detalle
       let pedidosIdsFiltrados = null;
       if (searchQuery && searchQuery.trim() !== '') {
@@ -303,6 +309,10 @@ class pedidosAlmacen {
       // Aplicar filtro de estado si se proporciona
       if (estado && estado.trim() !== '') {
         query = query.eq('estado', estado);
+      }
+
+      if (normalizedResponsableId) {
+        query = query.eq('personal_id', normalizedResponsableId);
       }
 
       // Si hay IDs encontrados, filtrar por esos IDs; si hay búsqueda y no hay IDs, devolver vacío
@@ -399,10 +409,20 @@ class pedidosAlmacen {
       });
       
       // Obtener el total de pedidos para la paginación
-      const { count, error: countError } = await supabase
+      let countQuery = supabase
         .from('pedidos_almacen')
         .select('*', { count: 'exact', head: true })
         .or(`sucursal_id.eq.${sucuId},sucursal_destino_id.eq.${sucuId}`);
+
+      if (estado && estado.trim() !== '') {
+        countQuery = countQuery.eq('estado', estado);
+      }
+
+      if (normalizedResponsableId) {
+        countQuery = countQuery.eq('personal_id', normalizedResponsableId);
+      }
+
+      const { count, error: countError } = await countQuery;
 
       if (countError) {
         throw new Error(`Error al contar pedidos: ${countError.message}`);

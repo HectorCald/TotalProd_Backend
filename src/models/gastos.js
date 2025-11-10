@@ -73,7 +73,29 @@ class gastos {
     }
 
     // Obtener todos los gastos con paginación y filtros
-    static async getAll(page = 1, limit = 10, search = '', metodoPago = null, proveedorId = null, ordenamiento = 'fecha_desc', sucuIdParam = null) {
+    static normalizeSearchTokens(search = '') {
+        if (!search) return [];
+        const normalized = search
+            .toString()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[-_/]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (!normalized) return [];
+
+        const tokens = new Set();
+        normalized.split(' ').forEach(token => {
+            const cleanToken = token.replace(/'/g, '');
+            if (cleanToken) tokens.add(cleanToken);
+        });
+
+        return Array.from(tokens);
+    }
+
+    static async getAll(page = 1, limit = 30, search = '', metodoPago = null, proveedorId = null, ordenamiento = 'fecha_desc', sucuIdParam = null) {
         try {
             const sucuId = sucuIdParam;
             if (!sucuId) {
@@ -83,7 +105,9 @@ class gastos {
                 };
             }
 
-            const offset = (page - 1) * limit;
+            const currentPage = parseInt(page, 10) > 0 ? parseInt(page, 10) : 1;
+            const perPage = parseInt(limit, 10) > 0 ? parseInt(limit, 10) : 30;
+            const offset = (currentPage - 1) * perPage;
 
             let query = supabase
                 .from('gastos')
@@ -111,8 +135,13 @@ class gastos {
                 .eq('sucu_id', sucuId);
 
             // Aplicar búsqueda si se proporciona
-            if (search && search.trim() !== '') {
-                query = query.or(`concepto.ilike.%${search}%,metodo_pago.ilike.%${search}%`);
+            const searchTokens = gastos.normalizeSearchTokens(search);
+            if (searchTokens.length > 0) {
+                const orFilters = searchTokens.flatMap(token => ([
+                    `concepto.ilike.%${token}%`,
+                    `metodo_pago.ilike.%${token}%`
+                ]));
+                query = query.or(orFilters.join(','));
             }
 
             // Aplicar filtro de método de pago
@@ -150,7 +179,7 @@ class gastos {
             }
 
             // Aplicar paginación
-            query = query.range(offset, offset + limit - 1);
+            query = query.range(offset, offset + perPage - 1);
 
             const { data, error, count } = await query;
 
@@ -182,18 +211,19 @@ class gastos {
                 return processedGasto;
             });
 
-            const totalPages = Math.ceil(count / limit);
-            const hasNextPage = page < totalPages;
-            const hasPreviousPage = page > 1;
+            const totalItems = count || 0;
+            const totalPages = perPage > 0 ? Math.ceil(totalItems / perPage) : 0;
+            const hasNextPage = currentPage < totalPages;
+            const hasPreviousPage = currentPage > 1 && totalPages > 0;
 
             return {
                 success: true,
                 data: processedData,
                 pagination: {
-                    currentPage: page,
+                    currentPage,
                     totalPages,
-                    totalItems: count,
-                    itemsPerPage: limit,
+                    totalItems,
+                    itemsPerPage: perPage,
                     hasNextPage,
                     hasPreviousPage
                 }

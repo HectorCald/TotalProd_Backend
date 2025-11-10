@@ -51,7 +51,8 @@ class Personal {
             can_update,
             can_anular,
             can_replace,
-            can_info
+            can_info,
+            can_sucursales
           )
         `)
         .eq('empresa_id', empresaId)
@@ -76,14 +77,16 @@ class Personal {
           editar: personal.personal_permisos[0].can_update,
           anular: personal.personal_permisos[0].can_anular,
           reemplazar: personal.personal_permisos[0].can_replace,
-          info: personal.personal_permisos[0].can_info
+          info: personal.personal_permisos[0].can_info,
+          sucursales: personal.personal_permisos[0].can_sucursales
         } : {
           crear: false,
           eliminar: false,
           editar: false,
           anular: false,
           reemplazar: false,
-          info: false
+          info: false,
+          sucursales: false
         };
 
         // Procesar la sucursal con información de la empresa
@@ -151,7 +154,8 @@ class Personal {
             can_update,
             can_anular,
             can_replace,
-            can_info
+            can_info,
+            can_sucursales
           )
         `)
         .eq('id', id)
@@ -176,13 +180,17 @@ class Personal {
         eliminar: data.personal_permisos[0].can_delete,
         editar: data.personal_permisos[0].can_update,
         anular: data.personal_permisos[0].can_anular,
-        reemplazar: data.personal_permisos[0].can_replace
+        reemplazar: data.personal_permisos[0].can_replace,
+        info: data.personal_permisos[0].can_info,
+        sucursales: data.personal_permisos[0].can_sucursales
       } : {
         crear: false,
         eliminar: false,
         editar: false,
         anular: false,
-        reemplazar: false
+        reemplazar: false,
+        info: false,
+        sucursales: false
       };
 
       // Procesar la sucursal con información de la empresa
@@ -297,7 +305,8 @@ class Personal {
             can_update: permisos.editar || false,
             can_anular: permisos.anular || false,
             can_replace: permisos.reemplazar || false,
-            can_info: permisos.info || false
+            can_info: permisos.info || false,
+            can_sucursales: permisos.sucursales || false
           }]);
 
         if (permisosError) {
@@ -397,7 +406,8 @@ class Personal {
             can_update: permisos.editar || false,
             can_anular: permisos.anular || false,
             can_replace: permisos.reemplazar || false,
-            can_info: permisos.info || false
+            can_info: permisos.info || false,
+            can_sucursales: permisos.sucursales || false
           }]);
 
         if (permisosError) {

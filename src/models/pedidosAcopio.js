@@ -75,7 +75,7 @@ class pedidosAcopio {
   }
 
   // Obtener todos los pedidos de la empresa
-  static async getAll(empresaId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc') {
+  static async getAll(empresaId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc', responsableId = null) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
@@ -116,6 +116,12 @@ class pedidosAcopio {
         .order(orderBy, { ascending: ascending })
         .range(offset, offset + limit - 1);
 
+      let normalizedResponsableId = null;
+      if (responsableId && responsableId !== 'null' && responsableId !== 'undefined') {
+        const parsedResponsable = parseInt(responsableId, 10);
+        normalizedResponsableId = Number.isNaN(parsedResponsable) ? responsableId : parsedResponsable;
+      }
+
       // Si hay búsqueda, pre-matchear IDs de productos por nombre y luego filtrar por observaciones
       let productoIdsFiltrados = null;
       if (searchQuery && searchQuery.trim() !== '') {
@@ -135,6 +141,10 @@ class pedidosAcopio {
       // Aplicar filtro de estado si se proporciona
       if (estado && estado.trim() !== '') {
         query = query.eq('estado', estado);
+      }
+
+      if (normalizedResponsableId) {
+        query = query.eq('personal_id', normalizedResponsableId);
       }
 
       const { data: pedidos, error } = await query;
