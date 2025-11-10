@@ -16,7 +16,7 @@ class movimientosAlmacen {
     static async create(movimientoData) {
         
         try {
-            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha } = movimientoData;
+            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden } = movimientoData;
 
             // Determinar timestamp para el movimiento
             const fechaActual = new Date();
@@ -30,6 +30,12 @@ class movimientosAlmacen {
             }
 
             const fechaMovimientoISO = fechaMovimiento.toISOString();
+
+            const numeroOrdenProporcionado = (numero_orden !== undefined && numero_orden !== null)
+                ? Number(numero_orden)
+                : null;
+
+            const numeroOrdenNormalizado = Number.isNaN(numeroOrdenProporcionado) ? null : numeroOrdenProporcionado;
 
             // Iniciar transacción - OPTIMIZADO: Solo campos necesarios, sin defaults
             const insertData = {
@@ -47,6 +53,10 @@ class movimientosAlmacen {
                 fecha: fechaMovimientoISO,
                 estado: 'finalizado' // Estado por defecto
             };
+
+            if (numeroOrdenNormalizado !== null) {
+                insertData.numero_orden = numeroOrdenNormalizado;
+            }
 
             // Solo agregar campos que tienen valor - OPTIMIZADO
             if (precio_id !== null && precio_id !== undefined) {
@@ -67,7 +77,7 @@ class movimientosAlmacen {
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
                 .insert(insertData)
-                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento')
+                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento, numero_orden')
                 .single();
                 
 
@@ -330,6 +340,8 @@ class movimientosAlmacen {
                 
             }
 
+            let numeroOrdenAsignado = insertData.numero_orden ?? null;
+
             // Usar datos del movimiento ya creado y stock calculado (SIN CONSULTAS ADICIONALES)
             const tPrepareResponseStart = Date.now();
             
@@ -347,7 +359,8 @@ class movimientosAlmacen {
                 produccion_damabrava_id: movimiento.produccion_damabrava_id,
                 agrupado: movimiento.agrupado,
                 descuento: movimiento.descuento,
-                aumento: movimiento.aumento
+                aumento: movimiento.aumento,
+                numero_orden: movimiento.numero_orden ?? numeroOrdenAsignado
             };
 
             // Usar productos con stock calculado (ya calculado arriba) o preparar fallback
@@ -392,13 +405,19 @@ class movimientosAlmacen {
                             const numeroOrdenActualizado = clienteActualizado?.total_orders || 0;
                             
                             // 3) TERCERO: Actualizar el movimiento con el numero_orden (total_orders actualizado del cliente)
-                            const { error: updateMovimientoError } = await supabase
-                                .from('movimientos_almacen')
-                                .update({ numero_orden: numeroOrdenActualizado })
-                                .eq('id', movimiento.id);
+                            if (numeroOrdenNormalizado === null) {
+                                const { error: updateMovimientoError } = await supabase
+                                    .from('movimientos_almacen')
+                                    .update({ numero_orden: numeroOrdenActualizado })
+                                    .eq('id', movimiento.id);
 
-                            if (updateMovimientoError) {
-                                console.warn('Error actualizando numero_orden del movimiento:', updateMovimientoError);
+                                if (updateMovimientoError) {
+                                    console.warn('Error actualizando numero_orden del movimiento:', updateMovimientoError);
+                                } else {
+                                    numeroOrdenAsignado = numeroOrdenActualizado;
+                                }
+                            } else {
+                                numeroOrdenAsignado = numeroOrdenNormalizado;
                             }
                         }
                     }
@@ -407,12 +426,15 @@ class movimientosAlmacen {
                 }
             }
 
+            movimientoBasico.numero_orden = numeroOrdenAsignado;
+
 
             return { 
                 success: true, 
                 data: {
                     ...movimientoBasico,
-                    productos: productosConStock
+                    productos: productosConStock,
+                    numero_orden: numeroOrdenAsignado
                 }
             };
 
