@@ -245,6 +245,8 @@ class registrosProduccionDamabravaController {
             const search = req.query.search || '';
             const responsable_id = req.query.responsable_id || null;
             const responsable_tipo = req.query.responsable_tipo || null;
+            const fecha_inicio = req.query.fecha_inicio || null;
+            const fecha_fin = req.query.fecha_fin || null;
 
             const result = await registrosProduccionDamabrava.getAll(
                 page, 
@@ -253,7 +255,9 @@ class registrosProduccionDamabravaController {
                 ordenamiento, 
                 search, 
                 responsable_id, 
-                responsable_tipo
+                responsable_tipo,
+                fecha_inicio,
+                fecha_fin
             );
 
             if (!result.success) {

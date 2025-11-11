@@ -119,6 +119,84 @@ class reglasProduccionDamabrava {
             };
         }
     }
+
+    static async existeReglaGeneral(empresaId) {
+        try {
+            const { data, error } = await supabase
+                .from('reglas_produccion')
+                .select('id')
+                .eq('empresa_id', empresaId)
+                .eq('general', true)
+                .limit(1);
+
+            if (error) {
+                return {
+                    success: false,
+                    message: error.message || 'Error al verificar reglas generales',
+                    error
+                };
+            }
+
+            return {
+                success: true,
+                existe: Array.isArray(data) && data.length > 0
+            };
+        } catch (error) {
+            return {
+                success: false,
+                message: 'Error interno del servidor',
+                error
+            };
+        }
+    }
+
+    static async delete(reglaId, empresaId) {
+        try {
+            const { data: regla, error: fetchError } = await supabase
+                .from('reglas_produccion')
+                .select('id, empresa_id')
+                .eq('id', reglaId)
+                .single();
+
+            if (fetchError || !regla) {
+                return {
+                    success: false,
+                    message: 'Regla no encontrada'
+                };
+            }
+
+            if (empresaId && regla.empresa_id && regla.empresa_id !== empresaId) {
+                return {
+                    success: false,
+                    message: 'No tienes permisos para eliminar esta regla'
+                };
+            }
+
+            const { error: deleteError } = await supabase
+                .from('reglas_produccion')
+                .delete()
+                .eq('id', reglaId);
+
+            if (deleteError) {
+                return {
+                    success: false,
+                    message: deleteError.message || 'Error al eliminar la regla',
+                    error: deleteError
+                };
+            }
+
+            return {
+                success: true,
+                message: 'Regla eliminada correctamente'
+            };
+        } catch (error) {
+            return {
+                success: false,
+                message: 'Error interno del servidor',
+                error
+            };
+        }
+    }
 }
 
 module.exports = reglasProduccionDamabrava;

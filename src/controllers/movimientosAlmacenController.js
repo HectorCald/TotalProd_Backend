@@ -196,7 +196,7 @@ class movimientosAlmacenController {
         try {
             const sucu_id = req.query.sucu_id;
             const page = parseInt(req.query.page) || 1;
-            const limit = parseInt(req.query.limit) || 10;
+            const limit = parseInt(req.query.limit) || 30;
             const tipo = req.query.tipo || null;
             const estado = req.query.estado || null;
             const ordenamiento = req.query.ordenamiento || 'fecha_desc';
@@ -239,7 +239,7 @@ class movimientosAlmacenController {
             const sucu_id = req.query.sucu_id;
             const { tipo } = req.params;
             const page = parseInt(req.query.page) || 1;
-            const limit = parseInt(req.query.limit) || 10;
+            const limit = parseInt(req.query.limit) || 30;
 
             if (!sucu_id) {
                 return res.status(400).json({

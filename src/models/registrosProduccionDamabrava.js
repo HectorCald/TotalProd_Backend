@@ -2,6 +2,44 @@ const { supabase } = require('../config/supabase');
 const productsAlmacen = require('./productsAlmacen');
 const movimientosAlmacen = require('./movimientosAlmacen');
 
+const enrichRegistroConProducto = async (registro) => {
+    if (!registro || !registro.producto_almacen || !registro.producto_almacen.id) {
+        return registro;
+    }
+
+    const yaTieneRecetas = Array.isArray(registro.producto_almacen.recetas)
+        && registro.producto_almacen.recetas.length > 0;
+    const yaTieneGramaje = registro.producto_almacen.gramaje !== undefined
+        && registro.producto_almacen.gramaje !== null;
+
+    if (yaTieneRecetas && yaTieneGramaje) {
+        return registro;
+    }
+
+    try {
+        const productoDetalle = await productsAlmacen.getById(registro.producto_almacen.id);
+        if (productoDetalle) {
+            registro.producto_almacen = {
+                ...registro.producto_almacen,
+                gramaje: productoDetalle.gramaje ?? registro.producto_almacen.gramaje ?? null,
+                recetas: productoDetalle.recetas || [],
+            };
+        }
+    } catch (error) {
+        console.error('Error enriqueciendo registro con detalle de producto:', error);
+    }
+
+    return registro;
+};
+
+const enrichRegistrosConProducto = async (registros = []) => {
+    if (!Array.isArray(registros) || registros.length === 0) {
+        return registros;
+    }
+
+    return Promise.all(registros.map((registro) => enrichRegistroConProducto(registro)));
+};
+
 // Función helper para normalizar texto (quitar acentos)
 const normalizeText = (text) => {
     if (!text) return '';
@@ -13,6 +51,10 @@ const normalizeText = (text) => {
 };
 
 class registrosProduccionDamabrava {
+    static async enrichRegistrosConProducto(registros = []) {
+        return enrichRegistrosConProducto(registros);
+    }
+
     // Crear un nuevo registro de producción
     static async create(registroData) {
         try {
@@ -125,6 +167,8 @@ class registrosProduccionDamabrava {
                 };
             }
 
+            await enrichRegistroConProducto(registro);
+
             // Obtener información del usuario o personal que registró
             let user = null;
             let personal = null;
@@ -181,7 +225,17 @@ class registrosProduccionDamabrava {
     }
 
     // Obtener todos los registros de producción (sin filtrar por sucursal)
-    static async getAll(page = 1, limit = 10, estado = null, ordenamiento = 'fecha_desc', search = '', responsableId = null, responsableTipo = null) {
+    static async getAll(
+        page = 1,
+        limit = 10,
+        estado = null,
+        ordenamiento = 'fecha_desc',
+        search = '',
+        responsableId = null,
+        responsableTipo = null,
+        fechaInicio = null,
+        fechaFin = null
+    ) {
         try {
             const offset = (page - 1) * limit;
 
@@ -223,6 +277,14 @@ class registrosProduccionDamabrava {
                 } else if (responsableTipo === 'usuario') {
                     query = query.eq('user_id', responsableId);
                 }
+            }
+
+            if (fechaInicio) {
+                query = query.gte('fecha', fechaInicio);
+            }
+
+            if (fechaFin) {
+                query = query.lte('fecha', fechaFin);
             }
 
             // Aplicar ordenamiento
@@ -294,8 +356,10 @@ class registrosProduccionDamabrava {
                 };
             });
 
+            const registrosConProducto = await enrichRegistrosConProducto(registrosConUsuarios);
+
             // Aplicar búsqueda por texto si se proporciona
-            let registrosFiltrados = registrosConUsuarios;
+            let registrosFiltrados = registrosConProducto;
             let totalFiltrados = totalCount;
             let hasNextPage = page < Math.ceil(totalCount / limit);
 
@@ -303,7 +367,7 @@ class registrosProduccionDamabrava {
                 const normalizedSearchTerm = normalizeText(search);
                 
                 // Filtrar todos los registros
-                registrosFiltrados = registrosConUsuarios.filter(registro => {
+                registrosFiltrados = registrosConProducto.filter(registro => {
                     // Buscar en nombre del producto
                     const nombreProducto = normalizeText(registro.producto_almacen?.name || '');
                     
@@ -610,6 +674,8 @@ class registrosProduccionDamabrava {
                 return { success: false, message: 'Error al verificar el registro' };
             }
 
+            await enrichRegistroConProducto(registroActualizado);
+
             // Obtener información del usuario o personal
             let user = null;
             let personal = null;
@@ -828,6 +894,8 @@ class registrosProduccionDamabrava {
                 return { success: false, message: 'Error al anular la verificación' };
             }
 
+            await enrichRegistroConProducto(registroActualizado);
+
             // Obtener información del usuario o personal
             let user = null;
             let personal = null;
@@ -940,6 +1008,8 @@ class registrosProduccionDamabrava {
                 console.error('Error actualizando registro:', updateError);
                 return { success: false, message: 'Error al actualizar la cantidad ingresada' };
             }
+
+            await enrichRegistroConProducto(registroActualizado);
 
             // Obtener información del usuario o personal
             let user = null;
@@ -1087,11 +1157,13 @@ class registrosProduccionDamabrava {
                 };
             });
 
+            const registrosConProducto = await enrichRegistrosConProducto(registrosConUsuarios);
+
             // Aplicar búsqueda por texto si se proporciona
-            let registrosFiltrados = registrosConUsuarios;
+            let registrosFiltrados = registrosConProducto;
             if (search && search.trim()) {
                 const searchTerm = search.toLowerCase().trim();
-                registrosFiltrados = registrosConUsuarios.filter(registro => {
+                registrosFiltrados = registrosConProducto.filter(registro => {
                     // Buscar en nombre del producto
                     const nombreProducto = (registro.producto_almacen?.name || '').toLowerCase();
                     
@@ -1183,6 +1255,8 @@ class registrosProduccionDamabrava {
                 return { success: false, message: 'Error al actualizar la cantidad ingresada' };
             }
 
+            await enrichRegistroConProducto(registroActualizado);
+
             // Obtener información del usuario o personal
             let user = null;
             let personal = null;
@@ -1234,8 +1308,6 @@ class registrosProduccionDamabrava {
             return { success: false, message: 'Error interno del servidor' };
         }
     }
-
-
 }
 
 module.exports = registrosProduccionDamabrava;

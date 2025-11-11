@@ -24,6 +24,8 @@ const gastosRoutes = require('./gastosRoutes');
 const deudasRoutes = require('./deudasRoutes');
 const registrosProduccionDamabravaRoutes = require('./registrosProduccionDamabravaRoutes');
 const reglasProduccionDamabravaRoutes = require('./reglasProduccionDamabravaRoutes');
+const pagosDamabravaRoutes = require('./pagosDamabravaRoutes');
+const permissionsRoutes = require('./permissionsRoutes');
 const conteosRoutes = require('./conteosRoutes');
 const cotizacionesRoutes = require('./cotizacionesRoutes');
 const empresaImagenRoutes = require('./empresaImagenRoutes');
@@ -120,6 +122,9 @@ router.use('/registros-produccion-damabrava', registrosProduccionDamabravaRoutes
 
 // Rutas de reglas de producción Damabrava
 router.use('/reglas-produccion-damabrava', reglasProduccionDamabravaRoutes);
+// Rutas de pagos Damabrava
+router.use('/pagos-damabrava', pagosDamabravaRoutes);
+router.use('/permissions', permissionsRoutes);
 
 // Rutas de conteos
 router.use('/conteos', conteosRoutes);

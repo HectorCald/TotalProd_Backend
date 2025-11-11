@@ -7,6 +7,7 @@ router.use(requireAuth);
 
 router.post('/', reglasProduccionDamabravaController.create);
 router.get('/', reglasProduccionDamabravaController.getAll);
+router.delete('/:id', reglasProduccionDamabravaController.delete);
 
 module.exports = router;
 

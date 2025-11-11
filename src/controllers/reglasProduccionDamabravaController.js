@@ -57,6 +57,19 @@ class reglasProduccionDamabravaController {
                 finalGeneral = false;
             }
 
+            if (finalGeneral === true) {
+                const existeGeneral = await reglasProduccionDamabrava.existeReglaGeneral(empresaId);
+                if (!existeGeneral.success) {
+                    return res.status(400).json(existeGeneral);
+                }
+                if (existeGeneral.existe) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Ya existe una regla general. Solo se permite una regla general sin contenido.'
+                    });
+                }
+            }
+
             let finalContiene = null;
             if (reglaTipo === 'general' && finalGeneral === false) {
                 if (!contiene || !contiene.trim()) {
@@ -163,6 +176,38 @@ class reglasProduccionDamabravaController {
             });
         } catch (error) {
             console.error('Error en reglasProduccionDamabravaController.getAll:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
+    static async delete(req, res) {
+        try {
+            const { id } = req.params;
+            const empresaId = req.user?.empresa_id;
+
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El identificador de la regla es obligatorio'
+                });
+            }
+
+            const result = await reglasProduccionDamabrava.delete(id, empresaId);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json({
+                success: true,
+                message: result.message || 'Regla eliminada correctamente'
+            });
+        } catch (error) {
+            console.error('Error en reglasProduccionDamabravaController.delete:', error);
             res.status(500).json({
                 success: false,
                 message: 'Error interno del servidor',

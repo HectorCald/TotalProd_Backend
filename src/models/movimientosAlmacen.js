@@ -564,7 +564,7 @@ class movimientosAlmacen {
     }
 
     // Obtener todos los movimientos de una sucursal
-    static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc', search = null, clienteId = null) {
+    static async getAll(sucuId, page = 1, limit = 30, tipo = null, estado = null, ordenamiento = 'fecha_desc', search = null, clienteId = null) {
         try {
             const tStart = Date.now();
             const offset = (page - 1) * limit;
@@ -747,7 +747,7 @@ class movimientosAlmacen {
     }
 
     // Obtener movimientos por tipo (entrada/salida)
-    static async getByType(sucuId, type, page = 1, limit = 10) {
+    static async getByType(sucuId, type, page = 1, limit = 30) {
         try {
             const offset = (page - 1) * limit;
 
