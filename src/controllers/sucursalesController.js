@@ -63,7 +63,7 @@ const sucursalesController = {
     async create(req, res) {
         try {
             const { name, almacen_sucursal_id, precios } = req.body;
-            const userId = req.user.id;
+            const authUser = req.user || {};
             
             if (!name || !name.trim()) {
                 return res.status(400).json({
@@ -72,11 +72,22 @@ const sucursalesController = {
                 });
             }
 
-            // Obtener empresa_id del usuario desde la base de datos
-            const User = require('../models/User');
-            const user = await User.getById(userId);
-            
-            if (!user || !user.empresa_id) {
+            let empresaId = null;
+
+            if (authUser?.type === 'employee') {
+                // Para empleados, tomar la empresa directamente del token
+                empresaId = authUser.empresa_id || null;
+            } else {
+                // Para usuarios propietarios (o tokens antiguos), obtener desde el modelo User
+                const User = require('../models/User');
+                const user = await User.getById(authUser.id);
+                
+                if (user && user.empresa_id) {
+                    empresaId = user.empresa_id;
+                }
+            }
+
+            if (!empresaId) {
                 return res.status(400).json({
                     success: false,
                     message: 'El usuario no tiene una empresa asociada'
@@ -85,7 +96,7 @@ const sucursalesController = {
 
             const sucursalData = {
                 name: name.trim(),
-                empresa_id: user.empresa_id,
+                empresa_id: empresaId,
                 // Si viene almacen_sucursal_id (switch inactivo), persistirlo
                 ...(almacen_sucursal_id ? { almacen_sucursal_id } : {})
             };
