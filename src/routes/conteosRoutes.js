@@ -3,6 +3,8 @@ const router = express.Router();
 const ConteosController = require('../controllers/conteosController');
 const { requireAuth } = require('../middleware/auth');
 const { requireModuleAccess } = require('../middleware/moduleAuth');
+// Obtener detalles de un conteo específico
+router.get('/:id/detalles', ConteosController.getDetalles);
 
 router.use(requireAuth);
 
@@ -14,6 +16,8 @@ router.post('/', ConteosController.create);
 
 // Obtener todos los conteos (sin paginación)
 router.get('/', ConteosController.getAll);
+
+
 
 // Reemplazar stock según conteo (almacén)
 router.post('/:id/replace', ConteosController.replaceStock);

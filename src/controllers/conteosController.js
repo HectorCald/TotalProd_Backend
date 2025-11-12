@@ -23,13 +23,14 @@ class ConteosController {
 			};
 
 			const result = await ConteosModel.create(payload);
+			
 			if (!result.success) {
 				return res.status(400).json(result);
 			}
 
 			return res.status(201).json({ success: true, id: result.data.id });
 		} catch (error) {
-			console.error('Error en ConteosController.create:', error);
+			console.error('[CONTEO CONTROLLER] Error en ConteosController.create:', error);
 			return res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
 		}
 	}
@@ -47,13 +48,35 @@ class ConteosController {
 			const sucursal_id = sucu_id;
 
 			const result = await ConteosModel.getAll({ sucursal_id, tipo });
+			
 			if (!result.success) {
 				return res.status(400).json(result);
 			}
 
 			return res.json({ success: true, data: result.data });
 		} catch (error) {
-			console.error('Error en ConteosController.getAll:', error);
+			console.error('[CONTEO CONTROLLER] Error en ConteosController.getAll:', error);
+			return res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
+		}
+	}
+
+	static async getDetalles(req, res) {
+		try {
+			const { id } = req.params;
+
+			if (!id) {
+				return res.status(400).json({ success: false, message: 'ID del conteo es requerido' });
+			}
+
+			const result = await ConteosModel.getDetalles(id);
+			
+			if (!result.success) {
+				return res.status(400).json(result);
+			}
+
+			return res.json({ success: true, data: result.data });
+		} catch (error) {
+			console.error('[CONTEO CONTROLLER] Error en ConteosController.getDetalles:', error);
 			return res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
 		}
 	}

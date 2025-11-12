@@ -57,9 +57,10 @@ class ConteosModel {
 				return row;
 			});
 
-			const { error: detalleError } = await supabase
+			const { error: detalleError, data: detallesInsertados } = await supabase
 				.from('conteo_detalle')
-				.insert(detallesRows);
+				.insert(detallesRows)
+				.select('id');
 
 			if (detalleError) {
 				// Limpieza si falla detalle
@@ -118,12 +119,80 @@ class ConteosModel {
 			}
 
 			const conteoIds = headers.map(h => h.id);
+
+			// Obtener conteo de detalles en PARALELO usando count (solo el número, sin traer datos)
+			const conteoCounts = {};
 			
-			// Si no hay conteos, retornar array vacío
-			if (conteoIds.length === 0) {
-				return { success: true, data: [] };
+			// Inicializar todos los conteos con 0
+			conteoIds.forEach(id => {
+				conteoCounts[id] = 0;
+			});
+
+			// Si hay conteos, hacer consultas en PARALELO para contar (sin traer los datos)
+			if (conteoIds.length > 0) {
+				const countPromises = conteoIds.map(conteoId =>
+					supabase
+						.from('conteo_detalle')
+						.select('id', { count: 'exact', head: true })
+						.eq('conteo_id', conteoId)
+				);
+
+				const countResults = await Promise.all(countPromises);
+
+				countResults.forEach((result, index) => {
+					const conteoId = conteoIds[index];
+					if (!result.error && result.count !== null) {
+						conteoCounts[conteoId] = result.count || 0;
+					}
+				});
 			}
 
+			const resultado = headers.map(h => {
+				// Construir el campo name para user y personal
+				const user = h.user ? {
+					id: h.user.id,
+					name: `${h.user.first_name || ''} ${h.user.last_name || ''}`.trim()
+				} : null;
+				
+				const personal = h.personal ? {
+					id: h.personal.id,
+					name: `${h.personal.first_name || ''} ${h.personal.last_name || ''}`.trim()
+				} : null;
+
+				return {
+					...h,
+					user,
+					personal,
+					detalles: [], // No traer detalles aquí, se cargarán bajo demanda
+					detalles_count: conteoCounts[h.id] || 0 // Agregar conteo de detalles
+				};
+			});
+
+			return { success: true, data: resultado };
+		} catch (error) {
+			console.error('[CONTEO MODEL] Error en ConteosModel.getAll:', error);
+			return { success: false, message: 'Error interno del servidor', error };
+		}
+	}
+
+	static async getDetalles(conteoId) {
+		try {
+			if (!conteoId) {
+				return { success: false, message: 'ID del conteo es requerido' };
+			}
+
+			// Primero obtener el conteo para validar que existe
+			const { data: conteo, error: conteoError } = await supabase
+				.from('conteos')
+				.select('id, sucursal_id')
+				.eq('id', conteoId)
+				.single();
+
+			if (conteoError || !conteo) {
+				return { success: false, message: 'Conteo no encontrado', error: conteoError };
+			}
+
+			// Obtener detalles con joins para un conteo específico
 			const { data: detalles, error: detalleError } = await supabase
 				.from('conteo_detalle')
 				.select(`
@@ -147,44 +216,16 @@ class ConteosModel {
 						)
 					)
 				`)
-				.in('conteo_id', conteoIds);
+				.eq('conteo_id', conteoId)
+				.order('id', { ascending: true });
 
 			if (detalleError) {
-				return { success: false, message: 'Error al obtener detalles de conteos', error: detalleError };
+				return { success: false, message: 'Error al obtener detalles del conteo', error: detalleError };
 			}
 
-			// Agrupar detalles por conteo_id
-			const detallesPorConteo = new Map();
-			conteoIds.forEach(id => detallesPorConteo.set(id, []));
-			(detalles || []).forEach(d => {
-				const arr = detallesPorConteo.get(d.conteo_id) || [];
-				arr.push(d);
-				detallesPorConteo.set(d.conteo_id, arr);
-			});
-
-			const resultado = headers.map(h => {
-				// Construir el campo name para user y personal
-				const user = h.user ? {
-					id: h.user.id,
-					name: `${h.user.first_name || ''} ${h.user.last_name || ''}`.trim()
-				} : null;
-				
-				const personal = h.personal ? {
-					id: h.personal.id,
-					name: `${h.personal.first_name || ''} ${h.personal.last_name || ''}`.trim()
-				} : null;
-
-				return {
-					...h,
-					user,
-					personal,
-					detalles: detallesPorConteo.get(h.id) || []
-				};
-			});
-
-			return { success: true, data: resultado };
+			return { success: true, data: detalles || [] };
 		} catch (error) {
-			console.error('Error en ConteosModel.getAll:', error);
+			console.error('[CONTEO MODEL] Error en ConteosModel.getDetalles:', error);
 			return { success: false, message: 'Error interno del servidor', error };
 		}
 	}
