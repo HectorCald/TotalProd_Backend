@@ -357,11 +357,11 @@ class movimientosAlmacenController {
         
         try {
             const { id } = req.params;
-            const { desdePedido } = req.body; // Nuevo parámetro para indicar si se anula desde pedido
+            const { desdePedido, esEdicion } = req.body; // esEdicion indica si es una edición (omitir validación de permisos)
             const userType = req.user?.type;
 
-            // Verificar permisos de anulación solo si es empleado
-            if (userType === 'employee') {
+            // Verificar permisos de anulación solo si es empleado Y NO es edición
+            if (userType === 'employee' && !esEdicion) {
                 const personal_id = req.user.id; // El personal_id viene del token
 
                 const hasPermission = await checkAnularPermission(personal_id);
@@ -404,10 +404,11 @@ class movimientosAlmacenController {
     static async eliminar(req, res) {
         try {
             const { id } = req.params;
+            const { esEdicion } = req.body || {}; // esEdicion indica si es una edición (omitir validación de permisos)
             const userType = req.user?.type;
 
-            // Verificar permisos de eliminación solo si es empleado
-            if (userType === 'employee') {
+            // Verificar permisos de eliminación solo si es empleado Y NO es edición
+            if (userType === 'employee' && !esEdicion) {
                 const personal_id = req.user.id; // El personal_id viene del token
 
                 const hasPermission = await checkDeletePermission(personal_id);

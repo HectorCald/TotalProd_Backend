@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 router.use(requireAuth);
 
 router.get('/info', permissionsController.getInfoPermission);
+router.get('/update', permissionsController.getUpdatePermission);
 
 module.exports = router;
 
