@@ -233,6 +233,39 @@ class movimientosAlmacenController {
         }
     }
 
+    // Obtener estadísticas optimizadas para gráficos
+    static async getStatsForCharts(req, res) {
+        try {
+            const sucu_id = req.query.sucu_id;
+
+            if (!sucu_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de la sucursal es requerido'
+                });
+            }
+
+            const result = await movimientosAlmacen.getStatsForCharts(sucu_id);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json({
+                success: true,
+                data: result.data
+            });
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacenController.getStatsForCharts:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
     // Obtener movimientos por tipo
     static async getByType(req, res) {
         try {

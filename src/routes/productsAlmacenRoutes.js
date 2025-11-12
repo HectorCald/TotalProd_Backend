@@ -9,6 +9,9 @@ router.use(requireAuth);
 // GET /api/products-almacen - Obtener todos los productos
 router.get('/', productsAlmacenController.getAll);
 
+// GET /api/products-almacen/for-production - Obtener productos ligeros (solo id y name) para formularios de producción
+router.get('/for-production', productsAlmacenController.getAllForProduction);
+
 // GET /api/products-almacen/by-ids - Obtener múltiples productos por IDs con recetas
 router.get('/by-ids', productsAlmacenController.getByIds);
 

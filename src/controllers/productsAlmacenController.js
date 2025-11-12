@@ -40,6 +40,34 @@ class productsAlmacenController {
     }
   }
 
+  // Obtener productos ligeros (solo id y name) para formularios de producción
+  static async getAllForProduction(req, res) {
+    try {
+      const empresaId = req.query.empresa_id;
+      
+      if (!empresaId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la empresa es requerido'
+        });
+      }
+
+      const products = await productsAlmacen.getAllForProduction(empresaId);
+      
+      res.status(200).json({
+        success: true,
+        message: 'Productos obtenidos exitosamente',
+        data: products
+      });
+    } catch (error) {
+      console.error('Error en productsAlmacenController.getAllForProduction:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
   // Obtener un producto por ID
   static async getById(req, res) {
     try {

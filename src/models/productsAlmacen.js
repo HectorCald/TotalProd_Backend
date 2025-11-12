@@ -244,6 +244,31 @@ class productsAlmacen {
     }
   }
 
+  // Método ligero para obtener solo id y name de productos (para formularios de producción)
+  static async getAllForProduction(empresaId) {
+    try {
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('products_almacen')
+        .select('id, name')
+        .eq('empresa_id', empresaId)
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Error de Supabase:', error);
+        throw new Error('No se pudo obtener los productos');
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error al obtener los productos para producción:', error);
+      throw new Error('No se pudo obtener los productos');
+    }
+  }
+
   // Crear un producto con precios, receta y stock en sucursal
   static async create(productData, empresaId, sucuId = null) {
     const tCreateStart = Date.now();

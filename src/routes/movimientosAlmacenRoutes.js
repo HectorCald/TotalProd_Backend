@@ -12,6 +12,9 @@ router.post('/', movimientosAlmacenController.create);
 // Obtener todos los movimientos del usuario
 router.get('/', movimientosAlmacenController.getAll);
 
+// Obtener estadísticas optimizadas para gráficos
+router.get('/stats/charts', movimientosAlmacenController.getStatsForCharts);
+
 // Obtener movimientos por tipo (entrada/salida)
 router.get('/tipo/:tipo', movimientosAlmacenController.getByType);
 

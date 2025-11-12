@@ -746,6 +746,96 @@ class movimientosAlmacen {
         }
     }
 
+    // Obtener estadísticas optimizadas para gráficos (solo campos necesarios)
+    static async getStatsForCharts(sucuId) {
+        try {
+            const ahora = new Date();
+            const añoActual = ahora.getFullYear();
+            const inicioAño = new Date(añoActual, 0, 1).toISOString();
+            const finAño = new Date(añoActual, 11, 31, 23, 59, 59).toISOString();
+
+            // Obtener solo los campos necesarios: fecha, type, estado
+            const { data: movimientos, error } = await supabase
+                .from('movimientos_almacen')
+                .select(`
+                    id,
+                    fecha,
+                    type,
+                    estado
+                `)
+                .eq('sucu_id', sucuId)
+                .gte('fecha', inicioAño)
+                .lte('fecha', finAño)
+                .order('fecha', { ascending: true });
+
+            if (error) {
+                console.error('Error obteniendo estadísticas de movimientos:', error);
+                return { success: false, message: 'Error al obtener estadísticas', error };
+            }
+
+            if (!movimientos || movimientos.length === 0) {
+                return {
+                    success: true,
+                    data: []
+                };
+            }
+
+            // Obtener productos solo para salidas no anuladas (para calcular ventas)
+            const movimientosSalidas = movimientos.filter(m => m.type === 'salida' && m.estado !== 'anulado');
+            const movimientoIdsSalidas = movimientosSalidas.map(m => m.id);
+
+            let productosData = [];
+            if (movimientoIdsSalidas.length > 0) {
+                const { data: productos, error: productosError } = await supabase
+                    .from('movimiento_almacen_producto')
+                    .select(`
+                        movimiento_almacen_id,
+                        cantidad,
+                        precio_unitario
+                    `)
+                    .in('movimiento_almacen_id', movimientoIdsSalidas);
+
+                if (productosError) {
+                    console.error('Error obteniendo productos para estadísticas:', productosError);
+                    // Continuar sin productos, solo con fechas
+                } else {
+                    productosData = productos || [];
+                }
+            }
+
+            // Agrupar productos por movimiento
+            const productosByMovimiento = new Map();
+            productosData.forEach(p => {
+                const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
+                arr.push({
+                    cantidad: p.cantidad,
+                    precio_unitario: p.precio_unitario
+                });
+                productosByMovimiento.set(p.movimiento_almacen_id, arr);
+            });
+
+            // Combinar movimientos con sus productos
+            const movimientosConProductos = movimientos.map(mov => {
+                const productos = productosByMovimiento.get(mov.id) || [];
+                return {
+                    fecha: mov.fecha,
+                    type: mov.type,
+                    estado: mov.estado,
+                    productos: productos
+                };
+            });
+
+            return {
+                success: true,
+                data: movimientosConProductos
+            };
+
+        } catch (error) {
+            console.error('Error en movimientosAlmacen.getStatsForCharts:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
     // Obtener movimientos por tipo (entrada/salida)
     static async getByType(sucuId, type, page = 1, limit = 30) {
         try {
