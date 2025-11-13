@@ -385,7 +385,7 @@ class movimientosAcopio {
   }
 
   // Obtener todos los movimientos
-  static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc', search = null, clienteId = null) {
+  static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc', search = null, clienteId = null, filtroFecha = null) {
     try {
       const tStart = Date.now();
       if (!sucuId) {
@@ -437,6 +437,16 @@ class movimientosAcopio {
       if (clienteId) {
         const clienteFilter = String(clienteId).toLowerCase();
         query = query.eq('cliente_id', clienteFilter);
+      }
+
+      // Aplicar filtro de fecha si se proporciona
+      if (filtroFecha) {
+        if (filtroFecha.inicio) {
+          query = query.gte('date', filtroFecha.inicio);
+        }
+        if (filtroFecha.fin) {
+          query = query.lte('date', filtroFecha.fin);
+        }
       }
 
       // Aplicar ordenamiento

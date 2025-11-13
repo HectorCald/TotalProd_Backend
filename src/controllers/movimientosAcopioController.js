@@ -238,7 +238,17 @@ class movimientosAcopioController {
   static async getAll(req, res) {
     try {
       const { page = 1, limit = 10, tipo, estado, ordenamiento = 'fecha_desc', sucu_id, search = null, cliente = null } = req.query;
-      console.log('[MovAcopioCtrl.getAll] params =>', { sucu_id, page, limit, tipo, estado, ordenamiento, search, cliente });
+      
+      // Extraer filtro de fecha
+      let filtroFecha = null;
+      if (req.query.fecha_inicio || req.query.fecha_fin) {
+        filtroFecha = {
+          inicio: req.query.fecha_inicio || null,
+          fin: req.query.fecha_fin || null
+        };
+      }
+      
+      console.log('[MovAcopioCtrl.getAll] params =>', { sucu_id, page, limit, tipo, estado, ordenamiento, search, cliente, filtroFecha });
 
       if (!sucu_id) {
         return res.status(400).json({
@@ -247,7 +257,7 @@ class movimientosAcopioController {
         });
       }
 
-      const result = await movimientosAcopio.getAll(sucu_id, parseInt(page), parseInt(limit), tipo, estado, ordenamiento, search, cliente);
+      const result = await movimientosAcopio.getAll(sucu_id, parseInt(page), parseInt(limit), tipo, estado, ordenamiento, search, cliente, filtroFecha);
       console.log('[MovAcopioCtrl.getAll] result =>', { success: result?.success, dataLen: result?.data?.length, pagination: result?.pagination });
 
       if (!result.success) {

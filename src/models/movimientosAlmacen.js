@@ -566,7 +566,7 @@ class movimientosAlmacen {
     }
 
     // Obtener todos los movimientos de una sucursal
-    static async getAll(sucuId, page = 1, limit = 30, tipo = null, estado = null, ordenamiento = 'fecha_desc', search = null, clienteId = null) {
+    static async getAll(sucuId, page = 1, limit = 30, tipo = null, estado = null, ordenamiento = 'fecha_desc', search = null, clienteId = null, filtroFecha = null) {
         try {
             const tStart = Date.now();
             const offset = (page - 1) * limit;
@@ -641,6 +641,16 @@ class movimientosAlmacen {
             // Aplicar filtro de cliente si se proporciona
             if (clienteId) {
                 query = query.eq('cliente_id', clienteId);
+            }
+
+            // Aplicar filtro de fecha si se proporciona
+            if (filtroFecha) {
+                if (filtroFecha.inicio) {
+                    query = query.gte('fecha', filtroFecha.inicio);
+                }
+                if (filtroFecha.fin) {
+                    query = query.lte('fecha', filtroFecha.fin);
+                }
             }
 
             // Aplicar ordenamiento

@@ -8,6 +8,15 @@ class gastosController {
     try {
       const { page = 1, limit = 30, search = '', metodo_pago = null, proveedor_id = null, ordenamiento = 'fecha_desc', sucu_id } = req.query;
       
+      // Extraer filtro de fecha
+      let filtroFecha = null;
+      if (req.query.fecha_inicio || req.query.fecha_fin) {
+        filtroFecha = {
+          inicio: req.query.fecha_inicio || null,
+          fin: req.query.fecha_fin || null
+        };
+      }
+      
       if (!sucu_id) {
         return res.status(400).json({
           success: false,
@@ -22,7 +31,8 @@ class gastosController {
         metodo_pago,
         proveedor_id,
         ordenamiento, 
-        sucu_id
+        sucu_id,
+        filtroFecha
       );
       
       if (!result.success) {

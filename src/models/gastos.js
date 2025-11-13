@@ -95,7 +95,7 @@ class gastos {
         return Array.from(tokens);
     }
 
-    static async getAll(page = 1, limit = 30, search = '', metodoPago = null, proveedorId = null, ordenamiento = 'fecha_desc', sucuIdParam = null) {
+    static async getAll(page = 1, limit = 30, search = '', metodoPago = null, proveedorId = null, ordenamiento = 'fecha_desc', sucuIdParam = null, filtroFecha = null) {
         try {
             const sucuId = sucuIdParam;
             if (!sucuId) {
@@ -152,6 +152,16 @@ class gastos {
             // Aplicar filtro de proveedor
             if (proveedorId) {
                 query = query.eq('proveedor_id', proveedorId);
+            }
+
+            // Aplicar filtro de fecha si se proporciona
+            if (filtroFecha) {
+                if (filtroFecha.inicio) {
+                    query = query.gte('fecha_gasto', filtroFecha.inicio);
+                }
+                if (filtroFecha.fin) {
+                    query = query.lte('fecha_gasto', filtroFecha.fin);
+                }
             }
 
             // Aplicar ordenamiento

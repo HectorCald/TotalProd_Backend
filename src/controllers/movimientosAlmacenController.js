@@ -203,6 +203,15 @@ class movimientosAlmacenController {
             const ordenamiento = req.query.ordenamiento || 'fecha_desc';
             const search = req.query.search || null;
             const cliente = req.query.cliente || null;
+            
+            // Extraer filtro de fecha
+            let filtroFecha = null;
+            if (req.query.fecha_inicio || req.query.fecha_fin) {
+                filtroFecha = {
+                    inicio: req.query.fecha_inicio || null,
+                    fin: req.query.fecha_fin || null
+                };
+            }
 
             if (!sucu_id) {
                 return res.status(400).json({
@@ -211,7 +220,7 @@ class movimientosAlmacenController {
                 });
             }
 
-            const result = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, estado, ordenamiento, search, cliente);
+            const result = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, estado, ordenamiento, search, cliente, filtroFecha);
 
             if (!result.success) {
                 return res.status(400).json(result);

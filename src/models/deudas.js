@@ -129,7 +129,7 @@ class deudas {
     }
 
     // Obtener todas las deudas con paginación y filtros
-    static async getAll(page = 1, limit = 10, search = '', estado = null, clienteId = null, ordenamiento = 'fecha_desc', sucuIdParam = null) {
+    static async getAll(page = 1, limit = 10, search = '', estado = null, clienteId = null, ordenamiento = 'fecha_desc', sucuIdParam = null, filtroFecha = null) {
         try {
             const sucuId = sucuIdParam;
             if (!sucuId) {
@@ -183,6 +183,16 @@ class deudas {
             // Aplicar filtro de cliente
             if (clienteId) {
                 query = query.eq('cliente_id', clienteId);
+            }
+
+            // Aplicar filtro de fecha si se proporciona
+            if (filtroFecha) {
+                if (filtroFecha.inicio) {
+                    query = query.gte('fecha_deuda', filtroFecha.inicio);
+                }
+                if (filtroFecha.fin) {
+                    query = query.lte('fecha_deuda', filtroFecha.fin);
+                }
             }
 
             // Aplicar ordenamiento
