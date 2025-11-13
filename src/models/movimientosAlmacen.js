@@ -16,7 +16,7 @@ class movimientosAlmacen {
     static async create(movimientoData) {
         
         try {
-            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden } = movimientoData;
+            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden, concepto } = movimientoData;
 
             // Determinar timestamp para el movimiento
             const fechaActual = new Date();
@@ -50,6 +50,7 @@ class movimientosAlmacen {
                 agrupado: !!agrupado,
                 descuento: parseFloat(descuento) || 0,
                 aumento: parseFloat(aumento) || 0,
+                concepto: concepto && concepto.trim() !== '' ? concepto.trim() : null,
                 fecha: fechaMovimientoISO,
                 estado: 'finalizado' // Estado por defecto
             };
@@ -77,7 +78,7 @@ class movimientosAlmacen {
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
                 .insert(insertData)
-                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento, numero_orden')
+                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento, numero_orden, concepto')
                 .single();
                 
 
@@ -360,6 +361,7 @@ class movimientosAlmacen {
                 agrupado: movimiento.agrupado,
                 descuento: movimiento.descuento,
                 aumento: movimiento.aumento,
+                concepto: movimiento.concepto,
                 numero_orden: movimiento.numero_orden ?? numeroOrdenAsignado
             };
 

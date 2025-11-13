@@ -144,9 +144,19 @@ const sucursales = {
                 await this.syncPreciosSucursal(data.id, precios);
             }
 
+            // Obtener los precios actualizados para devolverlos en la respuesta (siempre, incluso si no hay precios)
+            let preciosActualizados = [];
+            if (data.id) {
+                const preciosResult = await this.getPreciosBySucursalId(data.id);
+                preciosActualizados = preciosResult.success ? preciosResult.data : [];
+            }
+
             return {
                 success: true,
-                data: data
+                data: {
+                    ...data,
+                    precios: preciosActualizados
+                }
             };
         } catch (error) {
             console.error('Error en sucursales.create:', error);
