@@ -341,6 +341,64 @@ class cotizaciones {
         }
     }
 
+    // Volver a poner una cotización en pendiente
+    static async marcarPendiente(cotizacionId) {
+        try {
+            const { data: cotizacion, error } = await supabase
+                .from('cotizaciones')
+                .update({ estado: 'pendiente' })
+                .eq('id', cotizacionId)
+                .select(`
+                    id,
+                    numero_cotizacion,
+                    fecha,
+                    observaciones,
+                    metodo_pago,
+                    estado,
+                    total,
+                    fecha_vencimiento,
+                    agrupado,
+                    precio_id,
+                    user_id,
+                    personal_id,
+                    sucu_id,
+                    cliente_id,
+                    user:user_id(id, first_name, last_name),
+                    personal:personal_id(id, first_name, last_name),
+                    cliente:cliente_id(id, name),
+                    precio:precio_id(id, name),
+                    sucursales:sucu_id(id, name),
+                    productos:cotizacion_detalle(
+                        id,
+                        cantidad,
+                        precio_unitario,
+                        subtotal,
+                        producto:producto_almacen_id(
+                            id,
+                            name,
+                            description,
+                            grup
+                        )
+                    )
+                `)
+                .single();
+
+            if (error) {
+                console.error('Error marcando cotización como pendiente:', error);
+                return { success: false, message: 'Error al actualizar la cotización', error };
+            }
+
+            return {
+                success: true,
+                data: cotizacion
+            };
+
+        } catch (error) {
+            console.error('Error en Cotizaciones.marcarPendiente:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
     // Eliminar una cotización
     static async eliminar(cotizacionId) {
         try {

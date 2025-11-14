@@ -26,6 +26,9 @@ router.put('/:id/anular', cotizacionesController.anular);
 // Aprobar una cotización
 router.put('/:id/aprobar', cotizacionesController.aprobar);
 
+// Volver a poner en pendiente
+router.put('/:id/pendiente', cotizacionesController.marcarPendiente);
+
 // Eliminar una cotización
 router.delete('/:id', cotizacionesController.eliminar);
 
