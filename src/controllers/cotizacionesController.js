@@ -140,6 +140,7 @@ class cotizacionesController {
         try {
             // Obtener el sucu_id de la sucursal seleccionada
             const sucuId = req.query.sucu_id;
+            const { fecha_inicio = null, fecha_fin = null } = req.query;
             
             if (!sucuId) {
                 return res.status(400).json({
@@ -148,7 +149,15 @@ class cotizacionesController {
                 });
             }
 
-            const result = await cotizaciones.getAll(sucuId);
+            let filtroFecha = null;
+            if (fecha_inicio || fecha_fin) {
+                filtroFecha = {
+                    inicio: fecha_inicio || null,
+                    fin: fecha_fin || null
+                };
+            }
+
+            const result = await cotizaciones.getAll(sucuId, filtroFecha);
 
             if (!result.success) {
                 return res.status(400).json(result);
@@ -169,19 +178,20 @@ class cotizacionesController {
         }
     }
 
-    // Anular una cotización
-    static async anular(req, res) {
+    // Actualizar estado de una cotización
+    static async actualizarEstado(req, res) {
         try {
             const { id } = req.params;
+            const { estado } = req.body || {};
 
-            if (!id) {
+            if (!id || !estado) {
                 return res.status(400).json({
                     success: false,
-                    message: 'ID de cotización requerido'
+                    message: 'ID de cotización y estado son requeridos'
                 });
             }
 
-            const result = await cotizaciones.anular(id);
+            const result = await cotizaciones.actualizarEstado(id, estado);
 
             if (!result.success) {
                 return res.status(400).json(result);
@@ -193,73 +203,7 @@ class cotizacionesController {
             });
 
         } catch (error) {
-            console.error('Error en cotizacionesController.anular:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
-    }
-
-    // Aprobar una cotización
-    static async aprobar(req, res) {
-        try {
-            const { id } = req.params;
-
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de cotización requerido'
-                });
-            }
-
-            const result = await cotizaciones.aprobar(id);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.status(200).json({
-                success: true,
-                data: result.data
-            });
-
-        } catch (error) {
-            console.error('Error en cotizacionesController.aprobar:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
-    }
-
-    // Volver a poner una cotización en pendiente
-    static async marcarPendiente(req, res) {
-        try {
-            const { id } = req.params;
-
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de cotización requerido'
-                });
-            }
-
-            const result = await cotizaciones.marcarPendiente(id);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.status(200).json({
-                success: true,
-                data: result.data
-            });
-
-        } catch (error) {
-            console.error('Error en cotizacionesController.marcarPendiente:', error);
+            console.error('Error en cotizacionesController.actualizarEstado:', error);
             res.status(500).json({
                 success: false,
                 message: 'Error interno del servidor',

@@ -1,5 +1,39 @@
 const { supabase } = require('../config/supabase');
 
+const COTIZACION_SELECT = `
+    id,
+    numero_cotizacion,
+    fecha,
+    observaciones,
+    metodo_pago,
+    estado,
+    total,
+    fecha_vencimiento,
+    agrupado,
+    precio_id,
+    user_id,
+    personal_id,
+    sucu_id,
+    cliente_id,
+    user:user_id(id, first_name, last_name),
+    personal:personal_id(id, first_name, last_name),
+    cliente:cliente_id(id, name),
+    precio:precio_id(id, name),
+    sucursales:sucu_id(id, name),
+    productos:cotizacion_detalle(
+        id,
+        cantidad,
+        precio_unitario,
+        subtotal,
+        producto:producto_almacen_id(
+            id,
+            name,
+            description,
+            grup
+        )
+    )
+`;
+
 class cotizaciones {
     // Crear una nueva cotización
     static async create(cotizacionData) {
@@ -133,39 +167,7 @@ class cotizaciones {
         try {
             const { data: cotizacion, error } = await supabase
                 .from('cotizaciones')
-                .select(`
-                    id,
-                    numero_cotizacion,
-                    fecha,
-                    observaciones,
-                    metodo_pago,
-                    estado,
-                    total,
-                    fecha_vencimiento,
-                    agrupado,
-                    precio_id,
-                    user_id,
-                    personal_id,
-                    sucu_id,
-                    cliente_id,
-                    user:user_id(id, first_name, last_name),
-                    personal:personal_id(id, first_name, last_name),
-                    cliente:cliente_id(id, name),
-                    precio:precio_id(id, name),
-                    sucursales:sucu_id(id, name),
-                    productos:cotizacion_detalle(
-                        id,
-                        cantidad,
-                        precio_unitario,
-                        subtotal,
-                        producto:producto_almacen_id(
-                            id,
-                            name,
-                            description,
-                            grup
-                        )
-                    )
-                `)
+                .select(COTIZACION_SELECT)
                 .eq('id', cotizacionId)
                 .single();
 
@@ -190,45 +192,23 @@ class cotizaciones {
     }
 
     // Obtener todas las cotizaciones de una sucursal
-    static async getAll(sucuId) {
+    static async getAll(sucuId, filtroFecha = null) {
         try {
-            const { data: cotizaciones, error } = await supabase
+            let query = supabase
                 .from('cotizaciones')
-                .select(`
-                    id,
-                    numero_cotizacion,
-                    fecha,
-                    observaciones,
-                    metodo_pago,
-                    estado,
-                    total,
-                    fecha_vencimiento,
-                    agrupado,
-                    precio_id,
-                    user_id,
-                    personal_id,
-                    sucu_id,
-                    cliente_id,
-                    user:user_id(id, first_name, last_name),
-                    personal:personal_id(id, first_name, last_name),
-                    cliente:cliente_id(id, name),
-                    precio:precio_id(id, name),
-                    sucursales:sucu_id(id, name),
-                    productos:cotizacion_detalle(
-                        id,
-                        cantidad,
-                        precio_unitario,
-                        subtotal,
-                        producto:producto_almacen_id(
-                            id,
-                            name,
-                            description,
-                            grup
-                        )
-                    )
-                `)
+                .select(COTIZACION_SELECT)
                 .eq('sucu_id', sucuId)
                 .order('fecha', { ascending: false });
+
+            if (filtroFecha?.inicio) {
+                query = query.gte('fecha', filtroFecha.inicio);
+            }
+
+            if (filtroFecha?.fin) {
+                query = query.lte('fecha', filtroFecha.fin);
+            }
+
+            const { data, error } = await query;
 
             if (error) {
                 console.error('Error obteniendo cotizaciones:', error);
@@ -237,7 +217,7 @@ class cotizaciones {
 
             return {
                 success: true,
-                data: cotizaciones || []
+                data: data || []
             };
 
         } catch (error) {
@@ -246,51 +226,25 @@ class cotizaciones {
         }
     }
 
-    // Anular una cotización
-    static async anular(cotizacionId) {
+    // Actualizar estado de una cotización
+    static async actualizarEstado(cotizacionId, nuevoEstado) {
         try {
+            const estadosPermitidos = ['pendiente', 'aprobada', 'anulado', 'completado'];
+
+            if (!estadosPermitidos.includes(nuevoEstado)) {
+                return { success: false, message: 'Estado de cotización no válido' };
+            }
+
             const { data: cotizacion, error } = await supabase
                 .from('cotizaciones')
-                .update({ estado: 'anulado' })
+                .update({ estado: nuevoEstado })
                 .eq('id', cotizacionId)
-                .select(`
-                    id,
-                    numero_cotizacion,
-                    fecha,
-                    observaciones,
-                    metodo_pago,
-                    estado,
-                    total,
-                    fecha_vencimiento,
-                    agrupado,
-                    precio_id,
-                    user_id,
-                    personal_id,
-                    sucu_id,
-                    cliente_id,
-                    user:user_id(id, first_name, last_name),
-                    personal:personal_id(id, first_name, last_name),
-                    cliente:cliente_id(id, name),
-                    precio:precio_id(id, name),
-                    sucursales:sucu_id(id, name),
-                    productos:cotizacion_detalle(
-                        id,
-                        cantidad,
-                        precio_unitario,
-                        subtotal,
-                        producto:producto_almacen_id(
-                            id,
-                            name,
-                            description,
-                            grup
-                        )
-                    )
-                `)
+                .select(COTIZACION_SELECT)
                 .single();
 
             if (error) {
-                console.error('Error anulando cotización:', error);
-                return { success: false, message: 'Error al anular la cotización', error };
+                console.error('Error actualizando estado de cotización:', error);
+                return { success: false, message: 'Error al actualizar el estado de la cotización', error };
             }
 
             return {
@@ -299,123 +253,7 @@ class cotizaciones {
             };
 
         } catch (error) {
-            console.error('Error en Cotizaciones.anular:', error);
-            return { success: false, message: 'Error interno del servidor', error };
-        }
-    }
-
-    // Aprobar una cotización
-    static async aprobar(cotizacionId) {
-        try {
-            const { data: cotizacion, error } = await supabase
-                .from('cotizaciones')
-                .update({ estado: 'aprobada' })
-                .eq('id', cotizacionId)
-                .select(`
-                    id,
-                    numero_cotizacion,
-                    fecha,
-                    observaciones,
-                    metodo_pago,
-                    estado,
-                    total,
-                    fecha_vencimiento,
-                    agrupado,
-                    precio_id,
-                    user_id,
-                    personal_id,
-                    sucu_id,
-                    cliente_id,
-                    user:user_id(id, first_name, last_name),
-                    personal:personal_id(id, first_name, last_name),
-                    cliente:cliente_id(id, name),
-                    precio:precio_id(id, name),
-                    sucursales:sucu_id(id, name),
-                    productos:cotizacion_detalle(
-                        id,
-                        cantidad,
-                        precio_unitario,
-                        subtotal,
-                        producto:producto_almacen_id(
-                            id,
-                            name,
-                            description,
-                            grup
-                        )
-                    )
-                `)
-                .single();
-
-            if (error) {
-                console.error('Error aprobando cotización:', error);
-                return { success: false, message: 'Error al aprobar la cotización', error };
-            }
-
-            return {
-                success: true,
-                data: cotizacion
-            };
-
-        } catch (error) {
-            console.error('Error en Cotizaciones.aprobar:', error);
-            return { success: false, message: 'Error interno del servidor', error };
-        }
-    }
-
-    // Volver a poner una cotización en pendiente
-    static async marcarPendiente(cotizacionId) {
-        try {
-            const { data: cotizacion, error } = await supabase
-                .from('cotizaciones')
-                .update({ estado: 'pendiente' })
-                .eq('id', cotizacionId)
-                .select(`
-                    id,
-                    numero_cotizacion,
-                    fecha,
-                    observaciones,
-                    metodo_pago,
-                    estado,
-                    total,
-                    fecha_vencimiento,
-                    agrupado,
-                    precio_id,
-                    user_id,
-                    personal_id,
-                    sucu_id,
-                    cliente_id,
-                    user:user_id(id, first_name, last_name),
-                    personal:personal_id(id, first_name, last_name),
-                    cliente:cliente_id(id, name),
-                    precio:precio_id(id, name),
-                    sucursales:sucu_id(id, name),
-                    productos:cotizacion_detalle(
-                        id,
-                        cantidad,
-                        precio_unitario,
-                        subtotal,
-                        producto:producto_almacen_id(
-                            id,
-                            name,
-                            description,
-                            grup
-                        )
-                    )
-                `)
-                .single();
-
-            if (error) {
-                console.error('Error marcando cotización como pendiente:', error);
-                return { success: false, message: 'Error al actualizar la cotización', error };
-            }
-
-            return {
-                success: true,
-                data: cotizacion
-            };
-
-        } catch (error) {
-            console.error('Error en Cotizaciones.marcarPendiente:', error);
+            console.error('Error en Cotizaciones.actualizarEstado:', error);
             return { success: false, message: 'Error interno del servidor', error };
         }
     }

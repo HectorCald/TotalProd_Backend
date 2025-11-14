@@ -20,14 +20,8 @@ router.get('/', cotizacionesController.getAll);
 // Crear una nueva cotización
 router.post('/', cotizacionesController.create);
 
-// Anular una cotización
-router.put('/:id/anular', cotizacionesController.anular);
-
-// Aprobar una cotización
-router.put('/:id/aprobar', cotizacionesController.aprobar);
-
-// Volver a poner en pendiente
-router.put('/:id/pendiente', cotizacionesController.marcarPendiente);
+// Actualizar estado de una cotización
+router.put('/:id/estado', cotizacionesController.actualizarEstado);
 
 // Eliminar una cotización
 router.delete('/:id', cotizacionesController.eliminar);
