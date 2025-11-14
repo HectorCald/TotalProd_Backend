@@ -4,7 +4,7 @@ CREATE TABLE cotizacion_detalle (
     producto_almacen_id UUID NOT NULL,
     cantidad INTEGER NOT NULL,
     precio_unitario NUMERIC(12,2) NOT NULL,
-    subtotal NUMERIC(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED,
+    subtotal NUMERIC(12,2) NOT NULL,
     CONSTRAINT cotizacion_detalle_cotizacion_id_fkey
         FOREIGN KEY (cotizacion_id) REFERENCES cotizaciones (id) ON DELETE CASCADE,
     CONSTRAINT cotizacion_detalle_producto_id_fkey

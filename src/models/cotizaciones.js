@@ -24,10 +24,31 @@ class cotizaciones {
                 numeroCotizacion = (ultimaCotizacion.numero_cotizacion || 0) + 1;
             }
 
-            // Calcular el total de la cotización
-            const total = productos.reduce((sum, producto) => {
-                return sum + (producto.cantidad * producto.precio);
-            }, 0);
+            const normalizarDecimal = (valor, decimales = 2) => {
+                const numero = Number(valor);
+                if (!Number.isFinite(numero)) return 0;
+                return Number(numero.toFixed(decimales));
+            };
+
+            const productosNormalizados = (productos || []).map(producto => {
+                const cantidad = Number(producto.cantidad) || 0;
+                const precioUnitario = normalizarDecimal(producto.precio);
+                const subtotalCalculado = normalizarDecimal(precioUnitario * cantidad);
+                const subtotal = producto.subtotal !== undefined && producto.subtotal !== null
+                    ? normalizarDecimal(producto.subtotal)
+                    : subtotalCalculado;
+
+                return {
+                    ...producto,
+                    cantidad,
+                    precioNormalizado: precioUnitario,
+                    subtotalNormalizado: subtotal
+                };
+            });
+
+            const total = normalizarDecimal(
+                productosNormalizados.reduce((sum, producto) => sum + producto.subtotalNormalizado, 0)
+            );
 
             // Iniciar transacción
             const insertData = {
@@ -65,19 +86,15 @@ class cotizaciones {
             }
 
             // Crear los detalles de productos si existen
-            if (productos && productos.length > 0) {
-                // Preparar datos de productos
-                const productosData = productos.map(producto => {
-                    const precio = Number(producto.precio) || 0;
-                    const cantidad = Number(producto.cantidad);
-                    return {
-                        cotizacion_id: cotizacion.id,
-                        producto_almacen_id: producto.id,
-                        cantidad: cantidad,
-                        precio_unitario: precio
-                        // subtotal se calcula automáticamente por la columna generada
-                    };
-                });
+            if (productosNormalizados.length > 0) {
+                // Preparar datos de productos con subtotal explícito
+                const productosData = productosNormalizados.map(producto => ({
+                    cotizacion_id: cotizacion.id,
+                    producto_almacen_id: producto.id,
+                    cantidad: producto.cantidad,
+                    precio_unitario: producto.precioNormalizado,
+                    subtotal: producto.subtotalNormalizado
+                }));
 
                 // Insertar todos los productos en una sola operación
                 const { error: productosError } = await supabase
@@ -97,7 +114,11 @@ class cotizaciones {
                 success: true, 
                 data: {
                     ...cotizacion,
-                    productos: productos || []
+                    productos: productosNormalizados.map((producto) => ({
+                        ...producto,
+                        precio: producto.precioNormalizado,
+                        subtotal: producto.subtotalNormalizado
+                    }))
                 }
             };
 
