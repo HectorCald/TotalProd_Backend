@@ -191,14 +191,35 @@ class cotizaciones {
         }
     }
 
-    // Obtener todas las cotizaciones de una sucursal
-    static async getAll(sucuId, filtroFecha = null) {
+    // Obtener todas las cotizaciones de una sucursal con paginación y filtros
+    static async getAll(
+        sucuId,
+        page = 1,
+        limit = 30,
+        estado = null,
+        ordenamiento = 'fecha_desc',
+        search = null,
+        clienteId = null,
+        filtroFecha = null
+    ) {
         try {
+            const sanitizedPage = Math.max(parseInt(page, 10) || 1, 1);
+            const sanitizedLimit = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
+            const offset = (sanitizedPage - 1) * sanitizedLimit;
+            const searchTerm = typeof search === 'string' ? search.trim() : '';
+
             let query = supabase
                 .from('cotizaciones')
-                .select(COTIZACION_SELECT)
-                .eq('sucu_id', sucuId)
-                .order('fecha', { ascending: false });
+                .select(COTIZACION_SELECT, { count: 'exact' })
+                .eq('sucu_id', sucuId);
+
+            if (estado) {
+                query = query.eq('estado', estado);
+            }
+
+            if (clienteId) {
+                query = query.eq('cliente_id', clienteId);
+            }
 
             if (filtroFecha?.inicio) {
                 query = query.gte('fecha', filtroFecha.inicio);
@@ -208,16 +229,95 @@ class cotizaciones {
                 query = query.lte('fecha', filtroFecha.fin);
             }
 
-            const { data, error } = await query;
+            if (searchTerm) {
+                const normalizedSearch = `%${searchTerm}%`;
+                const orFilters = [];
+
+                const numericValue = Number(searchTerm);
+                if (!Number.isNaN(numericValue)) {
+                    orFilters.push(`numero_cotizacion.eq.${numericValue}`);
+                }
+
+                orFilters.push(
+                    `observaciones.ilike.${normalizedSearch}`,
+                    `metodo_pago.ilike.${normalizedSearch}`
+                );
+
+                const { data: clientesMatches, error: clientesError } = await supabase
+                    .from('clients')
+                    .select('id')
+                    .ilike('name', normalizedSearch);
+
+                if (!clientesError && clientesMatches?.length) {
+                    const clienteIds = clientesMatches.map(cliente => cliente.id);
+                    if (clienteIds.length > 0) {
+                        orFilters.push(`cliente_id.in.(${clienteIds.join(',')})`);
+                    }
+                }
+
+                const { data: productosMatches, error: productosError } = await supabase
+                    .from('products_almacen')
+                    .select('id')
+                    .or(`name.ilike.${normalizedSearch},description.ilike.${normalizedSearch}`);
+
+                if (!productosError && productosMatches?.length) {
+                    const productIds = productosMatches.map(producto => producto.id);
+                    if (productIds.length > 0) {
+                        const { data: detalleMatches, error: detalleError } = await supabase
+                            .from('cotizacion_detalle')
+                            .select('cotizacion_id')
+                            .in('producto_almacen_id', productIds);
+
+                        if (!detalleError && detalleMatches?.length) {
+                            const cotizacionIds = Array.from(new Set(detalleMatches.map(detalle => detalle.cotizacion_id)));
+                            if (cotizacionIds.length > 0) {
+                                orFilters.push(`id.in.(${cotizacionIds.join(',')})`);
+                            }
+                        }
+                    }
+                }
+
+                if (orFilters.length > 0) {
+                    query = query.or(orFilters.join(','));
+                }
+            }
+
+            switch (ordenamiento) {
+                case 'fecha_asc':
+                    query = query.order('fecha', { ascending: true });
+                    break;
+                case 'numero_desc':
+                    query = query.order('numero_cotizacion', { ascending: false });
+                    break;
+                case 'numero_asc':
+                    query = query.order('numero_cotizacion', { ascending: true });
+                    break;
+                default:
+                    query = query.order('fecha', { ascending: false });
+                    break;
+            }
+
+            const { data, error, count } = await query.range(offset, offset + sanitizedLimit - 1);
 
             if (error) {
                 console.error('Error obteniendo cotizaciones:', error);
                 return { success: false, message: 'Error al obtener las cotizaciones', error };
             }
 
+            const total = typeof count === 'number' ? count : data?.length || 0;
+            const hasNextPage = typeof count === 'number'
+                ? count > offset + sanitizedLimit
+                : (data?.length || 0) === sanitizedLimit;
+
             return {
                 success: true,
-                data: data || []
+                data: data || [],
+                pagination: {
+                    total,
+                    page: sanitizedPage,
+                    limit: sanitizedLimit,
+                    hasNextPage
+                }
             };
 
         } catch (error) {

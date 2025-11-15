@@ -138,8 +138,13 @@ class cotizacionesController {
     // Obtener todas las cotizaciones de una sucursal
     static async getAll(req, res) {
         try {
-            // Obtener el sucu_id de la sucursal seleccionada
             const sucuId = req.query.sucu_id;
+            const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+            const limit = Math.max(parseInt(req.query.limit, 10) || 30, 1);
+            const estado = req.query.estado || null;
+            const ordenamiento = req.query.ordenamiento || 'fecha_desc';
+            const clienteId = req.query.cliente || null;
+            const search = req.query.search || null;
             const { fecha_inicio = null, fecha_fin = null } = req.query;
             
             if (!sucuId) {
@@ -157,7 +162,16 @@ class cotizacionesController {
                 };
             }
 
-            const result = await cotizaciones.getAll(sucuId, filtroFecha);
+            const result = await cotizaciones.getAll(
+                sucuId,
+                page,
+                limit,
+                estado,
+                ordenamiento,
+                search,
+                clienteId,
+                filtroFecha
+            );
 
             if (!result.success) {
                 return res.status(400).json(result);
@@ -165,7 +179,8 @@ class cotizacionesController {
 
             res.status(200).json({
                 success: true,
-                data: result.data
+                data: result.data,
+                pagination: result.pagination
             });
 
         } catch (error) {
