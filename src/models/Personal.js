@@ -680,6 +680,72 @@ class Personal {
     }
   }
 
+  // Método para generar token de empleado desde sesión de admin (sin contraseña)
+  static async generateEmployeeTokenFromAdmin(employeeId) {
+    try {
+      if (!employeeId) {
+        return {
+          success: false,
+          message: 'ID del empleado es requerido'
+        };
+      }
+
+      // Obtener personal por ID
+      const personal = await this.getById(employeeId);
+
+      if (!personal) {
+        return {
+          success: false,
+          message: 'Empleado no encontrado'
+        };
+      }
+
+      if (!personal.is_active) {
+        return {
+          success: false,
+          message: 'La cuenta del empleado está inactiva'
+        };
+      }
+
+      // Generar token JWT
+      const { generateToken } = require('../config/jwt');
+      
+      const tokenPayload = {
+        id: personal.id,
+        empresa_id: personal.empresa_id,
+        type: 'employee'
+      };
+
+      const token = generateToken(tokenPayload);
+
+      return {
+        success: true,
+        data: {
+          personal: {
+            id: personal.id,
+            codigo: personal.codigo,
+            first_name: personal.first_name,
+            last_name: personal.last_name,
+            cargo: personal.cargo,
+            empresa_id: personal.empresa_id,
+            sucursal_id: personal.sucursal_id,
+            is_active: personal.is_active,
+            rastrear: personal.rastrear,
+            modules: personal.modules,
+            permisos: personal.permisos
+          },
+          token: token
+        }
+      };
+    } catch (error) {
+      console.error('Error al generar token de empleado:', error);
+      return {
+        success: false,
+        message: 'Error al generar token de empleado'
+      };
+    }
+  }
+
   // Método para cambiar contraseña de empleado
   static async changePassword(id, currentPassword, newPassword) {
     try {

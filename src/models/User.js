@@ -187,6 +187,73 @@ class User {
     }
   }
 
+  // Método para generar token de usuario desde sesión de admin/empleado (sin contraseña)
+  static async generateUserTokenFromAdmin(userId) {
+    try {
+      if (!userId) {
+        return {
+          success: false,
+          message: 'ID del usuario es requerido'
+        };
+      }
+
+      // Obtener usuario por ID
+      const user = await this.getById(userId);
+
+      if (!user) {
+        return {
+          success: false,
+          message: 'Usuario no encontrado'
+        };
+      }
+
+      if (!user.is_active) {
+        return {
+          success: false,
+          message: 'La cuenta del usuario está inactiva'
+        };
+      }
+
+      // Generar token JWT
+      const { generateToken } = require('../config/jwt');
+      
+      const tokenPayload = {
+        id: user.id,
+        empresa_id: user.empresa_id,
+        type: 'user'
+      };
+
+      const token = generateToken(tokenPayload);
+
+      return {
+        success: true,
+        data: {
+          user: {
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            phone: user.phone,
+            is_active: user.is_active,
+            plan_id: user.plan_id,
+            plan: user.plan,
+            modules: user.modules,
+            empresa_id: user.empresa_id,
+            empresa: user.empresa,
+            logo_tipo: user.logo_tipo
+          },
+          token: token
+        }
+      };
+    } catch (error) {
+      console.error('Error al generar token de usuario:', error);
+      return {
+        success: false,
+        message: 'Error al generar token de usuario'
+      };
+    }
+  }
+
   // Método estático para obtener usuario por celular
   static async getByEmail(email) {
     try {

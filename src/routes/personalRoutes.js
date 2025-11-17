@@ -11,6 +11,9 @@ router.post('/login-employee', PersonalController.loginEmployee);
 router.post('/:id/set-password', PersonalController.setPassword);
 router.post('/:id/change-password', PersonalController.changePassword); // Nueva ruta para cambiar contraseña
 
+// Ruta para generar token de empleado desde sesión de admin (requiere autenticación)
+router.post('/generate-employee-token', requireAuth, PersonalController.generateEmployeeTokenFromAdmin);
+
 // Aplicar autenticación a las rutas restantes
 router.use(requireAuth);
 
