@@ -28,6 +28,7 @@ const pagosDamabravaRoutes = require('./pagosDamabravaRoutes');
 const permissionsRoutes = require('./permissionsRoutes');
 const conteosRoutes = require('./conteosRoutes');
 const cotizacionesRoutes = require('./cotizacionesRoutes');
+const transferenciasAlmacenRoutes = require('./transferenciasAlmacenRoutes');
 const empresaImagenRoutes = require('./empresaImagenRoutes');
 const empresaRoutes = require('./empresaRoutes');
 const historialRoutes = require('./historialRoutes');
@@ -131,6 +132,9 @@ router.use('/conteos', conteosRoutes);
 
 // Rutas de cotizaciones
 router.use('/cotizaciones', cotizacionesRoutes);
+
+// Rutas de transferencias de almacén
+router.use('/transferencias-almacen', transferenciasAlmacenRoutes);
 
 // Rutas de imágenes de empresa
 router.use('/empresa-imagen', empresaImagenRoutes);

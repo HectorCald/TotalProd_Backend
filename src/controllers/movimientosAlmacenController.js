@@ -1,4 +1,5 @@
 const movimientosAlmacen = require('../models/movimientosAlmacen');
+const transferenciasAlmacen = require('../models/transferenciasAlmacen');
 const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
 
 class movimientosAlmacenController {
@@ -220,16 +221,79 @@ class movimientosAlmacenController {
                 });
             }
 
-            const result = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, estado, ordenamiento, search, cliente, filtroFecha);
+            // Obtener movimientos (solo si no hay filtro de tipo o si el tipo es 'entrada' o 'salida', pero NO 'transferencia')
+            let resultMovimientos = { success: true, data: [] };
+            if (tipo !== 'transferencia') {
+                resultMovimientos = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, estado, ordenamiento, search, cliente, filtroFecha);
 
-            if (!result.success) {
-                return res.status(400).json(result);
+                if (!resultMovimientos.success) {
+                    return res.status(400).json(resultMovimientos);
+                }
             }
+
+            // Obtener transferencias (solo si no hay filtro de tipo o si el tipo es 'transferencia')
+            let transferencias = [];
+            if (!tipo || tipo === 'transferencia') {
+                const estadoTransferencia = estado === 'finalizado' ? 'Finalizado' : estado === 'anulado' ? 'Anulado' : null;
+                const clienteIdTransferencia = cliente || null; // Usar el mismo filtro de cliente
+                const resultTransferencias = await transferenciasAlmacen.getAll(sucu_id, page, limit, estadoTransferencia, ordenamiento, search, filtroFecha, clienteIdTransferencia);
+                
+                if (resultTransferencias.success && resultTransferencias.data) {
+                    // Formatear transferencias como movimientos
+                    transferencias = resultTransferencias.data.map(transferencia => ({
+                        id: transferencia.id,
+                        type: 'transferencia',
+                        fecha: transferencia.fecha,
+                        estado: transferencia.estado === 'Anulado' ? 'anulado' : 'finalizado',
+                        concepto: transferencia.concepto || `Transferencia ${transferencia.sucursal_origen?.name || ''} → ${transferencia.sucursal_destino?.name || ''}`,
+                        sucu_id: transferencia.sucu_origen_id,
+                        sucu_origen_id: transferencia.sucu_origen_id,
+                        sucu_destino_id: transferencia.sucu_destino_id,
+                        sucursal: transferencia.sucursal_origen,
+                        sucursal_origen: transferencia.sucursal_origen,
+                        sucursal_destino: transferencia.sucursal_destino,
+                        precio: transferencia.precio,
+                        precio_id: transferencia.precio_id,
+                        agrupado: transferencia.agrupado,
+                        productos: transferencia.productos || [],
+                        user: transferencia.user,
+                        personal: transferencia.personal,
+                        cliente: transferencia.cliente || null,
+                        cliente_id: transferencia.cliente_id || null,
+                        descuento: 0,
+                        aumento: 0,
+                        numero_orden: null,
+                        metodo_pago: null,
+                        proveedor: null
+                    }));
+                }
+            }
+
+            // Combinar movimientos y transferencias
+            const allData = [...(resultMovimientos.data || []), ...transferencias];
+            
+            // Ordenar por fecha
+            allData.sort((a, b) => {
+                const fechaA = new Date(a.fecha);
+                const fechaB = new Date(b.fecha);
+                return ordenamiento === 'fecha_asc' ? fechaA - fechaB : fechaB - fechaA;
+            });
+
+            // Aplicar paginación manual si es necesario
+            const totalItems = allData.length;
+            const startIndex = (page - 1) * limit;
+            const endIndex = startIndex + limit;
+            const paginatedData = allData.slice(startIndex, endIndex);
 
             res.json({
                 success: true,
-                data: result.data,
-                pagination: result.pagination
+                data: paginatedData,
+                pagination: {
+                    total: totalItems,
+                    page,
+                    limit,
+                    hasNextPage: endIndex < totalItems
+                }
             });
 
 
