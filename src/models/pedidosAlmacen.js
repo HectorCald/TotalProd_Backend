@@ -240,19 +240,11 @@ class pedidosAlmacen {
           ascending = false;
       }
 
+      // OPTIMIZACIÓN: Obtener pedidos sin detalles primero (más rápido)
       let query = supabase
         .from('pedidos_almacen')
         .select(`
           *,
-          pedido_almacen_detalle (
-            *,
-            producto_almacen:producto_almacen_id (
-              id,
-              name,
-              description,
-              grup
-            )
-          ),
           sucursal:sucursal_id (
             id,
             name
@@ -339,6 +331,69 @@ class pedidosAlmacen {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
       }
 
+      // Si no hay pedidos, retornar array vacío
+      if (!pedidos || pedidos.length === 0) {
+        return {
+          success: true,
+          message: 'Pedidos obtenidos exitosamente',
+          data: [],
+          pagination: {
+            currentPage: page,
+            totalPages: 0,
+            totalItems: 0,
+            hasNextPage: false
+          }
+        };
+      }
+
+      // OPTIMIZACIÓN: Obtener productos por lotes (igual que movimientosAlmacen)
+      const pedidoIds = pedidos.map(p => p.id);
+      const detallesByPedido = new Map();
+      pedidoIds.forEach(id => detallesByPedido.set(id, []));
+
+      // Dividir pedidoIds en lotes de 100 para evitar límite de Supabase en .in()
+      const batchSize = 100;
+      const detallesAll = [];
+
+      for (let i = 0; i < pedidoIds.length; i += batchSize) {
+        const batchIds = pedidoIds.slice(i, i + batchSize);
+
+        const { data: detallesBatch, error: detallesError } = await supabase
+          .from('pedido_almacen_detalle')
+          .select(`
+            *,
+            producto_almacen:producto_almacen_id (
+              id,
+              name,
+              description,
+              grup
+            )
+          `)
+          .in('pedido_almacen_id', batchIds);
+
+        if (detallesError) {
+          console.error(`[PedidosAlmacenModel.getAll] Error obteniendo detalles (lote ${Math.floor(i/batchSize) + 1}):`, detallesError);
+        } else if (detallesBatch && Array.isArray(detallesBatch)) {
+          detallesAll.push(...detallesBatch);
+        }
+      }
+
+      // Mapear detalles a pedidos
+      if (detallesAll && detallesAll.length > 0) {
+        detallesAll.forEach(d => {
+          if (d && d.pedido_almacen_id) {
+            const arr = detallesByPedido.get(d.pedido_almacen_id) || [];
+            arr.push(d);
+            detallesByPedido.set(d.pedido_almacen_id, arr);
+          }
+        });
+      }
+
+      // Agregar detalles a cada pedido
+      const pedidosConDetalles = pedidos.map(pedido => ({
+        ...pedido,
+        pedido_almacen_detalle: detallesByPedido.get(pedido.id) || []
+      }));
 
       // Obtener nombres de usuarios y personal para cada pedido (BATCH LOADING)
       
@@ -400,8 +455,8 @@ class pedidosAlmacen {
         console.log('🔍 DEBUG - Movimientos obtenidos:', movimientosData);
       }
 
-      // Mapear user/personal y movimiento_salida a los pedidos
-      const pedidosConNombres = pedidos.map((pedido) => {
+      // Mapear user/personal y movimiento_salida a los pedidos (usar pedidosConDetalles en lugar de pedidos)
+      const pedidosConNombres = pedidosConDetalles.map((pedido) => {
         const user = pedido.user_id ? (userMap.get(pedido.user_id) || null) : null;
         const personal = pedido.personal_id ? (personalMap.get(pedido.personal_id) || null) : null;
         const movimiento_salida = pedido.movimiento_salida_id ? (movimientoSalidaMap.get(pedido.movimiento_salida_id) || null) : null;
@@ -456,19 +511,11 @@ class pedidosAlmacen {
         throw new Error('ID de la sucursal es requerido');
       }
 
+      // OPTIMIZACIÓN: Obtener pedidos sin detalles primero (más rápido)
       const { data: pedidos, error } = await supabase
         .from('pedidos_almacen')
         .select(`
           *,
-          pedido_almacen_detalle (
-            *,
-            producto_almacen:producto_almacen_id (
-              id,
-              name,
-              description,
-              grup
-            )
-          ),
           sucursal:sucursal_id (
             id,
             name
@@ -492,6 +539,64 @@ class pedidosAlmacen {
       if (error) {
         throw new Error(`Error al obtener pedidos: ${error.message}`);
       }
+
+      // Si no hay pedidos, retornar array vacío
+      if (!pedidos || pedidos.length === 0) {
+        return {
+          success: true,
+          message: 'Pedidos obtenidos exitosamente',
+          data: []
+        };
+      }
+
+      // OPTIMIZACIÓN: Obtener productos por lotes (igual que getAll)
+      const pedidoIds = pedidos.map(p => p.id);
+      const detallesByPedido = new Map();
+      pedidoIds.forEach(id => detallesByPedido.set(id, []));
+
+      // Dividir pedidoIds en lotes de 100 para evitar límite de Supabase en .in()
+      const batchSize = 100;
+      const detallesAll = [];
+
+      for (let i = 0; i < pedidoIds.length; i += batchSize) {
+        const batchIds = pedidoIds.slice(i, i + batchSize);
+
+        const { data: detallesBatch, error: detallesError } = await supabase
+          .from('pedido_almacen_detalle')
+          .select(`
+            *,
+            producto_almacen:producto_almacen_id (
+              id,
+              name,
+              description,
+              grup
+            )
+          `)
+          .in('pedido_almacen_id', batchIds);
+
+        if (detallesError) {
+          console.error(`[PedidosAlmacenModel.getAllSinLimite] Error obteniendo detalles (lote ${Math.floor(i/batchSize) + 1}):`, detallesError);
+        } else if (detallesBatch && Array.isArray(detallesBatch)) {
+          detallesAll.push(...detallesBatch);
+        }
+      }
+
+      // Mapear detalles a pedidos
+      if (detallesAll && detallesAll.length > 0) {
+        detallesAll.forEach(d => {
+          if (d && d.pedido_almacen_id) {
+            const arr = detallesByPedido.get(d.pedido_almacen_id) || [];
+            arr.push(d);
+            detallesByPedido.set(d.pedido_almacen_id, arr);
+          }
+        });
+      }
+
+      // Agregar detalles a cada pedido
+      const pedidosConDetalles = pedidos.map(pedido => ({
+        ...pedido,
+        pedido_almacen_detalle: detallesByPedido.get(pedido.id) || []
+      }));
 
       // Obtener nombres de usuarios y personal para cada pedido (BATCH LOADING)
       const tNombresStart = Date.now();
@@ -536,8 +641,8 @@ class pedidosAlmacen {
         });
       }
 
-      // Mapear user/personal a los pedidos
-      const pedidosConNombres = pedidos.map((pedido) => {
+      // Mapear user/personal a los pedidos (usar pedidosConDetalles en lugar de pedidos)
+      const pedidosConNombres = pedidosConDetalles.map((pedido) => {
         const user = pedido.user_id ? (userMap.get(pedido.user_id) || null) : null;
         const personal = pedido.personal_id ? (personalMap.get(pedido.personal_id) || null) : null;
         return { ...pedido, user, personal };
