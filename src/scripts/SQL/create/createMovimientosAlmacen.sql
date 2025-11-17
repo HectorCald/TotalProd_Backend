@@ -20,6 +20,8 @@ CREATE TABLE movimientos_almacen (
     descuento NUMERIC DEFAULT 0,
     aumento NUMERIC DEFAULT 0,
     concepto TEXT NULL,
+    ubicacion POINT NULL,
+    
     CONSTRAINT movimientos_almacen_cliente_id_fkey
         FOREIGN KEY (cliente_id) REFERENCES clients (id),
     CONSTRAINT movimientos_almacen_proveedor_id_fkey

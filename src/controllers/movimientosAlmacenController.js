@@ -8,7 +8,7 @@ class movimientosAlmacenController {
         
         try {
             const tValidationStart = Date.now();
-            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden, concepto } = req.body;
+            const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden, concepto, ubicacion } = req.body;
             const user_id = req.user?.id;
             const userType = req.user?.type; // Verificar si es empleado o usuario normal
 
@@ -112,7 +112,8 @@ class movimientosAlmacenController {
                 ...(gasto_id ? { gasto_id } : {}),
                 ...(typeof agrupado !== 'undefined' ? { agrupado: !!agrupado } : {}),
                 ...(fecha ? { fecha } : {}),
-                ...(numero_orden !== undefined ? { numero_orden } : {})
+                ...(numero_orden !== undefined ? { numero_orden } : {}),
+                ...(ubicacion ? { ubicacion } : {})
             };
 
             // VALIDAR INGREDIENTES ANTES de crear el movimiento si es entrada con restar_ingredientes
@@ -221,24 +222,39 @@ class movimientosAlmacenController {
                 });
             }
 
+            // Para combinar y paginar correctamente, necesitamos obtener TODOS los datos de cada fuente
+            // porque después de combinar y ordenar, necesitamos aplicar la paginación sobre el resultado combinado
+            // Usamos un límite muy alto para obtener todos los registros
+            const bufferLimit = 99999;
+            
             // Obtener movimientos (solo si no hay filtro de tipo o si el tipo es 'entrada' o 'salida', pero NO 'transferencia')
-            let resultMovimientos = { success: true, data: [] };
+            let resultMovimientos = { success: true, data: [], pagination: { total: 0, hasNextPage: false } };
+            let totalMovimientos = 0;
             if (tipo !== 'transferencia') {
-                resultMovimientos = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, estado, ordenamiento, search, cliente, filtroFecha);
+                // Obtener con buffer más grande para tener suficientes datos después de combinar
+                resultMovimientos = await movimientosAlmacen.getAll(sucu_id, 1, bufferLimit, tipo, estado, ordenamiento, search, cliente, filtroFecha);
 
                 if (!resultMovimientos.success) {
                     return res.status(400).json(resultMovimientos);
                 }
+                
+                // Obtener el total real de movimientos para calcular hasNextPage correctamente
+                totalMovimientos = resultMovimientos.pagination?.total || resultMovimientos.data?.length || 0;
             }
 
             // Obtener transferencias (solo si no hay filtro de tipo o si el tipo es 'transferencia')
             let transferencias = [];
+            let totalTransferencias = 0;
             if (!tipo || tipo === 'transferencia') {
                 const estadoTransferencia = estado === 'finalizado' ? 'Finalizado' : estado === 'anulado' ? 'Anulado' : null;
                 const clienteIdTransferencia = cliente || null; // Usar el mismo filtro de cliente
-                const resultTransferencias = await transferenciasAlmacen.getAll(sucu_id, page, limit, estadoTransferencia, ordenamiento, search, filtroFecha, clienteIdTransferencia);
+                // Obtener con buffer más grande
+                const resultTransferencias = await transferenciasAlmacen.getAll(sucu_id, 1, bufferLimit, estadoTransferencia, ordenamiento, search, filtroFecha, clienteIdTransferencia);
                 
                 if (resultTransferencias.success && resultTransferencias.data) {
+                    // Obtener el total real de transferencias
+                    totalTransferencias = resultTransferencias.pagination?.total || resultTransferencias.data?.length || 0;
+                    
                     // Formatear transferencias como movimientos
                     transferencias = resultTransferencias.data.map(transferencia => ({
                         id: transferencia.id,
@@ -279,20 +295,33 @@ class movimientosAlmacenController {
                 return ordenamiento === 'fecha_asc' ? fechaA - fechaB : fechaB - fechaA;
             });
 
-            // Aplicar paginación manual si es necesario
-            const totalItems = allData.length;
+            // Calcular el total real combinado
+            // Si hay búsqueda, el total es la cantidad de items filtrados en memoria
+            // Si no hay búsqueda, sumamos los totales de cada fuente
+            const totalItemsCombinados = search 
+                ? allData.length 
+                : (totalMovimientos + totalTransferencias);
+
+            // Aplicar paginación sobre el resultado combinado y ordenado
             const startIndex = (page - 1) * limit;
             const endIndex = startIndex + limit;
             const paginatedData = allData.slice(startIndex, endIndex);
+
+            // Calcular hasNextPage correctamente
+            // Si hay búsqueda, verificamos si hay más items en allData
+            // Si no hay búsqueda, verificamos si hay más items en total combinado
+            const hasNextPage = search 
+                ? endIndex < allData.length 
+                : endIndex < totalItemsCombinados;
 
             res.json({
                 success: true,
                 data: paginatedData,
                 pagination: {
-                    total: totalItems,
+                    total: totalItemsCombinados,
                     page,
                     limit,
-                    hasNextPage: endIndex < totalItems
+                    hasNextPage: hasNextPage
                 }
             });
 

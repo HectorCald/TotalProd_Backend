@@ -16,7 +16,7 @@ class movimientosAlmacen {
     static async create(movimientoData) {
         
         try {
-            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden, concepto } = movimientoData;
+            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden, concepto, ubicacion } = movimientoData;
 
             // Determinar timestamp para el movimiento
             const fechaActual = new Date();
@@ -54,6 +54,11 @@ class movimientosAlmacen {
                 fecha: fechaMovimientoISO,
                 estado: 'finalizado' // Estado por defecto
             };
+
+            // Si hay ubicación, usarla directamente (igual que en clients.js)
+            if (ubicacion) {
+                insertData.ubicacion = ubicacion;
+            }
 
             if (numeroOrdenNormalizado !== null) {
                 insertData.numero_orden = numeroOrdenNormalizado;
