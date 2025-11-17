@@ -688,33 +688,57 @@ class movimientosAlmacen {
 
 			const tHydrateStart = Date.now();
 
-			// 1) Productos de todos los movimientos en una sola consulta
+			// 1) Productos de todos los movimientos en lotes (Supabase tiene límite en .in())
 			let tProductosBatchMs = 0;
 			const tProdBatchStart = Date.now();
-			const { data: productosAll } = await supabase
-				.from('movimiento_almacen_producto')
-				.select(`
-					movimiento_almacen_id,
-					producto_almacen_id,
-					cantidad,
-					precio_unitario,
-					subtotal,
-					producto:producto_almacen_id(
-						id,
-						name,
-						description,
-						grup
-					)
-				`)
-				.in('movimiento_almacen_id', movimientoIds);
-			tProductosBatchMs = Date.now() - tProdBatchStart;
+			
 			const productosByMovimiento = new Map();
             (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
-            (productosAll || []).forEach(p => {
-				const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
-				arr.push(p);
-				productosByMovimiento.set(p.movimiento_almacen_id, arr);
-			});
+            
+            // Dividir movimientoIds en lotes de 100 para evitar límite de Supabase en .in()
+            const batchSize = 100;
+            const productosAll = [];
+            
+            for (let i = 0; i < movimientoIds.length; i += batchSize) {
+                const batchIds = movimientoIds.slice(i, i + batchSize);
+                
+                const { data: productosBatch, error: productosError } = await supabase
+                    .from('movimiento_almacen_producto')
+                    .select(`
+                        movimiento_almacen_id,
+                        producto_almacen_id,
+                        cantidad,
+                        precio_unitario,
+                        subtotal,
+                        producto:producto_almacen_id(
+                            id,
+                            name,
+                            description,
+                            grup
+                        )
+                    `)
+                    .in('movimiento_almacen_id', batchIds);
+                
+                if (productosError) {
+                    console.error(`[MovAlmacenModel.getAll] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
+                    console.error(`[MovAlmacenModel.getAll] Movimiento IDs del lote:`, batchIds);
+                } else if (productosBatch && Array.isArray(productosBatch)) {
+                    productosAll.push(...productosBatch);
+                }
+            }
+			
+			tProductosBatchMs = Date.now() - tProdBatchStart;
+            
+            // Mapear productos a movimientos
+            if (productosAll && productosAll.length > 0) {
+                productosAll.forEach(p => {
+                    if (p && p.movimiento_almacen_id) {
+                        const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
+                        arr.push(p);
+                        productosByMovimiento.set(p.movimiento_almacen_id, arr);
+                    }
+                });
+            }
 
             // Usuarios y personal vienen embebidos en la query principal (sin llamadas extra)
 
