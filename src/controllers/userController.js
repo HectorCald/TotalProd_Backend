@@ -205,49 +205,6 @@ class UserController {
     }
   }
 
-  // Generar token de usuario desde sesión de admin/empleado (sin contraseña)
-  static async generateUserTokenFromAdmin(req, res) {
-    try {
-      const { userId } = req.body;
-
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del usuario es requerido'
-        });
-      }
-
-      // Verificar que el usuario autenticado sea un usuario o empleado
-      if (!req.user || (req.user.type !== 'user' && req.user.type !== 'employee')) {
-        return res.status(403).json({
-          success: false,
-          message: 'No tiene permisos para realizar esta acción'
-        });
-      }
-
-      const result = await User.generateUserTokenFromAdmin(userId);
-
-      if (!result.success) {
-        return res.status(400).json({
-          success: false,
-          message: result.message
-        });
-      }
-
-      res.status(200).json({
-        success: true,
-        message: 'Token de usuario generado exitosamente',
-        data: result.data
-      });
-    } catch (error) {
-      console.error('Error en generateUserTokenFromAdmin:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
-
   // Método para verificar contraseña actual
   static async verifyCurrentPassword(req, res) {
     try {

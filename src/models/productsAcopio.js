@@ -73,10 +73,16 @@ class productsAcopio {
   }
 
   // Método para obtener todos los productos
-  static async getAll(empresaId) {
+  static async getAll(empresaId, empresasAsociadasIds = []) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
+      }
+
+      // Construir array de IDs de empresas (empresa actual + asociadas)
+      const empresaIds = [empresaId];
+      if (Array.isArray(empresasAsociadasIds) && empresasAsociadasIds.length > 0) {
+        empresaIds.push(...empresasAsociadasIds);
       }
 
       const { data, error } = await supabase
@@ -113,7 +119,7 @@ class productsAcopio {
             )
           )
         `)
-        .eq('empresa_id', empresaId)
+        .in('empresa_id', empresaIds)
         .order('name', { ascending: true });
 
       if (error) {

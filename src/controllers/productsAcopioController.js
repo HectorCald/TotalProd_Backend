@@ -16,7 +16,16 @@ class productsAcopioController {
         });
       }
 
-      const products = await productsAcopio.getAll(empresaId);
+      // Obtener empresas asociadas si se proporcionan
+      let empresasAsociadasIds = [];
+      if (req.query['empresas_asociadas[]']) {
+        const asociadas = Array.isArray(req.query['empresas_asociadas[]']) 
+          ? req.query['empresas_asociadas[]'] 
+          : [req.query['empresas_asociadas[]']];
+        empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined');
+      }
+
+      const products = await productsAcopio.getAll(empresaId, empresasAsociadasIds);
       
       res.status(200).json({
         success: true,

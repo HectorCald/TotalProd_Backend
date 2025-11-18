@@ -165,16 +165,31 @@ class productsAlmacen {
   }
 
   // Método para obtener todos los productos de una empresa con stock de sucursal
-  static async getAll(empresaId, sucuId = null) {
+  static async getAll(empresaId, sucuId = null, empresasAsociadasIds = []) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
       }
 
+      // Construir array de IDs de empresas (empresa actual + asociadas)
+      const empresaIds = [empresaId];
+      if (Array.isArray(empresasAsociadasIds) && empresasAsociadasIds.length > 0) {
+        empresaIds.push(...empresasAsociadasIds);
+      }
+
       const { data, error } = await supabase
         .from('products_almacen')
         .select(`
-          *,
+          id,
+          name,
+          codigo_barras,
+          category_id,
+          description,
+          created_at,
+          empresa_id,
+          grup,
+          stock_minimo,
+          costo_produccion,
           category_almacen:category_id (
             id,
             name
@@ -214,7 +229,7 @@ class productsAlmacen {
             sucursal_id
           )
         `)
-        .eq('empresa_id', empresaId)
+        .in('empresa_id', empresaIds)
         .order('name', { ascending: true });
 
       if (error) {
@@ -230,10 +245,11 @@ class productsAlmacen {
         });
       }
 
-      // Agregar category_name a cada producto
+      // Agregar category_name y es_asociado a cada producto
       if (data) {
         data.forEach(producto => {
           producto.category_name = producto.category_almacen?.name;
+          producto.es_asociado = producto.empresa_id !== empresaId;
         });
       }
 

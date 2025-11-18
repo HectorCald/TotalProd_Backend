@@ -261,7 +261,7 @@ class movimientosAlmacenController {
                         type: 'transferencia',
                         fecha: transferencia.fecha,
                         estado: transferencia.estado === 'Anulado' ? 'anulado' : 'finalizado',
-                        concepto: transferencia.concepto || `Transferencia ${transferencia.sucursal_origen?.name || ''} → ${transferencia.sucursal_destino?.name || ''}`,
+                        concepto: transferencia.concepto || `${transferencia.sucursal_origen?.name || 'Origen'} > ${transferencia.sucursal_destino?.name || 'Destino'}`,
                         sucu_id: transferencia.sucu_origen_id,
                         sucu_origen_id: transferencia.sucu_origen_id,
                         sucu_destino_id: transferencia.sucu_destino_id,

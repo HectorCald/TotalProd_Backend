@@ -18,7 +18,6 @@ router.use(requireModuleAccess('Deudas'));
 
 // Rutas para las deudas
 router.get('/', deudasController.getAll);
-router.get('/sin-limite', deudasController.getAllSinLimite);
 router.get('/por-fechas', deudasController.getByDateRange);
 router.get('/vencidas', deudasController.getDeudasVencidas);
 router.get('/:id', deudasController.getById);

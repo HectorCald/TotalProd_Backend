@@ -642,84 +642,6 @@ class Personal {
         };
       }
 
-      // Obtener datos completos del empleado (con sucursal, módulos, permisos)
-      const completePersonal = await this.getById(personal.id);
-      if (!completePersonal) {
-        return {
-          success: false,
-          message: 'Error al obtener datos del empleado'
-        };
-      }
-
-      // Generar token JWT
-      const { generateToken } = require('../config/jwt');
-      
-      const tokenPayload = {
-        id: completePersonal.id,
-        empresa_id: completePersonal.empresa_id,
-        type: 'employee'
-      };
-
-      const token = generateToken(tokenPayload);
-
-      // Devolver toda la información completa del empleado (igual que generateEmployeeTokenFromAdmin)
-      return {
-        success: true,
-        data: {
-          personal: {
-            id: completePersonal.id,
-            codigo: completePersonal.codigo,
-            first_name: completePersonal.first_name,
-            last_name: completePersonal.last_name,
-            cargo: completePersonal.cargo,
-            empresa_id: completePersonal.empresa_id,
-            sucursal_id: completePersonal.sucursal_id,
-            is_active: completePersonal.is_active,
-            rastrear: completePersonal.rastrear,
-            ubicacion: completePersonal.ubicacion,
-            modules: completePersonal.modules,
-            permisos: completePersonal.permisos,
-            sucursal: completePersonal.sucursal
-          },
-          token: token
-        }
-      };
-    } catch (error) {
-      console.error('Error en login de empleado:', error);
-      return {
-        success: false,
-        message: 'Error en el login'
-      };
-    }
-  }
-
-  // Método para generar token de empleado desde sesión de admin (sin contraseña)
-  static async generateEmployeeTokenFromAdmin(employeeId) {
-    try {
-      if (!employeeId) {
-        return {
-          success: false,
-          message: 'ID del empleado es requerido'
-        };
-      }
-
-      // Obtener personal por ID (esto ya devuelve toda la información completa con sucursal, módulos, permisos)
-      const personal = await this.getById(employeeId);
-
-      if (!personal) {
-        return {
-          success: false,
-          message: 'Empleado no encontrado'
-        };
-      }
-
-      if (!personal.is_active) {
-        return {
-          success: false,
-          message: 'La cuenta del empleado está inactiva'
-        };
-      }
-
       // Generar token JWT
       const { generateToken } = require('../config/jwt');
       
@@ -731,7 +653,6 @@ class Personal {
 
       const token = generateToken(tokenPayload);
 
-      // Devolver toda la información completa del empleado (igual que getById)
       return {
         success: true,
         data: {
@@ -745,19 +666,16 @@ class Personal {
             sucursal_id: personal.sucursal_id,
             is_active: personal.is_active,
             rastrear: personal.rastrear,
-            ubicacion: personal.ubicacion,
-            modules: personal.modules,
-            permisos: personal.permisos,
-            sucursal: personal.sucursal
+            modules: personal.modules
           },
           token: token
         }
       };
     } catch (error) {
-      console.error('Error al generar token de empleado:', error);
+      console.error('Error en login de empleado:', error);
       return {
         success: false,
-        message: 'Error al generar token de empleado'
+        message: 'Error en el login'
       };
     }
   }

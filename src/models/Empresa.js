@@ -8,6 +8,7 @@ class Empresa {
     this.propietario_id = data.propietario_id;
     this.logo_tipo = data.logo_tipo;
     this.tipo = data.tipo;
+    this.codigo = data.codigo;
     this.created_at = data.created_at;
   }
 
@@ -76,6 +77,34 @@ class Empresa {
     } catch (error) {
       console.error('Error en getById:', error);
       throw new Error('No se pudo obtener la empresa');
+    }
+  }
+
+  // Método estático para buscar empresa por código
+  static async searchByCodigo(codigo) {
+    try {
+      if (!codigo) {
+        throw new Error('Código es requerido');
+      }
+
+      const { data: empresas, error } = await supabase
+        .from('empresas')
+        .select('*')
+        .ilike('codigo', `%${codigo}%`);
+
+      if (error) {
+        console.error('Error al buscar empresa por código:', error);
+        throw new Error('No se pudo buscar la empresa');
+      }
+
+      if (!empresas || empresas.length === 0) {
+        return [];
+      }
+
+      return empresas.map(empresa => new Empresa(empresa));
+    } catch (error) {
+      console.error('Error en searchByCodigo:', error);
+      throw new Error('No se pudo buscar la empresa');
     }
   }
 }

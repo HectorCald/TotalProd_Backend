@@ -13,7 +13,6 @@ router.use(requireModuleAccess('Gastos'));
 
 // Rutas para los gastos
 router.get('/', gastosController.getAll);
-router.get('/sin-limite', gastosController.getAllSinLimite);
 router.get('/por-fechas', gastosController.getByDateRange);
 router.get('/:id', gastosController.getById);
 router.post('/', gastosController.create);

@@ -6,6 +6,9 @@ const { requireAuth } = require('../middleware/auth');
 // Aplicar middleware de autenticación a todas las rutas
 router.use(requireAuth);
 
+// Buscar empresa por código
+router.get('/search/codigo', EmpresaController.searchByCodigo);
+
 // Actualizar tipo de empresa
 router.put('/tipo', EmpresaController.updateTipo);
 

@@ -49,33 +49,6 @@ class deudasController {
     }
   }
 
-  // Obtener todas las deudas sin límite (para reportes)
-  static async getAllSinLimite(req, res) {
-    try {
-      const { ordenamiento = 'fecha_deuda_desc', sucu_id } = req.query;
-      
-      if (!sucu_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la sucursal es requerido'
-        });
-      }
-
-      const result = await deudas.getAllSinLimite(ordenamiento, sucu_id);
-      
-      if (!result.success) {
-        return res.status(400).json(result);
-      }
-
-      res.status(200).json(result);
-    } catch (error) {
-      console.error('Error en getAllSinLimite deudas:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error al obtener las deudas'
-      });
-    }
-  }
 
   // Obtener una deuda por ID
   static async getById(req, res) {

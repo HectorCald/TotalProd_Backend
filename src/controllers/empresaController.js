@@ -87,6 +87,45 @@ class EmpresaController {
       });
     }
   }
+
+  // Método para buscar empresa por código
+  static async searchByCodigo(req, res) {
+    try {
+      const { codigo } = req.query;
+
+      if (!codigo) {
+        return res.status(400).json({
+          success: false,
+          message: 'Código es requerido'
+        });
+      }
+
+      const empresas = await Empresa.searchByCodigo(codigo);
+
+      res.status(200).json({
+        success: true,
+        message: empresas.length > 0 ? 'Empresas encontradas' : 'No se encontraron empresas',
+        data: {
+          empresas: empresas.map(empresa => ({
+            id: empresa.id,
+            name: empresa.name,
+            description: empresa.description,
+            logo_tipo: empresa.logo_tipo,
+            tipo: empresa.tipo,
+            codigo: empresa.codigo,
+            propietario_id: empresa.propietario_id,
+            created_at: empresa.created_at
+          }))
+        }
+      });
+    } catch (error) {
+      console.error('Error en searchByCodigo:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
 }
 
 module.exports = EmpresaController;

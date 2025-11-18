@@ -16,6 +16,15 @@ class pricesTypesController {
         });
       }
 
+      // Obtener empresas asociadas si se proporcionan
+      let empresasAsociadasIds = [];
+      if (req.query.empresas_asociadas) {
+        const asociadas = Array.isArray(req.query.empresas_asociadas) 
+          ? req.query.empresas_asociadas 
+          : [req.query.empresas_asociadas];
+        empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
+      }
+
       let priceTypes;
 
       // Si se proporciona sucursal_id, verificar si es "Casa Matriz"
@@ -24,20 +33,20 @@ class pricesTypesController {
         const sucursalResult = await sucursales.getById(sucursalId);
         
         if (sucursalResult.success && sucursalResult.data) {
-          // Si es "Casa Matriz", cargar todos los precios normalmente
+          // Si es "Casa Matriz", cargar todos los precios normalmente (incluyendo asociadas)
           if (sucursalResult.data.name === 'Casa Matriz') {
-            priceTypes = await pricesTypes.getAll(empresaId);
+            priceTypes = await pricesTypes.getAll(empresaId, empresasAsociadasIds);
           } else {
             // Si no es "Casa Matriz", cargar solo los precios asignados a esa sucursal
             priceTypes = await pricesTypes.getBySucursalId(sucursalId);
           }
         } else {
-          // Si no se encuentra la sucursal, cargar todos los precios por defecto
-          priceTypes = await pricesTypes.getAll(empresaId);
+          // Si no se encuentra la sucursal, cargar todos los precios por defecto (incluyendo asociadas)
+          priceTypes = await pricesTypes.getAll(empresaId, empresasAsociadasIds);
         }
       } else {
-        // Si no se proporciona sucursal_id, cargar todos los precios normalmente
-        priceTypes = await pricesTypes.getAll(empresaId);
+        // Si no se proporciona sucursal_id, cargar todos los precios normalmente (incluyendo asociadas)
+        priceTypes = await pricesTypes.getAll(empresaId, empresasAsociadasIds);
       }
       
       res.status(200).json({

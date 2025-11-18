@@ -49,33 +49,6 @@ class gastosController {
     }
   }
 
-  // Obtener todos los gastos sin límite (para reportes)
-  static async getAllSinLimite(req, res) {
-    try {
-      const { ordenamiento = 'fecha_gasto_desc', sucu_id } = req.query;
-      
-      if (!sucu_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la sucursal es requerido'
-        });
-      }
-
-      const result = await gastos.getAllSinLimite(ordenamiento, sucu_id);
-      
-      if (!result.success) {
-        return res.status(400).json(result);
-      }
-
-      res.status(200).json(result);
-    } catch (error) {
-      console.error('Error en getAllSinLimite gastos:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error al obtener los gastos'
-      });
-    }
-  }
 
   // Obtener un gasto por ID
   static async getById(req, res) {

@@ -1,9 +1,10 @@
 const { supabase } = require('../config/supabase');
 
 const sucursales = {
-    // Obtener todas las sucursales de una empresa
-    async getByEmpresaId(empresaId) {
+    // Obtener todas las sucursales de una empresa y "Casa Matriz" de empresas asociadas
+    async getByEmpresaId(empresaId, empresasAsociadasIds = []) {
         try {
+            // Obtener todas las sucursales de la empresa actual
             const { data, error } = await supabase
                 .from('sucursales')
                 .select(`
@@ -33,8 +34,7 @@ const sucursales = {
                 throw error;
             }
 
-            // Mapear los datos para incluir los nombres de precios de forma más accesible
-            const dataMapeada = (data || []).map(sucursal => {
+            let dataMapeada = (data || []).map(sucursal => {
                 const precios = (sucursal.sucursal_precios || [])
                     .map(sp => sp.prices_types)
                     .filter(Boolean);
@@ -44,6 +44,56 @@ const sucursales = {
                     precios: precios
                 };
             });
+
+            // Obtener solo "Casa Matriz" de empresas asociadas
+            if (Array.isArray(empresasAsociadasIds) && empresasAsociadasIds.length > 0) {
+                const { data: casasMatriz, error: errorCasasMatriz } = await supabase
+                    .from('sucursales')
+                    .select(`
+                        id,
+                        name,
+                        almacen_sucursal_id,
+                        total_pedidos,
+                        created_at,
+                        empresas!inner (
+                            id,
+                            name,
+                            propietario_id,
+                            tipo
+                        ),
+                        sucursal_precios (
+                            precio_id,
+                            prices_types:precio_id (
+                                id,
+                                name
+                            )
+                        )
+                    `)
+                    .in('empresa_id', empresasAsociadasIds)
+                    .eq('name', 'Casa Matriz')
+                    .order('created_at', { ascending: true });
+
+                if (!errorCasasMatriz && casasMatriz && casasMatriz.length > 0) {
+                    const casasMatrizMapeadas = casasMatriz.map(sucursal => {
+                        const precios = (sucursal.sucursal_precios || [])
+                            .map(sp => sp.prices_types)
+                            .filter(Boolean);
+                        
+                        // Cambiar el nombre visualmente para incluir el nombre de la empresa
+                        const nombreEmpresa = sucursal.empresas?.name || '';
+                        const nombreVisual = nombreEmpresa ? `Casa Matriz (${nombreEmpresa})` : 'Casa Matriz';
+                        
+                        return {
+                            ...sucursal,
+                            name: nombreVisual, // Cambiar el nombre visualmente
+                            precios: precios
+                        };
+                    });
+
+                    // Combinar sucursales propias con "Casa Matriz" de empresas asociadas
+                    dataMapeada = [...dataMapeada, ...casasMatrizMapeadas];
+                }
+            }
 
             return {
                 success: true,

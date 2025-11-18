@@ -13,7 +13,16 @@ const sucursalesController = {
                 });
             }
 
-            const result = await sucursales.getByEmpresaId(empresaId);
+            // Obtener empresas asociadas si se proporcionan
+            let empresasAsociadasIds = [];
+            if (req.query.empresas_asociadas) {
+                const asociadas = Array.isArray(req.query.empresas_asociadas) 
+                    ? req.query.empresas_asociadas 
+                    : [req.query.empresas_asociadas];
+                empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
+            }
+
+            const result = await sucursales.getByEmpresaId(empresaId, empresasAsociadasIds);
             
             if (result.success) {
                 res.json(result);

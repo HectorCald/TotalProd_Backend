@@ -328,49 +328,6 @@ class PersonalController {
     }
   }
 
-  // Generar token de empleado desde sesión de admin (sin contraseña)
-  static async generateEmployeeTokenFromAdmin(req, res) {
-    try {
-      const { employeeId } = req.body;
-
-      if (!employeeId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del empleado es requerido'
-        });
-      }
-
-      // Verificar que el usuario autenticado sea un usuario (admin), no un empleado
-      if (req.user?.type !== 'user') {
-        return res.status(403).json({
-          success: false,
-          message: 'Solo los usuarios administradores pueden realizar esta acción'
-        });
-      }
-
-      const result = await Personal.generateEmployeeTokenFromAdmin(employeeId);
-
-      if (!result.success) {
-        return res.status(400).json({
-          success: false,
-          message: result.message
-        });
-      }
-
-      res.status(200).json({
-        success: true,
-        message: 'Token de empleado generado exitosamente',
-        data: result.data
-      });
-    } catch (error) {
-      console.error('Error en generateEmployeeTokenFromAdmin:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
-
   // Cambiar contraseña de empleado
   static async changePassword(req, res) {
     try {

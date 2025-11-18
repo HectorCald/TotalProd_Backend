@@ -24,7 +24,16 @@ class productsAlmacenController {
         });
       }
 
-      const products = await productsAlmacen.getAll(empresaId, sucuId);
+      // Obtener empresas asociadas si se proporcionan
+      let empresasAsociadasIds = [];
+      if (req.query.empresas_asociadas) {
+        const asociadas = Array.isArray(req.query.empresas_asociadas) 
+          ? req.query.empresas_asociadas 
+          : [req.query.empresas_asociadas];
+        empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
+      }
+
+      const products = await productsAlmacen.getAll(empresaId, sucuId, empresasAsociadasIds);
       
       res.status(200).json({
         success: true,
