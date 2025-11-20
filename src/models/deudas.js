@@ -165,7 +165,11 @@ class deudas {
                     ),
                     sucursal_destino:destino_sucursal_id (
                         id,
-                        name
+                        name,
+                        empresas (
+                            id,
+                            name
+                        )
                     )
                 `, { count: 'exact' })
                 .eq('sucu_id', sucuId);
@@ -312,7 +316,11 @@ class deudas {
                     ),
                     sucursal_destino:destino_sucursal_id (
                         id,
-                        name
+                        name,
+                        empresas (
+                            id,
+                            name
+                        )
                     )
                 `)
                 .eq('id', id)
@@ -426,7 +434,11 @@ class deudas {
                     ),
                     sucursal_destino:destino_sucursal_id (
                         id,
-                        name
+                        name,
+                        empresas (
+                            id,
+                            name
+                        )
                     )
                 `)
                 .single();

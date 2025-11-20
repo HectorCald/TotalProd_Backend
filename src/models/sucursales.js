@@ -286,7 +286,7 @@ const sucursales = {
             const { data: movimientosAcopio, error: errorAcopio } = await supabase
                 .from('movimientos_acopio')
                 .select('id')
-                .eq('sucursal_id', id)
+                .eq('sucu_id', id)
                 .limit(1);
 
             if (errorAcopio) {
@@ -297,7 +297,7 @@ const sucursales = {
             const { data: movimientosAlmacen, error: errorAlmacen } = await supabase
                 .from('movimientos_almacen')
                 .select('id')
-                .eq('sucursal_id', id)
+                .eq('sucu_id', id)
                 .limit(1);
 
             if (errorAlmacen) {
@@ -308,7 +308,7 @@ const sucursales = {
             const { data: pedidosAcopio, error: errorPedidosAcopio } = await supabase
                 .from('pedidos_acopio')
                 .select('id')
-                .eq('sucursal_id', id)
+                .eq('sucu_id', id)
                 .limit(1);
 
             if (errorPedidosAcopio) {

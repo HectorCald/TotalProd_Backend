@@ -19,19 +19,7 @@ const COTIZACION_SELECT = `
     personal:personal_id(id, first_name, last_name),
     cliente:cliente_id(id, name),
     precio:precio_id(id, name),
-    sucursales:sucu_id(id, name),
-    productos:cotizacion_detalle(
-        id,
-        cantidad,
-        precio_unitario,
-        subtotal,
-        producto:producto_almacen_id(
-            id,
-            name,
-            description,
-            grup
-        )
-    )
+    sucursales:sucu_id(id, name)
 `;
 
 class cotizaciones {
@@ -180,9 +168,34 @@ class cotizaciones {
                 return { success: false, message: 'Cotización no encontrada' };
             }
 
+            // Obtener productos de la cotización por separado
+            const { data: productos, error: productosError } = await supabase
+                .from('cotizacion_detalle')
+                .select(`
+                    id,
+                    cantidad,
+                    precio_unitario,
+                    subtotal,
+                    producto:producto_almacen_id(
+                        id,
+                        name,
+                        description,
+                        grup
+                    )
+                `)
+                .eq('cotizacion_id', cotizacionId);
+
+            if (productosError) {
+                console.error('Error obteniendo productos de la cotización:', productosError);
+                // Continuar sin productos en lugar de fallar
+            }
+
             return {
                 success: true,
-                data: cotizacion
+                data: {
+                    ...cotizacion,
+                    productos: productos || []
+                }
             };
 
         } catch (error) {
@@ -304,14 +317,82 @@ class cotizaciones {
                 return { success: false, message: 'Error al obtener las cotizaciones', error };
             }
 
-            const total = typeof count === 'number' ? count : data?.length || 0;
+            // Si no hay cotizaciones, retornar array vacío
+            if (!data || data.length === 0) {
+                return {
+                    success: true,
+                    data: [],
+                    pagination: {
+                        total: count || 0,
+                        page: sanitizedPage,
+                        limit: sanitizedLimit,
+                        hasNextPage: false
+                    }
+                };
+            }
+
+            // Obtener productos por lotes (igual que movimientosAlmacen.js)
+            const cotizacionIds = data.map(c => c.id);
+            const productosByCotizacion = new Map();
+            (cotizacionIds || []).forEach(id => productosByCotizacion.set(id, []));
+
+            // Dividir cotizacionIds en lotes de 100 para evitar límite de Supabase en .in()
+            const batchSize = 100;
+            const productosAll = [];
+
+            for (let i = 0; i < cotizacionIds.length; i += batchSize) {
+                const batchIds = cotizacionIds.slice(i, i + batchSize);
+
+                const { data: productosBatch, error: productosError } = await supabase
+                    .from('cotizacion_detalle')
+                    .select(`
+                        cotizacion_id,
+                        id,
+                        cantidad,
+                        precio_unitario,
+                        subtotal,
+                        producto:producto_almacen_id(
+                            id,
+                            name,
+                            description,
+                            grup
+                        )
+                    `)
+                    .in('cotizacion_id', batchIds);
+
+                if (productosError) {
+                    console.error(`[CotizacionesModel.getAll] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
+                    console.error(`[CotizacionesModel.getAll] Cotización IDs del lote:`, batchIds);
+                } else if (productosBatch && Array.isArray(productosBatch)) {
+                    productosAll.push(...productosBatch);
+                }
+            }
+
+            // Mapear productos a cotizaciones
+            if (productosAll && productosAll.length > 0) {
+                productosAll.forEach(p => {
+                    if (p && p.cotizacion_id) {
+                        const arr = productosByCotizacion.get(p.cotizacion_id) || [];
+                        arr.push(p);
+                        productosByCotizacion.set(p.cotizacion_id, arr);
+                    }
+                });
+            }
+
+            // Armar respuesta final con productos incluidos
+            const cotizacionesConProductos = data.map(cotizacion => ({
+                ...cotizacion,
+                productos: productosByCotizacion.get(cotizacion.id) || []
+            }));
+
+            const total = typeof count === 'number' ? count : cotizacionesConProductos?.length || 0;
             const hasNextPage = typeof count === 'number'
                 ? count > offset + sanitizedLimit
-                : (data?.length || 0) === sanitizedLimit;
+                : (cotizacionesConProductos?.length || 0) === sanitizedLimit;
 
             return {
                 success: true,
-                data: data || [],
+                data: cotizacionesConProductos || [],
                 pagination: {
                     total,
                     page: sanitizedPage,
