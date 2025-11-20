@@ -7,6 +7,7 @@ router.use(requireAuth);
 
 router.post('/', pedidosAcopioController.create);
 router.get('/', pedidosAcopioController.getAll);
+router.get('/solicitantes-unicos', pedidosAcopioController.getSolicitantesUnicos);
 router.get('/:id', pedidosAcopioController.getById);
 router.patch('/:id/estado', pedidosAcopioController.updateEstado);
 router.post('/:id/entregar', pedidosAcopioController.entregar);

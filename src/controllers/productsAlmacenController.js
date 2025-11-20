@@ -9,6 +9,7 @@ class productsAlmacenController {
       // Obtener parámetros de la query
       const empresaId = req.query.empresa_id;
       const sucuId = req.query.sucu_id;
+      const ocultarStockCero = req.query.ocultar_stock_cero === 'true' || req.query.ocultar_stock_cero === true;
       
       if (!empresaId) {
         return res.status(400).json({
@@ -33,12 +34,23 @@ class productsAlmacenController {
         empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
       }
 
-      const products = await productsAlmacen.getAll(empresaId, sucuId, empresasAsociadasIds);
+      const products = await productsAlmacen.getAll(empresaId, sucuId, empresasAsociadasIds, ocultarStockCero);
+      
+      // Extraer información de tamaños si existe
+      let sizeInfo = null;
+      let productsData = products;
+      if (products && products._sizeInfo) {
+        sizeInfo = products._sizeInfo;
+        // Remover _sizeInfo del array antes de enviarlo
+        delete products._sizeInfo;
+        productsData = products;
+      }
       
       res.status(200).json({
         success: true,
         message: 'Productos obtenidos exitosamente',
-        data: products
+        data: productsData,
+        sizeInfo: sizeInfo // Incluir información de tamaños en la respuesta
       });
     } catch (error) {
       console.error('Error en productsAlmacenController.getAll:', error);

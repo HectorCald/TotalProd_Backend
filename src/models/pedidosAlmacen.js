@@ -205,7 +205,7 @@ class pedidosAlmacen {
   }
 
   // Obtener todos los pedidos de la sucursal (pedidos que hizo o que están destinados a esta sucursal)
-  static async getAll(sucuId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc', responsableId = null) {
+  static async getAll(sucuId, page = 1, limit = 10, searchQuery = null, estado = null, ordenamiento = 'fecha_desc', responsableId = null, filtroFecha = null) {
     try {
       
       if (!sucuId) {
@@ -268,8 +268,8 @@ class pedidosAlmacen {
 
       let normalizedResponsableId = null;
       if (responsableId && responsableId !== 'null' && responsableId !== 'undefined') {
-        const parsedResponsable = parseInt(responsableId, 10);
-        normalizedResponsableId = Number.isNaN(parsedResponsable) ? responsableId : parsedResponsable;
+        // Mantener como string para evitar problemas con UUIDs y TEXT IDs
+        normalizedResponsableId = String(responsableId);
       }
 
       // Si hay búsqueda, primero obtener IDs de productos por nombre, luego IDs de pedidos por detalle
@@ -303,8 +303,20 @@ class pedidosAlmacen {
         query = query.eq('estado', estado);
       }
 
+      // Filtrar por solicitante (user_id o personal_id)
       if (normalizedResponsableId) {
-        query = query.eq('personal_id', normalizedResponsableId);
+        // El responsableId puede ser user_id o personal_id, intentamos ambos
+        query = query.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
+      }
+
+      // Aplicar filtro de fecha si se proporciona
+      if (filtroFecha) {
+        if (filtroFecha.inicio) {
+          query = query.gte('fecha', filtroFecha.inicio);
+        }
+        if (filtroFecha.fin) {
+          query = query.lte('fecha', filtroFecha.fin);
+        }
       }
 
       // Si hay IDs encontrados, filtrar por esos IDs; si hay búsqueda y no hay IDs, devolver vacío
@@ -473,8 +485,19 @@ class pedidosAlmacen {
         countQuery = countQuery.eq('estado', estado);
       }
 
+      // Filtrar por solicitante (user_id o personal_id) en el conteo también
       if (normalizedResponsableId) {
-        countQuery = countQuery.eq('personal_id', normalizedResponsableId);
+        countQuery = countQuery.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
+      }
+
+      // Aplicar filtro de fecha en el conteo también
+      if (filtroFecha) {
+        if (filtroFecha.inicio) {
+          countQuery = countQuery.gte('fecha', filtroFecha.inicio);
+        }
+        if (filtroFecha.fin) {
+          countQuery = countQuery.lte('fecha', filtroFecha.fin);
+        }
       }
 
       const { count, error: countError } = await countQuery;
@@ -1321,6 +1344,97 @@ class pedidosAlmacen {
     } catch (error) {
       console.error('Error en decrementarTotalPedidosSucursal:', error);
       // No lanzar error para no interrumpir el flujo principal
+    }
+  }
+
+  // Obtener solicitantes únicos (solo IDs de user_id y personal_id)
+  static async getSolicitantesUnicos(sucuId) {
+    try {
+      if (!sucuId) {
+        throw new Error('ID de la sucursal es requerido');
+      }
+
+      // Obtener solo los IDs únicos de user_id y personal_id
+      const { data: pedidos, error } = await supabase
+        .from('pedidos_almacen')
+        .select('user_id, personal_id')
+        .or(`sucursal_id.eq.${sucuId},sucursal_destino_id.eq.${sucuId}`);
+
+      if (error) {
+        throw new Error(`Error al obtener solicitantes: ${error.message}`);
+      }
+
+      // Extraer IDs únicos
+      const userIds = new Set();
+      const personalIds = new Set();
+
+      pedidos.forEach(pedido => {
+        if (pedido.user_id) {
+          userIds.add(pedido.user_id);
+        }
+        if (pedido.personal_id) {
+          personalIds.add(pedido.personal_id);
+        }
+      });
+
+      // Obtener nombres de usuarios y personal
+      const solicitantes = [];
+
+      // Obtener usuarios
+      if (userIds.size > 0) {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .in('id', Array.from(userIds));
+
+        if (usersData) {
+          usersData.forEach(user => {
+            solicitantes.push({
+              id: user.id,
+              name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Usuario desconocido',
+              tipo: 'user',
+              user_id: user.id,
+              personal_id: null
+            });
+          });
+        }
+      }
+
+      // Obtener personal
+      if (personalIds.size > 0) {
+        const { data: personalData } = await supabase
+          .from('personal')
+          .select('id, first_name, last_name')
+          .in('id', Array.from(personalIds));
+
+        if (personalData) {
+          personalData.forEach(personal => {
+            solicitantes.push({
+              id: personal.id,
+              name: `${personal.first_name || ''} ${personal.last_name || ''}`.trim() || 'Personal desconocido',
+              tipo: 'personal',
+              user_id: null,
+              personal_id: personal.id
+            });
+          });
+        }
+      }
+
+      // Ordenar por nombre
+      solicitantes.sort((a, b) => a.name.localeCompare(b.name));
+
+      return {
+        success: true,
+        message: 'Solicitantes obtenidos exitosamente',
+        data: solicitantes
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacen.getSolicitantesUnicos:', error);
+      return {
+        success: false,
+        message: error.message
+      };
     }
   }
 

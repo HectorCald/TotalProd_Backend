@@ -6,7 +6,7 @@ CREATE TABLE deuda_pagos_parciales (
     user_id UUID NULL,
     personal_id UUID NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    
+    detalle TEXT NULL,
     CONSTRAINT deuda_pagos_parciales_deuda_id_fkey
         FOREIGN KEY (deuda_id) REFERENCES deudas (id) ON DELETE CASCADE,
         

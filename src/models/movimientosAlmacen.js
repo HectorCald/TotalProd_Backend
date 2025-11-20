@@ -16,7 +16,7 @@ class movimientosAlmacen {
     static async create(movimientoData) {
         
         try {
-            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden, concepto, ubicacion } = movimientoData;
+            const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden, concepto, ubicacion, porcentaje } = movimientoData;
 
             // Determinar timestamp para el movimiento
             const fechaActual = new Date();
@@ -52,7 +52,12 @@ class movimientosAlmacen {
                 aumento: parseFloat(aumento) || 0,
                 concepto: concepto && concepto.trim() !== '' ? concepto.trim() : null,
                 fecha: fechaMovimientoISO,
-                estado: 'finalizado' // Estado por defecto
+                estado: 'finalizado', // Estado por defecto
+                porcentaje: (() => {
+                    const tieneDescuentoAumento = (parseFloat(descuento) || 0) > 0 || (parseFloat(aumento) || 0) > 0;
+                    if (!tieneDescuentoAumento) return null;
+                    return porcentaje === true ? true : (porcentaje === false ? false : null);
+                })()
             };
 
             // Si hay ubicación, usarla directamente (igual que en clients.js)
@@ -83,7 +88,7 @@ class movimientosAlmacen {
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
                 .insert(insertData)
-                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento, numero_orden, concepto')
+                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento, numero_orden, concepto, porcentaje')
                 .single();
                 
 
@@ -367,7 +372,8 @@ class movimientosAlmacen {
                 descuento: movimiento.descuento,
                 aumento: movimiento.aumento,
                 concepto: movimiento.concepto,
-                numero_orden: movimiento.numero_orden ?? numeroOrdenAsignado
+                numero_orden: movimiento.numero_orden ?? numeroOrdenAsignado,
+                porcentaje: movimiento.porcentaje
             };
 
             // Usar productos con stock calculado (ya calculado arriba) o preparar fallback

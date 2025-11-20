@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const { calculateProductsSizes, logProductsSizes } = require('../utils/dataSizeHelper');
 
 class productsAlmacen {
 
@@ -165,7 +166,7 @@ class productsAlmacen {
   }
 
   // Método para obtener todos los productos de una empresa con stock de sucursal
-  static async getAll(empresaId, sucuId = null, empresasAsociadasIds = []) {
+  static async getAll(empresaId, sucuId = null, empresasAsociadasIds = [], ocultarStockCero = false) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
@@ -252,8 +253,23 @@ class productsAlmacen {
           producto.es_asociado = producto.empresa_id !== empresaId;
         });
       }
+      
+      // Si ocultarStockCero es true y hay sucuId, filtrar productos con stock <= 0
+      let productosFinales = data || [];
+      if (sucuId && ocultarStockCero && data) {
+        productosFinales = data.filter(producto => (Number(producto.stock) || 0) > 0);
+      }
 
-      return data || [];
+      // Calcular y loggear tamaños de datos
+      if (productosFinales && productosFinales.length > 0) {
+        const sizes = calculateProductsSizes(productosFinales);
+        logProductsSizes(sizes, 'getAll');
+        
+        // Agregar información de tamaños a los productos para que el controller pueda enviarla
+        productosFinales._sizeInfo = sizes;
+      }
+
+      return productosFinales;
     } catch (error) {
       console.error('Error al obtener los productos:', error);
       throw new Error('No se pudo obtener los productos');

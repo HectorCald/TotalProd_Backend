@@ -108,6 +108,15 @@ class pedidosAlmacenController {
       const estado = req.query.estado || null;
       const ordenamiento = req.query.ordenamiento || 'fecha_desc';
       const responsableId = req.query.responsable_id || null;
+      
+      // Extraer filtro de fecha
+      let filtroFecha = null;
+      if (req.query.fecha_inicio || req.query.fecha_fin) {
+        filtroFecha = {
+          inicio: req.query.fecha_inicio || null,
+          fin: req.query.fecha_fin || null
+        };
+      }
 
       if (!sucu_id) {
         return res.status(400).json({
@@ -116,7 +125,7 @@ class pedidosAlmacenController {
         });
       }
 
-      const result = await pedidosAlmacen.getAll(sucu_id, page, limit, searchQuery, estado, ordenamiento, responsableId);
+      const result = await pedidosAlmacen.getAll(sucu_id, page, limit, searchQuery, estado, ordenamiento, responsableId, filtroFecha);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -126,6 +135,35 @@ class pedidosAlmacenController {
 
     } catch (error) {
       console.error('Error en pedidosAlmacenController.getAll:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener solicitantes únicos
+  static async getSolicitantesUnicos(req, res) {
+    try {
+      const { sucu_id } = req.query;
+
+      if (!sucu_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de la sucursal es requerido'
+        });
+      }
+
+      const result = await pedidosAlmacen.getSolicitantesUnicos(sucu_id);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacenController.getSolicitantesUnicos:', error);
       return res.status(500).json({
         success: false,
         message: 'Error interno del servidor'

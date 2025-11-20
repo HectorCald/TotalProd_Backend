@@ -430,7 +430,7 @@ class deudasController {
   static async createPagoParcial(req, res) {
     try {
       const { id } = req.params; // deuda id
-      const { monto, fecha } = req.body;
+      const { monto, fecha, detalle } = req.body;
 
       if (!id) {
         return res.status(400).json({ success: false, message: 'ID de la deuda es requerido' });
@@ -443,7 +443,7 @@ class deudasController {
       const user_id = userType === 'employee' ? null : req.user?.id;
       const personal_id = userType === 'employee' ? req.user?.id : null;
 
-      const result = await deudas.createPagoParcial({ deuda_id: id, monto: parseFloat(monto), fecha, user_id, personal_id });
+      const result = await deudas.createPagoParcial({ deuda_id: id, monto: parseFloat(monto), fecha, detalle: detalle || null, user_id, personal_id });
 
       if (!result.success) {
         return res.status(400).json(result);

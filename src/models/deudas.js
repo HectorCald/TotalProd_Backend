@@ -648,7 +648,7 @@ class deudas {
     }
 
     // Registrar pago parcial y actualizar saldo/estado
-    static async createPagoParcial({ deuda_id, monto, fecha, user_id = null, personal_id = null }) {
+    static async createPagoParcial({ deuda_id, monto, fecha, detalle = null, user_id = null, personal_id = null }) {
         try {
             // Obtener deuda actual
             const { data: deudaActual, error: deudaError } = await supabase
@@ -676,6 +676,9 @@ class deudas {
             if (fecha) {
                 // Guardar como timestamp o date según la columna; la tabla usa TIMESTAMPTZ
                 pagoData.fecha = fecha;
+            }
+            if (detalle) {
+                pagoData.detalle = detalle;
             }
 
             const { data: pagoInsertado, error: pagoError } = await supabase

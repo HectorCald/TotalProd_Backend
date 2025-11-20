@@ -10,6 +10,7 @@ router.use(requireAuth);
 router.post('/', pedidosAlmacenController.create);
 router.get('/', pedidosAlmacenController.getAll);
 router.get('/sin-limite', pedidosAlmacenController.getAllSinLimite);
+router.get('/solicitantes-unicos', pedidosAlmacenController.getSolicitantesUnicos);
 router.get('/:id', pedidosAlmacenController.getById);
 router.put('/:id', pedidosAlmacenController.update);
 // router.put('/:id/entrega', pedidosAlmacenController.updateEntrega); // DEPRECATED - no se usa

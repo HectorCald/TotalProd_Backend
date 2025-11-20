@@ -59,6 +59,15 @@ class pedidosAcopioController {
       const estado = req.query.estado || null;
       const ordenamiento = req.query.ordenamiento || 'fecha_desc';
       const responsableId = req.query.responsable_id || null;
+      
+      // Extraer filtro de fecha
+      let filtroFecha = null;
+      if (req.query.fecha_inicio || req.query.fecha_fin) {
+        filtroFecha = {
+          inicio: req.query.fecha_inicio || null,
+          fin: req.query.fecha_fin || null
+        };
+      }
 
       if (!empresa_id) {
         return res.status(400).json({ 
@@ -67,7 +76,7 @@ class pedidosAcopioController {
         });
       }
 
-      const result = await pedidosAcopio.getAll(empresa_id, page, limit, searchQuery, estado, ordenamiento, responsableId);
+      const result = await pedidosAcopio.getAll(empresa_id, page, limit, searchQuery, estado, ordenamiento, responsableId, filtroFecha);
 
       if (result.success) {
         return res.status(200).json(result);
@@ -313,6 +322,32 @@ class pedidosAcopioController {
 
     } catch (error) {
       console.error('Error en pedidosAcopioController.entregar:', error);
+      return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+    }
+  }
+
+  // Obtener solicitantes únicos
+  static async getSolicitantesUnicos(req, res) {
+    try {
+      const { empresa_id } = req.query;
+
+      if (!empresa_id) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'ID de la empresa es requerido' 
+        });
+      }
+
+      const result = await pedidosAcopio.getSolicitantesUnicos(empresa_id);
+
+      if (result.success) {
+        return res.status(200).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+
+    } catch (error) {
+      console.error('Error en pedidosAcopioController.getSolicitantesUnicos:', error);
       return res.status(500).json({ success: false, message: 'Error interno del servidor' });
     }
   }
