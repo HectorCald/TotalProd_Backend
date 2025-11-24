@@ -689,25 +689,23 @@ class movimientosAlmacen {
             }
 
             // Obtener productos y información de usuario para cada movimiento
-			// Hidratación OPTIMIZADA: cargar en lote para evitar N+1
+			// Hidratación OPTIMIZADA: cargar en lotes separados para evitar límite de 1000 líneas
             const movimientoIds = movimientos.map(m => m.id);
 
 			const tHydrateStart = Date.now();
 
-			// 1) Productos de todos los movimientos en lotes (Supabase tiene límite en .in())
-			let tProductosBatchMs = 0;
-			const tProdBatchStart = Date.now();
-			
+			// 1) Primero obtener productos del movimiento SIN relaciones anidadas (para evitar límite de 1000)
 			const productosByMovimiento = new Map();
             (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
             
-            // Dividir movimientoIds en lotes de 100 para evitar límite de Supabase en .in()
-            const batchSize = 100;
-            const productosAll = [];
+            // Dividir movimientoIds en lotes más pequeños para evitar límite de Supabase
+            const batchSize = 50; // Reducir tamaño de lote para evitar límite
+            const productosMovimientoAll = [];
             
             for (let i = 0; i < movimientoIds.length; i += batchSize) {
                 const batchIds = movimientoIds.slice(i, i + batchSize);
                 
+                // Obtener productos SIN relaciones anidadas primero
                 const { data: productosBatch, error: productosError } = await supabase
                     .from('movimiento_almacen_producto')
                     .select(`
@@ -715,13 +713,7 @@ class movimientosAlmacen {
                         producto_almacen_id,
                         cantidad,
                         precio_unitario,
-                        subtotal,
-                        producto:producto_almacen_id(
-                            id,
-                            name,
-                            description,
-                            grup
-                        )
+                        subtotal
                     `)
                     .in('movimiento_almacen_id', batchIds);
                 
@@ -729,22 +721,53 @@ class movimientosAlmacen {
                     console.error(`[MovAlmacenModel.getAll] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
                     console.error(`[MovAlmacenModel.getAll] Movimiento IDs del lote:`, batchIds);
                 } else if (productosBatch && Array.isArray(productosBatch)) {
-                    productosAll.push(...productosBatch);
+                    productosMovimientoAll.push(...productosBatch);
                 }
             }
-			
-			tProductosBatchMs = Date.now() - tProdBatchStart;
             
-            // Mapear productos a movimientos
-            if (productosAll && productosAll.length > 0) {
-                productosAll.forEach(p => {
-                    if (p && p.movimiento_almacen_id) {
-                        const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
-                        arr.push(p);
-                        productosByMovimiento.set(p.movimiento_almacen_id, arr);
-                    }
-                });
+            // 2) Obtener IDs únicos de productos para cargar sus datos
+            const productoIds = [...new Set(productosMovimientoAll.map(p => p.producto_almacen_id))];
+            
+            // 3) Cargar productos de almacén en lotes pequeños para evitar límite de 1000
+            const productosAlmacenMap = new Map();
+            const productoBatchSize = 100; // Lotes de productos más pequeños
+            
+            for (let i = 0; i < productoIds.length; i += productoBatchSize) {
+                const batchProductIds = productoIds.slice(i, i + productoBatchSize);
+                
+                const { data: productosAlmacenBatch, error: productosAlmacenError } = await supabase
+                    .from('products_almacen')
+                    .select(`
+                        id,
+                        name,
+                        description,
+                        grup
+                    `)
+                    .in('id', batchProductIds);
+                
+                if (productosAlmacenError) {
+                    console.error(`[MovAlmacenModel.getAll] Error obteniendo productos almacén (lote ${Math.floor(i/productoBatchSize) + 1}):`, productosAlmacenError);
+                } else if (productosAlmacenBatch && Array.isArray(productosAlmacenBatch)) {
+                    productosAlmacenBatch.forEach(prod => {
+                        productosAlmacenMap.set(prod.id, prod);
+                    });
+                }
             }
+            
+            // 4) Combinar productos del movimiento con sus datos de almacén
+            productosMovimientoAll.forEach(p => {
+                if (p && p.movimiento_almacen_id) {
+                    const productoAlmacen = productosAlmacenMap.get(p.producto_almacen_id);
+                    const productoCompleto = {
+                        ...p,
+                        producto: productoAlmacen || null
+                    };
+                    
+                    const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
+                    arr.push(productoCompleto);
+                    productosByMovimiento.set(p.movimiento_almacen_id, arr);
+                }
+            });
 
             // Usuarios y personal vienen embebidos en la query principal (sin llamadas extra)
 
@@ -1879,39 +1902,80 @@ class movimientosAlmacen {
                 };
             }
 
-            // Hidratación OPTIMIZADA: cargar productos en lote para evitar N+1
+            // Hidratación OPTIMIZADA: cargar productos en lotes separados para evitar límite de 1000 líneas
             const movimientoIds = movimientos.map(m => m.id);
 
-            // 1) Productos de todos los movimientos en una sola consulta (igual que getAll)
-            const { data: productosAll, error: productosError } = await supabase
-                .from('movimiento_almacen_producto')
-                .select(`
-                    movimiento_almacen_id,
-                    producto_almacen_id,
-                    cantidad,
-                    precio_unitario,
-                    subtotal,
-                    producto:producto_almacen_id(
+            // 1) Primero obtener productos del movimiento SIN relaciones anidadas
+            const productosByMovimiento = new Map();
+            (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
+            
+            // Dividir movimientoIds en lotes para evitar límite de Supabase
+            const batchSize = 50;
+            const productosMovimientoAll = [];
+            
+            for (let i = 0; i < movimientoIds.length; i += batchSize) {
+                const batchIds = movimientoIds.slice(i, i + batchSize);
+                
+                const { data: productosBatch, error: productosError } = await supabase
+                    .from('movimiento_almacen_producto')
+                    .select(`
+                        movimiento_almacen_id,
+                        producto_almacen_id,
+                        cantidad,
+                        precio_unitario,
+                        subtotal
+                    `)
+                    .in('movimiento_almacen_id', batchIds);
+                
+                if (productosError) {
+                    console.error(`[MovAlmacenModel.getByCliente] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
+                } else if (productosBatch && Array.isArray(productosBatch)) {
+                    productosMovimientoAll.push(...productosBatch);
+                }
+            }
+            
+            // 2) Obtener IDs únicos de productos para cargar sus datos
+            const productoIds = [...new Set(productosMovimientoAll.map(p => p.producto_almacen_id))];
+            
+            // 3) Cargar productos de almacén en lotes pequeños
+            const productosAlmacenMap = new Map();
+            const productoBatchSize = 100;
+            
+            for (let i = 0; i < productoIds.length; i += productoBatchSize) {
+                const batchProductIds = productoIds.slice(i, i + productoBatchSize);
+                
+                const { data: productosAlmacenBatch, error: productosAlmacenError } = await supabase
+                    .from('products_almacen')
+                    .select(`
                         id,
                         name,
                         description,
                         grup
-                    )
-                `)
-                .in('movimiento_almacen_id', movimientoIds);
-
-            if (productosError) {
-                console.error('Error obteniendo productos:', productosError);
-                return { success: false, message: 'Error al obtener productos', error: productosError };
+                    `)
+                    .in('id', batchProductIds);
+                
+                if (productosAlmacenError) {
+                    console.error(`[MovAlmacenModel.getByCliente] Error obteniendo productos almacén (lote ${Math.floor(i/productoBatchSize) + 1}):`, productosAlmacenError);
+                } else if (productosAlmacenBatch && Array.isArray(productosAlmacenBatch)) {
+                    productosAlmacenBatch.forEach(prod => {
+                        productosAlmacenMap.set(prod.id, prod);
+                    });
+                }
             }
-
-            // Crear mapa de productos por movimiento
-            const productosByMovimiento = new Map();
-            (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
-            (productosAll || []).forEach(p => {
-                const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
-                arr.push(p);
-                productosByMovimiento.set(p.movimiento_almacen_id, arr);
+            
+            // 4) Combinar productos del movimiento con sus datos de almacén
+            productosMovimientoAll.forEach(p => {
+                if (p && p.movimiento_almacen_id) {
+                    const productoAlmacen = productosAlmacenMap.get(p.producto_almacen_id);
+                    const productoCompleto = {
+                        ...p,
+                        producto: productoAlmacen || null
+                    };
+                    
+                    const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
+                    arr.push(productoCompleto);
+                    productosByMovimiento.set(p.movimiento_almacen_id, arr);
+                }
             });
 
             // Armar respuesta final con productos incluidos
@@ -1978,39 +2042,80 @@ class movimientosAlmacen {
                 };
             }
 
-            // Hidratación OPTIMIZADA: cargar productos en lote para evitar N+1
+            // Hidratación OPTIMIZADA: cargar productos en lotes separados para evitar límite de 1000 líneas
             const movimientoIds = movimientos.map(m => m.id);
 
-            // 1) Productos de todos los movimientos en una sola consulta
-            const { data: productosAll, error: productosError } = await supabase
-                .from('movimiento_almacen_producto')
-                .select(`
-                    movimiento_almacen_id,
-                    producto_almacen_id,
-                    cantidad,
-                    precio_unitario,
-                    subtotal,
-                    producto:producto_almacen_id(
+            // 1) Primero obtener productos del movimiento SIN relaciones anidadas
+            const productosByMovimiento = new Map();
+            (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
+            
+            // Dividir movimientoIds en lotes para evitar límite de Supabase
+            const batchSize = 50;
+            const productosMovimientoAll = [];
+            
+            for (let i = 0; i < movimientoIds.length; i += batchSize) {
+                const batchIds = movimientoIds.slice(i, i + batchSize);
+                
+                const { data: productosBatch, error: productosError } = await supabase
+                    .from('movimiento_almacen_producto')
+                    .select(`
+                        movimiento_almacen_id,
+                        producto_almacen_id,
+                        cantidad,
+                        precio_unitario,
+                        subtotal
+                    `)
+                    .in('movimiento_almacen_id', batchIds);
+                
+                if (productosError) {
+                    console.error(`[MovAlmacenModel.getByProduccionDamabrava] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
+                } else if (productosBatch && Array.isArray(productosBatch)) {
+                    productosMovimientoAll.push(...productosBatch);
+                }
+            }
+            
+            // 2) Obtener IDs únicos de productos para cargar sus datos
+            const productoIds = [...new Set(productosMovimientoAll.map(p => p.producto_almacen_id))];
+            
+            // 3) Cargar productos de almacén en lotes pequeños
+            const productosAlmacenMap = new Map();
+            const productoBatchSize = 100;
+            
+            for (let i = 0; i < productoIds.length; i += productoBatchSize) {
+                const batchProductIds = productoIds.slice(i, i + productoBatchSize);
+                
+                const { data: productosAlmacenBatch, error: productosAlmacenError } = await supabase
+                    .from('products_almacen')
+                    .select(`
                         id,
                         name,
                         description,
                         grup
-                    )
-                `)
-                .in('movimiento_almacen_id', movimientoIds);
-
-            if (productosError) {
-                console.error('Error obteniendo productos:', productosError);
-                return { success: false, message: 'Error al obtener productos', error: productosError };
+                    `)
+                    .in('id', batchProductIds);
+                
+                if (productosAlmacenError) {
+                    console.error(`[MovAlmacenModel.getByProduccionDamabrava] Error obteniendo productos almacén (lote ${Math.floor(i/productoBatchSize) + 1}):`, productosAlmacenError);
+                } else if (productosAlmacenBatch && Array.isArray(productosAlmacenBatch)) {
+                    productosAlmacenBatch.forEach(prod => {
+                        productosAlmacenMap.set(prod.id, prod);
+                    });
+                }
             }
-
-            // Crear mapa de productos por movimiento
-            const productosByMovimiento = new Map();
-            (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
-            (productosAll || []).forEach(p => {
-                const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
-                arr.push(p);
-                productosByMovimiento.set(p.movimiento_almacen_id, arr);
+            
+            // 4) Combinar productos del movimiento con sus datos de almacén
+            productosMovimientoAll.forEach(p => {
+                if (p && p.movimiento_almacen_id) {
+                    const productoAlmacen = productosAlmacenMap.get(p.producto_almacen_id);
+                    const productoCompleto = {
+                        ...p,
+                        producto: productoAlmacen || null
+                    };
+                    
+                    const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
+                    arr.push(productoCompleto);
+                    productosByMovimiento.set(p.movimiento_almacen_id, arr);
+                }
             });
 
             // Armar respuesta final con productos incluidos
