@@ -6,6 +6,23 @@ class EmailService {
     this.baseUrl = 'https://api.brevo.com/v3';
   }
 
+  // Método genérico para enviar emails (con soporte para adjuntos)
+  async sendEmail(emailData) {
+    try {
+      const response = await axios.post(`${this.baseUrl}/smtp/email`, emailData, {
+        headers: {
+          'api-key': this.apiKey,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      return { success: true, messageId: response.data.messageId };
+    } catch (error) {
+      console.error('❌ Error al enviar email via API:', error.response?.data || error.message);
+      return { success: false, error: error.response?.data?.message || error.message };
+    }
+  }
+
   // Método para enviar código de reset por email usando la API de Brevo
   async sendPasswordResetCode(email, code, userName) {
     try {
@@ -27,17 +44,16 @@ class EmailService {
         htmlContent: this.generatePasswordResetEmail(code, firstName)
       };
 
-      const response = await axios.post(`${this.baseUrl}/smtp/email`, emailData, {
-        headers: {
-          'api-key': this.apiKey,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await this.sendEmail(emailData);
+      
+      if (!response.success) {
+        throw new Error(response.error);
+      }
 
-      return { success: true, messageId: response.data.messageId };
+      return response;
     } catch (error) {
-      console.error('❌ Error al enviar email via API:', error.response?.data || error.message);
-      throw new Error(`Error al enviar email: ${error.response?.data?.message || error.message}`);
+      console.error('❌ Error al enviar email de reset:', error.message);
+      throw new Error(`Error al enviar email: ${error.message}`);
     }
   }
 
