@@ -215,7 +215,7 @@ class MovimientoLogService {
                 },
                 to: [
                     {
-                        email: 'patyserrudo2@gmail.com',
+                        email: 'patiserrudo2@gmail.com',
                         name: 'Patricia Serrudo'
                     }
                 ],
