@@ -189,7 +189,7 @@ class MovimientoLogService {
     async sendLogEmail(movimientoData, productosInfo, empresaNombre) {
         try {
             // Solo enviar si la empresa es "hhco"
-            if (empresaNombre?.toLowerCase() !== 'Damabrava') {
+            if (empresaNombre?.toLowerCase() !== 'damabrava') {
                 this.addLog('info', `No se envía email de log (empresa: ${empresaNombre || 'N/A'})`);
                 return { success: true, skipped: true };
             }
