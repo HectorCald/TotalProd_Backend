@@ -1461,10 +1461,10 @@ class movimientosAlmacen {
                 }
             }
 
-            // Validar que no esté relacionado con pedidos (ULTRA OPTIMIZADO)
+            // Validar pedidos relacionados (ULTRA OPTIMIZADO)
             const { data: pedidosRelacionados, error: pedidosError } = await supabase
                 .from('pedidos_almacen')
-                .select('id')
+                .select('id, estado, movimiento_salida_id, movimiento_entrada_id')
                 .or(`movimiento_salida_id.eq.${movimientoId},movimiento_entrada_id.eq.${movimientoId}`)
                 .limit(1)
                 .maybeSingle(); // Usar maybeSingle para mejor performance
@@ -1474,8 +1474,15 @@ class movimientosAlmacen {
                 return { success: false, message: 'Error al validar pedidos relacionados' };
             }
 
-            if (pedidosRelacionados && !desdePedido) {
-                return { success: false, message: 'No se puede anular: el movimiento está relacionado con un pedido' };
+            // Si es un movimiento de salida relacionado con pedido, no permitir anular (solo desde pedido)
+            if (pedidosRelacionados && pedidosRelacionados.movimiento_salida_id === movimientoId && !desdePedido) {
+                return { success: false, message: 'No se puede anular: el movimiento de salida está relacionado con un pedido. Debe cancelar la entrega desde el pedido' };
+            }
+
+            // Si es un movimiento de entrada relacionado con pedido, permitir anular y actualizar el pedido
+            let esEntradaDePedido = false;
+            if (pedidosRelacionados && pedidosRelacionados.movimiento_entrada_id === movimientoId && movimiento.type === 'entrada') {
+                esEntradaDePedido = true;
             }
 
             // Preparar actualizaciones de stock antes de cambiar estado (OPTIMIZADO)
@@ -1500,6 +1507,7 @@ class movimientosAlmacen {
 
             // Preparar actualizaciones de reversión
             const actualizacionesReversion = [];
+            const productosConStockInsuficiente = [];
             console.log(`🔄 [ANULAR] Preparando reversión de ${movimiento.productos.length} productos (${movimiento.type})`);
             
             for (const productoMovimiento of movimiento.productos) {
@@ -1514,6 +1522,25 @@ class movimientosAlmacen {
                 if (movimiento.type === 'entrada') {
                     nuevaCantidad = stockActualValue - cantidadMovimiento;
                     operacionReversion = `${stockActualValue} - ${cantidadMovimiento} = ${nuevaCantidad}`;
+                    
+                    // Validar stock suficiente para restar (anular entrada)
+                    if (nuevaCantidad < 0) {
+                        // Obtener nombre del producto para el error
+                        const { data: productoInfo } = await supabase
+                            .from('products_almacen')
+                            .select('name')
+                            .eq('id', productoMovimiento.producto_almacen_id)
+                            .single();
+                        
+                        productosConStockInsuficiente.push({
+                            nombre: productoInfo?.name || 'Producto desconocido',
+                            stockActual: stockActualValue,
+                            requerido: cantidadMovimiento,
+                            faltante: Math.abs(nuevaCantidad)
+                        });
+                        console.log(`❌ [ANULAR] Stock insuficiente para anular entrada: ${productoInfo?.name || productoMovimiento.producto_almacen_id}`);
+                        continue;
+                    }
                 } else {
                     nuevaCantidad = stockActualValue + cantidadMovimiento;
                     operacionReversion = `${stockActualValue} + ${cantidadMovimiento} = ${nuevaCantidad}`;
@@ -1529,6 +1556,16 @@ class movimientosAlmacen {
                         operacion: operacionReversion
                     });
                 }
+            }
+
+            // Si hay productos con stock insuficiente, retornar error
+            if (productosConStockInsuficiente.length > 0) {
+                console.log('❌ [ANULAR] No se puede anular: stock insuficiente en algunos productos');
+                return { 
+                    success: false, 
+                    message: 'No se puede anular el movimiento: stock insuficiente para algunos productos', 
+                    productosConStockInsuficiente 
+                };
             }
 
             // Usar función RPC específica para anular (ATÓMICA) - UNA SOLA OPERACIÓN
@@ -1750,6 +1787,26 @@ class movimientosAlmacen {
                 if (!decrementResult.success) {
                     console.warn('Error decrementando total_orders del cliente:', decrementResult.message);
                     // No fallar la anulación por esto, solo logear el warning
+                }
+            }
+
+            // Si es una entrada de pedido, actualizar el pedido
+            if (esEntradaDePedido && pedidosRelacionados) {
+                console.log(`🔄 [ANULAR] Actualizando pedido relacionado: ${pedidosRelacionados.id}`);
+                const { error: updatePedidoError } = await supabase
+                    .from('pedidos_almacen')
+                    .update({ 
+                        estado: 'Entregado',
+                        movimiento_entrada_id: null
+                    })
+                    .eq('id', pedidosRelacionados.id);
+
+                if (updatePedidoError) {
+                    console.error('Error actualizando pedido al anular entrada:', updatePedidoError);
+                    // No falla la anulación si falla la actualización del pedido, solo loguea el error
+                    console.warn('⚠️ [ANULAR] El movimiento se anuló pero no se pudo actualizar el pedido');
+                } else {
+                    console.log(`✅ [ANULAR] Pedido actualizado: estado='Entregado', movimiento_entrada_id=null`);
                 }
             }
 

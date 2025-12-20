@@ -437,12 +437,37 @@ class movimientosAlmacenController {
                 return res.status(404).json(result);
             }
 
-            // Verificar que el movimiento pertenece a la sucursal
-            if (result.data.sucu_id !== sucu_id) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'No tienes permisos para ver este movimiento'
-                });
+            // Verificar que el movimiento pertenece a la sucursal O está relacionado con un pedido entre sucursales
+            const movimientoPerteneceASucursal = result.data.sucu_id === sucu_id;
+            
+            if (!movimientoPerteneceASucursal) {
+                // Verificar si el movimiento está relacionado con un pedido donde la sucursal actual participa
+                const { data: pedidos, error: pedidosError } = await require('../config/supabase').supabase
+                    .from('pedidos_almacen')
+                    .select('id, sucursal_id, sucursal_destino_id, movimiento_salida_id, movimiento_entrada_id')
+                    .or(`movimiento_salida_id.eq.${id},movimiento_entrada_id.eq.${id}`)
+                    .limit(1);
+
+                if (!pedidosError && pedidos && pedidos.length > 0) {
+                    const pedido = pedidos[0];
+                    // Permitir acceso si la sucursal actual es la que solicita o la que entrega el pedido
+                    const sucursalParticipaEnPedido = 
+                        pedido.sucursal_id === sucu_id || 
+                        pedido.sucursal_destino_id === sucu_id;
+                    
+                    if (!sucursalParticipaEnPedido) {
+                        return res.status(403).json({
+                            success: false,
+                            message: 'No tienes permisos para ver este movimiento'
+                        });
+                    }
+                } else {
+                    // Si no está relacionado con un pedido, no tiene acceso
+                    return res.status(403).json({
+                        success: false,
+                        message: 'No tienes permisos para ver este movimiento'
+                    });
+                }
             }
 
             res.json({
