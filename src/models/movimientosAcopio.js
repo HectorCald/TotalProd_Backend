@@ -10,6 +10,23 @@ const normalizeText = (text) => {
         .trim();
 };
 
+// Función para generar código aleatorio de 8 caracteres alfanuméricos
+const generarCodigoAleatorio = () => {
+    const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let codigo = '';
+    for (let i = 0; i < 8; i++) {
+        codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+    }
+    return codigo;
+};
+
+// Función para generar código de movimiento
+const generarCodigoMovimiento = (type) => {
+    const prefijo = type === 'salida' ? 'SAL' : 'ENT';
+    const codigoAleatorio = generarCodigoAleatorio();
+    return `#${prefijo}-${codigoAleatorio}`;
+};
+
 class movimientosAcopio {
   // Crear un movimiento
   static async create(movimientoData, userId, personalId = null) {
@@ -39,6 +56,9 @@ class movimientosAcopio {
       const ahora = new Date();
       const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
 
+      // Generar código único para el movimiento
+      const codigoMovimiento = generarCodigoMovimiento(movimientoData.type);
+
       const dbData = {
         product_id: movimientoData.product_id,
         sucu_id: movimientoData.sucu_id,
@@ -51,7 +71,8 @@ class movimientosAcopio {
         metodo_pago: movimientoData.metodo_pago || null,
         gasto_id: movimientoData.gasto_id || null,
         restar_ingredientes: movimientoData.restar_ingredientes || false,
-        date: ahoraBolivia.toISOString() // Usar timestamp en zona horaria de Bolivia
+        date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
+        codigo: codigoMovimiento
       };
 
       // Solo incluir user_id o personal_id si no son null

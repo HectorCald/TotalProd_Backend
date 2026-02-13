@@ -70,7 +70,8 @@ class HistorialController {
                 limit,
                 offset,
                 user_id,
-                personal_id
+                personal_id,
+                search
             } = req.query;
 
             const resolvedEmpresaId = empresa_id || req.user?.empresa_id || req.user?.empresaId;
@@ -89,6 +90,7 @@ class HistorialController {
                 registro_id,
                 user_id,
                 personal_id,
+                search: search || null,
                 limit: limit ? parseInt(limit, 10) : undefined,
                 offset: offset ? parseInt(offset, 10) : undefined
             });
@@ -100,6 +102,33 @@ class HistorialController {
             return res.json(result);
         } catch (error) {
             console.error('Error en HistorialController.getAll:', error);
+            return res.status(500).json({
+                success: false,
+                message: error.message || 'Error interno del servidor'
+            });
+        }
+    }
+
+    static async getResponsablesUnicos(req, res) {
+        try {
+            const empresa_id = req.query.empresa_id || req.user?.empresa_id || req.user?.empresaId;
+
+            if (!empresa_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El campo empresa_id es obligatorio'
+                });
+            }
+
+            const result = await Historial.getResponsablesUnicos(empresa_id);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            return res.json(result);
+        } catch (error) {
+            console.error('Error en HistorialController.getResponsablesUnicos:', error);
             return res.status(500).json({
                 success: false,
                 message: error.message || 'Error interno del servidor'

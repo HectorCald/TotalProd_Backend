@@ -175,6 +175,62 @@ class clientsController {
       });
     }
   }
+
+  // Obtener un cliente por ID
+  static async getById(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del cliente es requerido'
+        });
+      }
+
+      const clientData = await client.getById(id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Cliente obtenido exitosamente',
+        data: clientData
+      });
+    } catch (error) {
+      console.error('Error en getById:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener ubicación del cliente (tabla clients o último movimiento con ubicación)
+  static async getLocation(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del cliente es requerido'
+        });
+      }
+
+      const result = await client.getLocation(id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Ubicación obtenida',
+        data: result
+      });
+    } catch (error) {
+      console.error('Error en getLocation:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
 }
 
 module.exports = clientsController;

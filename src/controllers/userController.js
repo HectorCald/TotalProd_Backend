@@ -118,7 +118,7 @@ class UserController {
       if (!user) {
         return res.status(401).json({
           success: false,
-          message: 'Credenciales inválidas'
+          message: 'Contraseña o correo electrónico incorrecto. Verifica los datos e intenta nuevamente.'
         });
       }
 

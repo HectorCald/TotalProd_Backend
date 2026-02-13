@@ -1,5 +1,21 @@
 const { supabase } = require('../config/supabase');
 
+// Función para generar código aleatorio de 8 caracteres alfanuméricos
+const generarCodigoAleatorio = () => {
+    const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let codigo = '';
+    for (let i = 0; i < 8; i++) {
+        codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+    }
+    return codigo;
+};
+
+// Función para generar código de pedido
+const generarCodigoPedido = () => {
+    const codigoAleatorio = generarCodigoAleatorio();
+    return `#PED-${codigoAleatorio}`;
+};
+
 class pedidosAlmacen {
   // Crear un pedido
   static async create(pedidoData, userId, empresaId, personalId = null, sucuId = null) {
@@ -52,6 +68,9 @@ class pedidosAlmacen {
 
       const numeroPedido = sucursalActualizada?.total_pedidos || 0;
 
+      // Generar código único para el pedido
+      const codigoPedido = generarCodigoPedido();
+
       // Crear el pedido principal
       const pedidoPrincipal = {
         empresa_id: empresaId,
@@ -62,7 +81,8 @@ class pedidosAlmacen {
         estado: 'Pendiente',
         fecha: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
         agrupado: !!pedidoData.agrupado,
-        numero_pedido: numeroPedido
+        numero_pedido: numeroPedido,
+        codigo: codigoPedido
       };
 
       // Solo agregar user_id o personal_id si tienen valor

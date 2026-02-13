@@ -11,8 +11,10 @@ router.use(requireAuth);
 // Aplicar middleware de acceso al módulo 'Clientes' a todas las rutas
 router.use(requireModuleAccess('Clientes'));
 
-// Rutas para los clientes
+// Rutas para los clientes (/:id/location debe ir antes de /:id)
 router.get('/', clientsController.getAll);
+router.get('/:id/location', clientsController.getLocation);
+router.get('/:id', clientsController.getById);
 router.post('/', clientsController.create);
 router.put('/:id', clientsController.update);
 router.delete('/:id', clientsController.delete);

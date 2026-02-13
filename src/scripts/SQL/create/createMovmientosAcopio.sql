@@ -14,6 +14,7 @@ CREATE TABLE movimientos_acopio (
     gasto_id UUID,
     restar_ingredientes BOOLEAN NOT NULL DEFAULT FALSE,
     movimiento_entrada_id UUID,
+    codigo TEXT NULL,
     CONSTRAINT movimientos_acopio_movimiento_entrada_id_fkey 
         FOREIGN KEY (movimiento_entrada_id) REFERENCES movimientos_acopio (id),
     date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

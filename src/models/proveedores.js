@@ -140,6 +140,35 @@ class proveedores {
       throw error;
     }
   }
+
+  // Obtener un proveedor por ID
+  static async getById(id) {
+    try {
+      if (!id) {
+        throw new Error('ID del proveedor es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('proveedores')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Error de Supabase:', error);
+        throw new Error('No se pudo obtener el proveedor');
+      }
+
+      if (!data) {
+        throw new Error('Proveedor no encontrado');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error al obtener el proveedor:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = proveedores;

@@ -13,6 +13,7 @@ CREATE TABLE cotizaciones (
     fecha_vencimiento DATE NULL,                     -- Fecha hasta la cual es válida la cotización
     agrupado BOOLEAN NOT NULL DEFAULT FALSE,
     precio_id UUID,
+    codigo TEXT NULL,
     CONSTRAINT cotizaciones_precio_id_fkey
         FOREIGN KEY (precio_id) REFERENCES prices_types (id),
     CONSTRAINT cotizaciones_cliente_id_fkey

@@ -14,7 +14,7 @@ class clients {
     this.sucu_id = data.sucu_id;
   }
 
-  // Método para obtener todos los clientes de una sucursal
+  // Método para obtener todos los clientes de una sucursal (solo datos de la tabla clients).
   static async getAll(sucuId) {
     try {
       if (!sucuId) {
@@ -29,11 +29,53 @@ class clients {
       if (error) {
         throw new Error('No se pudo obtener los clientes');
       }
-      
-      return data;
+
+      return data || [];
     } catch (error) {
       console.error('Error al obtener los clientes:', error);
       throw new Error('No se pudo obtener los clientes');
+    }
+  }
+
+  // Obtener la ubicación de un cliente: la de la tabla clients si existe;
+  // si no, la del último movimiento (movimientos_almacen.ubicacion) donde cliente_id = id y ubicacion no es null.
+  static async getLocation(clientId) {
+    try {
+      if (!clientId) {
+        return { location: null };
+      }
+
+      const { data: client, error: errClient } = await supabase
+        .from('clients')
+        .select('location')
+        .eq('id', clientId)
+        .single();
+
+      if (errClient || !client) {
+        return { location: null };
+      }
+
+      if (client.location != null) {
+        return { location: client.location };
+      }
+
+      const { data: mov, error: errMov } = await supabase
+        .from('movimientos_almacen')
+        .select('ubicacion')
+        .eq('cliente_id', clientId)
+        .not('ubicacion', 'is', null)
+        .order('fecha', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (errMov || !mov || mov.ubicacion == null) {
+        return { location: null };
+      }
+
+      return { location: mov.ubicacion };
+    } catch (error) {
+      console.error('Error al obtener ubicación del cliente:', error);
+      return { location: null };
     }
   }
 
@@ -137,6 +179,35 @@ class clients {
       }
     } catch (error) {
       console.error('Error al actualizar el cliente:', error);
+      throw error;
+    }
+  }
+
+  // Obtener un cliente por ID
+  static async getById(id) {
+    try {
+      if (!id) {
+        throw new Error('ID del cliente es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Error de Supabase:', error);
+        throw new Error('No se pudo obtener el cliente');
+      }
+
+      if (!data) {
+        throw new Error('Cliente no encontrado');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error al obtener el cliente:', error);
       throw error;
     }
   }

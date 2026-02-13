@@ -112,6 +112,7 @@ class Historial {
                 registro_id = null,
                 user_id = null,
                 personal_id = null,
+                search = null,
                 limit = 50,
                 offset = 0
             } = filters;
@@ -159,6 +160,11 @@ class Historial {
                 query = query.eq('personal_id', personal_id);
             }
 
+            if (search && typeof search === 'string' && search.trim() !== '') {
+                const term = `%${search.trim()}%`;
+                query = query.or(`modulo.ilike.${term},lugar_afectado.ilike.${term}`);
+            }
+
             const { data, error, count } = await query;
 
             if (error) {
@@ -185,13 +191,17 @@ class Historial {
                 return processed;
             });
 
+            const total = count || 0;
+            const hasNextPage = (offset + limit) < total;
+
             return {
                 success: true,
                 data: processedData,
                 pagination: {
-                    total: count || 0,
+                    total,
                     limit,
-                    offset
+                    offset,
+                    hasNextPage
                 }
             };
         } catch (error) {
@@ -199,6 +209,74 @@ class Historial {
             return {
                 success: false,
                 message: 'Error al obtener el historial',
+                error
+            };
+        }
+    }
+
+    static async getResponsablesUnicos(empresaId) {
+        try {
+            if (!empresaId) {
+                throw new Error('El campo empresa_id es obligatorio.');
+            }
+
+            const { data: historial, error } = await supabase
+                .from('historial_acciones')
+                .select('user_id, personal_id')
+                .eq('empresa_id', empresaId);
+
+            if (error) throw error;
+
+            const userIds = new Set();
+            const personalIds = new Set();
+            (historial || []).forEach(h => {
+                if (h.user_id) userIds.add(h.user_id);
+                if (h.personal_id) personalIds.add(h.personal_id);
+            });
+
+            const responsables = [];
+
+            if (userIds.size > 0) {
+                const { data: usersData } = await supabase
+                    .from('users')
+                    .select('id, first_name, last_name')
+                    .in('id', Array.from(userIds));
+
+                (usersData || []).forEach(user => {
+                    responsables.push({
+                        id: user.id,
+                        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Usuario desconocido',
+                        tipo: 'user'
+                    });
+                });
+            }
+
+            if (personalIds.size > 0) {
+                const { data: personalData } = await supabase
+                    .from('personal')
+                    .select('id, first_name, last_name')
+                    .in('id', Array.from(personalIds));
+
+                (personalData || []).forEach(p => {
+                    responsables.push({
+                        id: p.id,
+                        name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Personal desconocido',
+                        tipo: 'personal'
+                    });
+                });
+            }
+
+            responsables.sort((a, b) => a.name.localeCompare(b.name));
+
+            return {
+                success: true,
+                data: responsables
+            };
+        } catch (error) {
+            console.error('Error en Historial.getResponsablesUnicos:', error);
+            return {
+                success: false,
+                message: error.message || 'Error al obtener responsables',
                 error
             };
         }

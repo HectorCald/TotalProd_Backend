@@ -173,6 +173,34 @@ class proveedoresController {
       });
     }
   }
+
+  // Obtener un proveedor por ID
+  static async getById(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del proveedor es requerido'
+        });
+      }
+
+      const proveedorData = await proveedor.getById(id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Proveedor obtenido exitosamente',
+        data: proveedorData
+      });
+    } catch (error) {
+      console.error('Error en getById:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
 }
 
 module.exports = proveedoresController;

@@ -20,6 +20,40 @@ class User {
     this.logo_tipo = data.logo_tipo || null; // Logo de la empresa
   }
 
+  /**
+   * Genera un código único para empresa: nombre (minúscula, sin espacios/acentos) + inicial primer nombre + inicial primer apellido.
+   * Si ya existe, añade 1, 2, etc. al final.
+   */
+  static async generateCodigoEmpresa(nameStore, firstName, lastName) {
+    const normalize = (text) => {
+      if (!text || typeof text !== 'string') return '';
+      return text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '');
+    };
+    const nombreEmpresa = normalize(nameStore);
+    const inicialNombre = firstName && firstName.trim().length > 0 ? normalize(firstName.trim()[0]) : '';
+    const inicialApellido = lastName && lastName.trim().length > 0 ? normalize(lastName.trim()[0]) : '';
+    const baseCodigo = nombreEmpresa + inicialNombre + inicialApellido;
+    if (!baseCodigo) return null;
+
+    let candidate = baseCodigo;
+    let suffix = 0;
+    for (;;) {
+      const { data: existing, error } = await supabase
+        .from('empresas')
+        .select('id')
+        .eq('codigo', candidate)
+        .maybeSingle();
+      if (error) throw new Error(`Error al verificar código de empresa: ${error.message}`);
+      if (!existing) return candidate;
+      suffix += 1;
+      candidate = baseCodigo + String(suffix);
+    }
+  }
+
   // Método estático para crear un usuario
   static async create(userData) {
     try {
@@ -79,12 +113,20 @@ class User {
         throw new Error(`Error al asignar plan Free: ${userPlanError.message}`);
       }
 
-      // 5. Crear empresa para el usuario (OBLIGATORIO)
+      // 5. Generar código único: nombre empresa (minúscula, sin espacios/acentos) + inicial nombre + inicial apellido; si existe, añadir 1, 2, etc.
+      const codigo = await User.generateCodigoEmpresa(
+        userData.nameStore,
+        userData.firstName,
+        userData.lastName
+      );
+
+      // 6. Crear empresa para el usuario (OBLIGATORIO)
       const empresaData = {
         name: userData.nameStore, // Ya validado en frontend, no necesita fallback
         description: null, // Siempre null según nueva estructura
         propietario_id: insertedUser.id,
-        tipo: null // Tipo inicial null, se seleccionará después
+        tipo: null, // Tipo inicial null, se seleccionará después
+        codigo: codigo
       };
 
       const { data: insertedEmpresa, error: empresaError } = await supabase
@@ -102,7 +144,7 @@ class User {
         throw new Error('No se pudo crear la empresa');
       }
 
-      // 6. Crear sucursal "Casa Matriz" para la empresa (OBLIGATORIO)
+      // 7. Crear sucursal "Casa Matriz" para la empresa (OBLIGATORIO)
       const sucursalData = {
         empresa_id: insertedEmpresa.id,
         name: 'Casa Matriz'
@@ -117,7 +159,7 @@ class User {
         throw new Error(`Error al crear sucursal Casa Matriz: ${sucursalError.message}`);
       }
 
-      // 7. Crear tipo de precio por defecto "Principal" para la empresa (OBLIGATORIO)
+      // 8. Crear tipo de precio por defecto "Principal" para la empresa (OBLIGATORIO)
       const precioTypeData = {
         empresa_id: insertedEmpresa.id,
         name: 'Principal',
@@ -133,7 +175,7 @@ class User {
         throw new Error(`Error al crear tipo de precio Principal: ${precioTypeError.message}`);
       }
 
-      // 8. Retornar instancia del modelo User
+      // 9. Retornar instancia del modelo User
       return new User(insertedUser);
 
     } catch (error) {

@@ -13,6 +13,7 @@ router.use(requireModuleAccess('Proveedores'));
 
 // Rutas para los proveedores
 router.get('/', proveedoresController.getAll);
+router.get('/:id', proveedoresController.getById);
 router.post('/', proveedoresController.create);
 router.put('/:id', proveedoresController.update);
 router.delete('/:id', proveedoresController.delete);

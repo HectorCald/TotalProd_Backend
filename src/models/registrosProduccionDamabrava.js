@@ -408,6 +408,65 @@ class registrosProduccionDamabrava {
         }
     }
 
+    // Obtener un registro de producción por ID
+    static async getById(id) {
+        try {
+            if (!id) {
+                return { success: false, message: 'ID es requerido' };
+            }
+
+            const { data, error } = await supabase
+                .from('registros_produccion_damabrava')
+                .select(`
+                    *,
+                    producto_almacen:producto_almacen_id(
+                        id,
+                        name,
+                        description
+                    ),
+                    sucursal:sucursal_id(
+                        id,
+                        name
+                    ),
+                    user:user_id(
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id(
+                        id,
+                        first_name,
+                        last_name
+                    )
+                `)
+                .eq('id', id)
+                .single();
+
+            if (error || !data) {
+                return { success: false, message: 'Registro no encontrado' };
+            }
+
+            const registro = { ...data };
+            if (registro.user) {
+                registro.user = {
+                    ...registro.user,
+                    name: `${registro.user.first_name || ''} ${registro.user.last_name || ''}`.trim()
+                };
+            }
+            if (registro.personal) {
+                registro.personal = {
+                    ...registro.personal,
+                    name: `${registro.personal.first_name || ''} ${registro.personal.last_name || ''}`.trim()
+                };
+            }
+
+            const enriched = await enrichRegistroConProducto(registro);
+            return { success: true, data: enriched };
+        } catch (error) {
+            return { success: false, message: error.message || 'Error al obtener el registro' };
+        }
+    }
+
     // Eliminar un registro de producción
     static async delete(registroId) {
         try {
@@ -1064,7 +1123,7 @@ class registrosProduccionDamabrava {
     }
 
     // Obtener registros de producción del usuario actual
-    static async getByUser(userId, userType, page = 1, limit = 10, estado = null, ordenamiento = 'fecha_desc', search = '') {
+    static async getByUser(userId, userType, page = 1, limit = 10, estado = null, ordenamiento = 'fecha_desc', search = '', fechaInicio = null, fechaFin = null) {
         try {
             const offset = (page - 1) * limit;
 
@@ -1103,6 +1162,14 @@ class registrosProduccionDamabrava {
             // Aplicar filtro de estado si se proporciona
             if (estado) {
                 query = query.eq('estado', estado);
+            }
+
+            // Filtro por fecha de registro
+            if (fechaInicio) {
+                query = query.gte('fecha', fechaInicio);
+            }
+            if (fechaFin) {
+                query = query.lte('fecha', fechaFin);
             }
 
             // Aplicar ordenamiento

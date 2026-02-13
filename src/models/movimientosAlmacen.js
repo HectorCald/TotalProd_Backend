@@ -12,6 +12,23 @@ const normalizeText = (text) => {
         .trim();
 };
 
+// Función para generar código aleatorio de 8 caracteres alfanuméricos
+const generarCodigoAleatorio = () => {
+    const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let codigo = '';
+    for (let i = 0; i < 8; i++) {
+        codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+    }
+    return codigo;
+};
+
+// Función para generar código de movimiento
+const generarCodigoMovimiento = (type) => {
+    const prefijo = type === 'salida' ? 'VEN' : 'ENT';
+    const codigoAleatorio = generarCodigoAleatorio();
+    return `#${prefijo}-${codigoAleatorio}`;
+};
+
 class movimientosAlmacen {
     // Crear un nuevo movimiento de almacén
     static async create(movimientoData) {
@@ -84,6 +101,9 @@ class movimientosAlmacen {
 
             const numeroOrdenNormalizado = Number.isNaN(numeroOrdenProporcionado) ? null : numeroOrdenProporcionado;
 
+            // Generar código único para el movimiento
+            const codigoMovimiento = generarCodigoMovimiento(type);
+
             // Iniciar transacción - OPTIMIZADO: Solo campos necesarios, sin defaults
             const insertData = {
                 sucu_id,
@@ -100,6 +120,7 @@ class movimientosAlmacen {
                 concepto: concepto && concepto.trim() !== '' ? concepto.trim() : null,
                 fecha: fechaMovimientoISO,
                 estado: 'finalizado', // Estado por defecto
+                codigo: codigoMovimiento,
                 porcentaje: (() => {
                     const tieneDescuentoAumento = (parseFloat(descuento) || 0) > 0 || (parseFloat(aumento) || 0) > 0;
                     if (!tieneDescuentoAumento) return null;
@@ -203,7 +224,7 @@ class movimientosAlmacen {
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
                 .insert(insertData)
-                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento, numero_orden, concepto, porcentaje')
+                .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento, numero_orden, concepto, porcentaje, codigo')
                 .single();
                 
 
@@ -750,8 +771,8 @@ class movimientosAlmacen {
                 .from('movimientos_almacen')
                 .select(`
                     *,
-                    cliente:clients(id, name, total_orders),
-                    proveedor:proveedores(id, name, total_orders),
+                    cliente:clients(id, name),
+                    proveedor:proveedores(id, name),
                     precio:prices_types(id, name),
                     sucursal:sucu_id(id, name),
                     user:user_id(id, first_name, last_name),

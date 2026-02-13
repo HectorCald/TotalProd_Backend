@@ -15,6 +15,9 @@ router.get('/', registrosProduccionDamabravaController.getAll);
 // Obtener registros de producción del usuario actual
 router.get('/my-production', registrosProduccionDamabravaController.getByUser);
 
+// Obtener un registro de producción por ID
+router.get('/:id', registrosProduccionDamabravaController.getById);
+
 // Eliminar un registro de producción
 router.delete('/:id', registrosProduccionDamabravaController.delete);
 

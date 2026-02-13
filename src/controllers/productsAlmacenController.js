@@ -204,7 +204,7 @@ class productsAlmacenController {
   // Crear un producto
   static async create(req, res) {
     try {
-      const { name, description, stock, codigo_barras, category_id, grup, stock_minimo, costo_produccion, prices, receta, empresa_id, sucu_id } = req.body;
+      const { name, stock, codigo_barras, category_id, grup, stock_minimo, costo_produccion, prices, receta, empresa_id, sucu_id } = req.body;
       const userType = req.user?.type;
 
       // Validaciones básicas
@@ -249,16 +249,18 @@ class productsAlmacenController {
         }
       }
 
+      // Numéricos opcionales: vacío → null (no 0) para consistencia crear/actualizar
+      const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
+
       // Crear el producto
       const newProduct = await productsAlmacen.create({
         name: name.trim(),
-        description: description ? description.trim() : null,
         stock: parseInt(stock),
         codigo_barras: codigo_barras ? codigo_barras.trim() : null,
         category_id: category_id || null,
-        grup: grup || null,
-        stock_minimo: stock_minimo || 0,
-        costo_produccion: costo_produccion || null,
+        grup: optionalNum(grup),
+        stock_minimo: optionalNum(stock_minimo),
+        costo_produccion: optionalNum(costo_produccion),
         prices: prices || {},
         receta: receta || null
       }, empresa_id, sucu_id);
@@ -281,7 +283,7 @@ class productsAlmacenController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { name, description, stock, codigo_barras, category_id, grup, stock_minimo, costo_produccion, prices, receta, sucu_id } = req.body;
+      const { name, stock, codigo_barras, category_id, grup, stock_minimo, costo_produccion, prices, receta, sucu_id } = req.body;
       const userType = req.user?.type;
 
       if (!id) {
@@ -325,16 +327,18 @@ class productsAlmacenController {
         }
       }
 
+      // Numéricos opcionales: vacío → null (consistencia con create)
+      const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
+
       // Actualizar el producto
       const updatedProduct = await productsAlmacen.update(id, {
         name: name.trim(),
-        description: description ? description.trim() : null,
         stock: parseInt(stock),
         codigo_barras: codigo_barras ? codigo_barras.trim() : null,
         category_id: category_id || null,
-        grup: grup || null,
-        stock_minimo: stock_minimo || 0,
-        costo_produccion: costo_produccion || null,
+        grup: optionalNum(grup),
+        stock_minimo: optionalNum(stock_minimo),
+        costo_produccion: optionalNum(costo_produccion),
         prices: prices || {},
         receta: receta || null
       }, sucu_id);
@@ -397,8 +401,9 @@ class productsAlmacenController {
   // Actualizar múltiples productos en lote (para importación)
   static async bulkUpdate(req, res) {
     try {
-      const { productosData, empresa_id } = req.body;
+      const { productosData, empresa_id, sucu_id } = req.body;
       const empresaId = req.user?.empresa_id || empresa_id;
+      const sucuId = req.user?.sucu_id || sucu_id;
 
       if (!empresaId) {
         return res.status(400).json({
@@ -414,7 +419,7 @@ class productsAlmacenController {
         });
       }
 
-      const resultado = await productsAlmacen.bulkUpdate(productosData, empresaId);
+      const resultado = await productsAlmacen.bulkUpdate(productosData, empresaId, sucuId);
 
       res.status(200).json({
         success: true,

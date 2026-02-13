@@ -638,7 +638,7 @@ class Personal {
       if (!isPasswordValid) {
         return {
           success: false,
-          message: 'Contraseña incorrecta'
+          message: 'La contraseña ingresada no es correcta. Verifica que estés usando la contraseña de tu cuenta e intenta nuevamente.'
         };
       }
 

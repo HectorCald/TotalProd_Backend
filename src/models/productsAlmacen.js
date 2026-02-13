@@ -10,7 +10,6 @@ class productsAlmacen {
     this.stock = data.stock;
     this.codigo_barras = data.codigo_barras;
     this.category_id = data.category_id;
-    this.description = data.description;
     this.created_at = data.created_at;
     this.empresa_id = data.empresa_id;
     this.grup = data.grup;
@@ -185,7 +184,6 @@ class productsAlmacen {
           name,
           codigo_barras,
           category_id,
-          description,
           created_at,
           empresa_id,
           grup,
@@ -335,15 +333,17 @@ class productsAlmacen {
 
       // 1. Crear el producto principal (sin stock, ya que se maneja en productos_sucursal)
       const tProductStart = Date.now();
+      // Numéricos opcionales: vacío/null → null en DB (no 0)
+      const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
+
       const dbProductData = {
         name: nombreProducto,
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
-        description: productData.description || null,
         empresa_id: empresaId,
-        grup: productData.grup || null,
-        stock_minimo: productData.stock_minimo || 0,
-        costo_produccion: productData.costo_produccion || null
+        grup: optionalNum(productData.grup),
+        stock_minimo: optionalNum(productData.stock_minimo),
+        costo_produccion: optionalNum(productData.costo_produccion)
       };
 
       const { data: product, error: productError } = await supabase
@@ -517,14 +517,16 @@ class productsAlmacen {
         throw new Error('ID del producto es requerido');
       }
 
+      // Numéricos opcionales: vacío/null → null en DB (consistencia con create)
+      const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
+
       const updateData = {
         name: productData.name,
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
-        description: productData.description || null,
-        grup: productData.grup || null,
-        stock_minimo: productData.stock_minimo || 0,
-        costo_produccion: productData.costo_produccion || null
+        grup: optionalNum(productData.grup),
+        stock_minimo: optionalNum(productData.stock_minimo),
+        costo_produccion: optionalNum(productData.costo_produccion)
       };
 
       // Actualizar el producto principal
@@ -748,7 +750,7 @@ class productsAlmacen {
   }
 
   // Actualizar múltiples productos en lote (para importación)
-  static async bulkUpdate(productosData, empresaId) {
+  static async bulkUpdate(productosData, empresaId, sucuId = null) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
@@ -775,7 +777,7 @@ class productsAlmacen {
       for (const batch of batches) {
         const batchPromises = batch.map(async (productoData) => {
           try {
-            const { id, name, codigo_barras, description, precios } = productoData;
+            const { id, name, codigo_barras, precios, stock } = productoData;
             
             if (!id) {
               throw new Error('ID del producto es requerido');
@@ -785,7 +787,6 @@ class productsAlmacen {
             const updateData = {};
             if (name !== undefined && name !== null && name !== '') updateData.name = name;
             if (codigo_barras !== undefined && codigo_barras !== null) updateData.codigo_barras = codigo_barras;
-            if (description !== undefined && description !== null) updateData.description = description;
 
             // Actualizar producto principal si hay cambios
             if (Object.keys(updateData).length > 0) {
@@ -797,6 +798,26 @@ class productsAlmacen {
 
               if (productError) {
                 throw new Error(`Error actualizando producto ${id}: ${productError.message}`);
+              }
+            }
+
+            // Actualizar stock en sucursal si se proporciona
+            if (sucuId && stock !== undefined && stock !== null) {
+              const stockVal = parseInt(stock, 10);
+              if (!isNaN(stockVal) && stockVal >= 0) {
+                const { error: stockError } = await supabase
+                  .from('productos_sucursal')
+                  .upsert({
+                    producto_id: id,
+                    sucursal_id: sucuId,
+                    stock: stockVal
+                  }, {
+                    onConflict: 'producto_id,sucursal_id'
+                  });
+
+                if (stockError) {
+                  throw new Error(`Error actualizando stock del producto ${id}: ${stockError.message}`);
+                }
               }
             }
 
@@ -882,7 +903,7 @@ class productsAlmacen {
       for (const batch of batches) {
         const batchPromises = batch.map(async (productoData) => {
           try {
-            const { name, codigo_barras, description, precios } = productoData;
+            const { name, codigo_barras, precios, stock } = productoData;
             
             if (!name || !name.trim()) {
               throw new Error('El nombre del producto es requerido');
@@ -910,7 +931,6 @@ class productsAlmacen {
               .insert([{
                 name: name.trim(),
                 codigo_barras: codigo_barras || null,
-                description: description || null,
                 empresa_id: empresaId
               }])
               .select();
@@ -925,14 +945,17 @@ class productsAlmacen {
 
             const productId = product[0].id;
 
-            // Crear stock en sucursal si se especifica
+            // Crear stock en sucursal si se especifica sucuId
             if (sucuId) {
+              const stockInicial = (stock !== undefined && stock !== null && !isNaN(parseInt(stock, 10)))
+                ? Math.max(0, parseInt(stock, 10))
+                : 0;
               const { error: stockError } = await supabase
                 .from('productos_sucursal')
                 .insert([{
                   producto_id: productId,
                   sucursal_id: sucuId,
-                  stock: 0 // Stock inicial en 0
+                  stock: stockInicial
                 }]);
 
               if (stockError) {

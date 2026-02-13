@@ -197,6 +197,8 @@ class registrosProduccionDamabravaController {
             const estado = req.query.estado || null;
             const ordenamiento = req.query.ordenamiento || 'fecha_desc';
             const search = req.query.search || '';
+            const fecha_inicio = req.query.fecha_inicio || null;
+            const fecha_fin = req.query.fecha_fin || null;
 
             if (!userId) {
                 return res.status(400).json({
@@ -212,7 +214,9 @@ class registrosProduccionDamabravaController {
                 limit,
                 estado,
                 ordenamiento,
-                search
+                search,
+                fecha_inicio,
+                fecha_fin
             );
 
             if (!result.success) {
@@ -227,6 +231,35 @@ class registrosProduccionDamabravaController {
 
         } catch (error) {
             console.error('Error en registrosProduccionDamabravaController.getByUser:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
+    // Obtener un registro de producción por ID
+    static async getById(req, res) {
+        try {
+            const { id } = req.params;
+
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID es requerido'
+                });
+            }
+
+            const result = await registrosProduccionDamabrava.getById(id);
+
+            if (!result.success) {
+                return res.status(404).json(result);
+            }
+
+            res.json(result);
+        } catch (error) {
+            console.error('Error en registrosProduccionDamabravaController.getById:', error);
             res.status(500).json({
                 success: false,
                 message: 'Error interno del servidor',

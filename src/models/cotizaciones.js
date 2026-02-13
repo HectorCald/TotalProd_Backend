@@ -1,8 +1,25 @@
 const { supabase } = require('../config/supabase');
 
+// Función para generar código aleatorio de 8 caracteres alfanuméricos
+const generarCodigoAleatorio = () => {
+    const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let codigo = '';
+    for (let i = 0; i < 8; i++) {
+        codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+    }
+    return codigo;
+};
+
+// Función para generar código de cotización
+const generarCodigoCotizacion = () => {
+    const codigoAleatorio = generarCodigoAleatorio();
+    return `CTZ-${codigoAleatorio}`;
+};
+
 const COTIZACION_SELECT = `
     id,
     numero_cotizacion,
+    codigo,
     fecha,
     observaciones,
     metodo_pago,
@@ -72,6 +89,9 @@ class cotizaciones {
                 productosNormalizados.reduce((sum, producto) => sum + producto.subtotalNormalizado, 0)
             );
 
+            // Generar código de cotización
+            const codigoCotizacion = generarCodigoCotizacion();
+
             // Iniciar transacción
             const insertData = {
                 sucu_id,
@@ -84,7 +104,8 @@ class cotizaciones {
                 numero_cotizacion: numeroCotizacion,
                 fecha_vencimiento: fecha_vencimiento || null,
                 agrupado: agrupado || false,
-                precio_id: precio_id || null
+                precio_id: precio_id || null,
+                codigo: codigoCotizacion
             };
 
             // Solo agregar campos que tienen valor
@@ -99,7 +120,7 @@ class cotizaciones {
             const { data: cotizacion, error: cotizacionError } = await supabase
                 .from('cotizaciones')
                 .insert(insertData)
-                .select('id, sucu_id, fecha, estado, total, numero_cotizacion, observaciones, metodo_pago, cliente_id, fecha_vencimiento, agrupado, precio_id')
+                .select('id, sucu_id, fecha, estado, total, numero_cotizacion, codigo, observaciones, metodo_pago, cliente_id, fecha_vencimiento, agrupado, precio_id')
                 .single();
 
             if (cotizacionError) {
@@ -252,6 +273,7 @@ class cotizaciones {
                 }
 
                 orFilters.push(
+                    `codigo.ilike.${normalizedSearch}`,
                     `observaciones.ilike.${normalizedSearch}`,
                     `metodo_pago.ilike.${normalizedSearch}`
                 );
@@ -331,32 +353,28 @@ class cotizaciones {
                 };
             }
 
-            // Obtener productos por lotes (igual que movimientosAlmacen.js)
+            // Hidratación OPTIMIZADA: cargar en lotes separados para evitar límite de 1000 líneas
             const cotizacionIds = data.map(c => c.id);
             const productosByCotizacion = new Map();
             (cotizacionIds || []).forEach(id => productosByCotizacion.set(id, []));
 
-            // Dividir cotizacionIds en lotes de 100 para evitar límite de Supabase en .in()
-            const batchSize = 100;
-            const productosAll = [];
+            // 1) Primero obtener productos de cotización SIN relaciones anidadas (para evitar límite de 1000)
+            const batchSize = 50; // Reducir tamaño de lote para evitar límite
+            const productosDetalleAll = [];
 
             for (let i = 0; i < cotizacionIds.length; i += batchSize) {
                 const batchIds = cotizacionIds.slice(i, i + batchSize);
 
+                // Obtener productos SIN relaciones anidadas primero
                 const { data: productosBatch, error: productosError } = await supabase
                     .from('cotizacion_detalle')
                     .select(`
                         cotizacion_id,
                         id,
+                        producto_almacen_id,
                         cantidad,
                         precio_unitario,
-                        subtotal,
-                        producto:producto_almacen_id(
-                            id,
-                            name,
-                            description,
-                            grup
-                        )
+                        subtotal
                     `)
                     .in('cotizacion_id', batchIds);
 
@@ -364,20 +382,56 @@ class cotizaciones {
                     console.error(`[CotizacionesModel.getAll] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
                     console.error(`[CotizacionesModel.getAll] Cotización IDs del lote:`, batchIds);
                 } else if (productosBatch && Array.isArray(productosBatch)) {
-                    productosAll.push(...productosBatch);
+                    productosDetalleAll.push(...productosBatch);
                 }
             }
 
-            // Mapear productos a cotizaciones
-            if (productosAll && productosAll.length > 0) {
-                productosAll.forEach(p => {
-                    if (p && p.cotizacion_id) {
-                        const arr = productosByCotizacion.get(p.cotizacion_id) || [];
-                        arr.push(p);
-                        productosByCotizacion.set(p.cotizacion_id, arr);
-                    }
-                });
+            // 2) Obtener IDs únicos de productos para cargar sus datos
+            const productoIds = [...new Set(productosDetalleAll.map(p => p.producto_almacen_id))];
+
+            // 3) Cargar productos de almacén en lotes pequeños para evitar límite de 1000
+            const productosAlmacenMap = new Map();
+            const productoBatchSize = 100; // Lotes de productos más pequeños
+
+            for (let i = 0; i < productoIds.length; i += productoBatchSize) {
+                const batchProductIds = productoIds.slice(i, i + productoBatchSize);
+
+                const { data: productosAlmacenBatch, error: productosAlmacenError } = await supabase
+                    .from('products_almacen')
+                    .select(`
+                        id,
+                        name,
+                        description,
+                        grup
+                    `)
+                    .in('id', batchProductIds);
+
+                if (productosAlmacenError) {
+                    console.error(`[CotizacionesModel.getAll] Error obteniendo productos almacén (lote ${Math.floor(i/productoBatchSize) + 1}):`, productosAlmacenError);
+                } else if (productosAlmacenBatch && Array.isArray(productosAlmacenBatch)) {
+                    productosAlmacenBatch.forEach(prod => {
+                        productosAlmacenMap.set(prod.id, prod);
+                    });
+                }
             }
+
+            // 4) Combinar productos del detalle con sus datos de almacén
+            productosDetalleAll.forEach(p => {
+                if (p && p.cotizacion_id) {
+                    const productoAlmacen = productosAlmacenMap.get(p.producto_almacen_id);
+                    const productoCompleto = {
+                        id: p.id,
+                        cantidad: p.cantidad,
+                        precio_unitario: p.precio_unitario,
+                        subtotal: p.subtotal,
+                        producto: productoAlmacen || null
+                    };
+
+                    const arr = productosByCotizacion.get(p.cotizacion_id) || [];
+                    arr.push(productoCompleto);
+                    productosByCotizacion.set(p.cotizacion_id, arr);
+                }
+            });
 
             // Armar respuesta final con productos incluidos
             const cotizacionesConProductos = data.map(cotizacion => ({
