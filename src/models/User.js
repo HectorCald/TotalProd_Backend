@@ -256,7 +256,7 @@ class User {
   // Método estático para obtener usuario por ID
   static async getById(id) {
     try {
-      // 1. Obtener el usuario básico con su empresa
+      // 1. Obtener el usuario básico con su empresa y sucursales
       const { data: user, error } = await supabase
         .from('users')
         .select(`
@@ -266,7 +266,8 @@ class User {
             name,
             description,
             logo_tipo,
-            tipo
+            tipo,
+            sucursales (*)
           )
         `)
         .eq('id', id)

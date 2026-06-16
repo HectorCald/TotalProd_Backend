@@ -1,147 +1,130 @@
 const sucursales = require('../models/sucursales');
 
-const sucursalesController = {
-    // Obtener sucursales por empresa
-    async getByEmpresaId(req, res) {
+class sucursalesController {
+
+    static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
+        const {
+            validateEmpresaId = false,
+            validateSucursalId = false,
+            successStatus = 200,
+            successMessage = 'Operación exitosa'
+        } = options;
+
         try {
-            const { empresaId } = req.params;
-            
-            if (!empresaId) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de empresa es requerido'
-                });
-            }
-
-            // Obtener empresas asociadas si se proporcionan
-            let empresasAsociadasIds = [];
-            if (req.query.empresas_asociadas) {
-                const asociadas = Array.isArray(req.query.empresas_asociadas) 
-                    ? req.query.empresas_asociadas 
-                    : [req.query.empresas_asociadas];
-                empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
-            }
-
-            const result = await sucursales.getByEmpresaId(empresaId, empresasAsociadasIds);
-            
-            if (result.success) {
-                res.json(result);
-            } else {
-                res.status(500).json(result);
-            }
-        } catch (error) {
-            console.error('Error en sucursalesController.getByEmpresaId:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
-    },
-
-    // Obtener sucursal por ID
-    async getById(req, res) {
-        try {
-            const { id } = req.params;
-            
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de sucursal es requerido'
-                });
-            }
-
-            const result = await sucursales.getById(id);
-            
-            if (result.success) {
-                res.json(result);
-            } else {
-                res.status(404).json(result);
-            }
-        } catch (error) {
-            console.error('Error en sucursalesController.getById:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
-    },
-
-    // Crear nueva sucursal
-    async create(req, res) {
-        try {
-            const { name, almacen_sucursal_id, precios } = req.body;
-            const authUser = req.user || {};
-            
-            if (!name || !name.trim()) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El nombre de la sucursal es requerido'
-                });
-            }
-
-            let empresaId = null;
-
-            if (authUser?.type === 'employee') {
-                // Para empleados, tomar la empresa directamente del token
-                empresaId = authUser.empresa_id || null;
-            } else {
-                // Para usuarios propietarios (o tokens antiguos), obtener desde el modelo User
-                const User = require('../models/User');
-                const user = await User.getById(authUser.id);
-                
-                if (user && user.empresa_id) {
-                    empresaId = user.empresa_id;
+            if (validateEmpresaId) {
+                const empresaId = req.query.empresa_id || req.body.empresa_id;
+                if (!empresaId) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'ID de la empresa es requerido'
+                    });
                 }
             }
 
-            if (!empresaId) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El usuario no tiene una empresa asociada'
-                });
+            if (validateSucursalId) {
+                const { id } = req.params;
+                if (!id) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'ID de sucursal es requerido'
+                    });
+                }
+            }
+
+            const data = await handlerFn();
+            
+            const responseBody = {
+                success: true,
+                message: successMessage
+            };
+            if (data !== undefined) {
+                responseBody.data = data;
+            }
+
+            return res.status(successStatus).json(responseBody);
+        } catch (error) {
+            console.error(`Error en ${actionName}:`, error);
+            
+            let statusCode = 500;
+            if (error.message.includes('no existe')) statusCode = 404;
+            else if (error.message.includes('No se puede eliminar') || error.message.includes('tiene registros relacionados') || error.message.includes('tiene movimientos') || error.message.includes('tiene pedidos') || error.message.includes('tiene personal') || error.message.includes('Casa Matriz')) statusCode = 409;
+            else if (error.message.includes('requerido') || error.message.includes('obligatorio')) statusCode = 400;
+
+            return res.status(statusCode).json({
+                success: false,
+                message: error.message || 'Error interno del servidor'
+            });
+        }
+    }
+
+    // Obtener todas las sucursales
+    static async getAll(req, res) {
+        return sucursalesController._handleRequest(res, 'getAll', req, async () => {
+            const empresaId = req.query.empresa_id;
+            let empresasAsociadasIds = [];
+            if (req.query.empresas_asociadas) {
+                const asocString = Array.isArray(req.query.empresas_asociadas) 
+                    ? req.query.empresas_asociadas.join(',') 
+                    : String(req.query.empresas_asociadas);
+                
+                empresasAsociadasIds = asocString.split(',')
+                    .map(id => id.trim())
+                    .filter(id => id && id !== 'null' && id !== 'undefined');
+            }
+            return await sucursales.getAll(empresaId, empresasAsociadasIds);
+        }, {
+            validateEmpresaId: true,
+            successMessage: 'Sucursales obtenidas exitosamente'
+        });
+    }
+
+    // Obtener sucursal por ID
+    static async getById(req, res) {
+        return sucursalesController._handleRequest(res, 'getById', req, async () => {
+            const { id } = req.params;
+            return await sucursales.getById(id);
+        }, {
+            validateSucursalId: true,
+            successMessage: 'Sucursal obtenida exitosamente'
+        });
+    }
+
+    // Crear nueva sucursal
+    static async create(req, res) {
+        return sucursalesController._handleRequest(res, 'create', req, async () => {
+            const { name, almacen_sucursal_id, precios, empresa_id } = req.body;
+            
+            if (!name || !name.trim()) {
+                throw new Error('El nombre de la sucursal es requerido');
             }
 
             const sucursalData = {
                 name: name.trim(),
-                empresa_id: empresaId,
-                // Si viene almacen_sucursal_id (switch inactivo), persistirlo
+                empresa_id: empresa_id,
                 ...(almacen_sucursal_id ? { almacen_sucursal_id } : {})
             };
 
-            const result = await sucursales.create(sucursalData, precios);
-            if (result.success) {
-                res.status(201).json(result);
-            } else {
-                res.status(500).json(result);
-            }
-        } catch (error) {
-            console.error('Error en sucursalesController.create:', error);
-            res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
-        }
-    },
+            return await sucursales.create(sucursalData, precios);
+        }, {
+            validateEmpresaId: true,
+            successStatus: 201,
+            successMessage: 'Sucursal creada exitosamente'
+        });
+    }
 
     // Actualizar sucursal
-    async update(req, res) {
-        try {
+    static async update(req, res) {
+        return sucursalesController._handleRequest(res, 'update', req, async () => {
             const { id } = req.params;
             const { name, almacen_sucursal_id, precios } = req.body;
             
             if (!name || !name.trim()) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El nombre de la sucursal es requerido'
-                });
+                throw new Error('El nombre de la sucursal es requerido');
             }
 
-            // Verificar si es la sucursal "Casa Matriz"
             const sucursalActual = await sucursales.getById(id);
-            if (sucursalActual.success && sucursalActual.data.name === 'Casa Matriz') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'No se puede editar la sucursal principal "Casa Matriz"'
-                });
+            if (sucursalActual && sucursalActual.name === 'Casa Matriz') {
+                throw new Error('No se puede editar la sucursal principal "Casa Matriz"');
             }
 
             const sucursalData = {
@@ -149,98 +132,40 @@ const sucursalesController = {
                 ...(typeof almacen_sucursal_id !== 'undefined' ? { almacen_sucursal_id } : {})
             };
 
-            const result = await sucursales.update(id, sucursalData, precios);
-            if (result.success) {
-                res.json(result);
-            } else {
-                res.status(500).json(result);
-            }
-        } catch (error) {
-            console.error('Error en sucursalesController.update:', error);
-            res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
-        }
-    },
+            return await sucursales.update(id, sucursalData, precios);
+        }, {
+            validateSucursalId: true,
+            successMessage: 'Sucursal actualizada exitosamente'
+        });
+    }
 
     // Eliminar sucursal
-    async delete(req, res) {
-        try {
+    static async delete(req, res) {
+        return sucursalesController._handleRequest(res, 'delete', req, async () => {
             const { id } = req.params;
             
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de sucursal es requerido'
-                });
-            }
-            
-            // Verificar si es la sucursal "Casa Matriz"
             const sucursalActual = await sucursales.getById(id);
-            if (sucursalActual.success && sucursalActual.data.name === 'Casa Matriz') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'No se puede eliminar la sucursal principal "Casa Matriz"'
-                });
+            if (sucursalActual && sucursalActual.name === 'Casa Matriz') {
+                throw new Error('No se puede eliminar la sucursal principal "Casa Matriz"');
             }
             
-            const result = await sucursales.delete(id);
-            if (result.success) {
-                res.json(result);
-            } else {
-                // Determinar el código de estado apropiado basado en el tipo de error
-                let statusCode = 500;
-                
-                if (result.message.includes('no existe')) {
-                    statusCode = 404;
-                } else if (result.message.includes('No se puede eliminar') || 
-                          result.message.includes('tiene registros relacionados') ||
-                          result.message.includes('tiene movimientos') ||
-                          result.message.includes('tiene pedidos') ||
-                          result.message.includes('tiene personal')) {
-                    statusCode = 409; // Conflict
-                } else if (result.message.includes('Error de base de datos')) {
-                    statusCode = 500;
-                }
-                
-                res.status(statusCode).json(result);
-            }
-        } catch (error) {
-            console.error('Error en sucursalesController.delete:', error);
-            res.status(500).json({ 
-                success: false, 
-                message: 'Error interno del servidor al eliminar la sucursal', 
-                error: error.message 
-            });
-        }
-    },
+            await sucursales.delete(id);
+        }, {
+            validateSucursalId: true,
+            successMessage: 'Sucursal eliminada exitosamente'
+        });
+    }
 
     // Obtener precios por sucursal
-    async getPreciosBySucursalId(req, res) {
-        try {
+    static async getPreciosBySucursalId(req, res) {
+        return sucursalesController._handleRequest(res, 'getPreciosBySucursalId', req, async () => {
             const { id } = req.params;
-            
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de sucursal es requerido'
-                });
-            }
-
-            const result = await sucursales.getPreciosBySucursalId(id);
-            
-            if (result.success) {
-                res.json(result);
-            } else {
-                res.status(500).json(result);
-            }
-        } catch (error) {
-            console.error('Error en sucursalesController.getPreciosBySucursalId:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+            return await sucursales.getPreciosBySucursalId(id);
+        }, {
+            validateSucursalId: true,
+            successMessage: 'Precios de sucursal obtenidos exitosamente'
+        });
     }
-};
+}
 
 module.exports = sucursalesController;

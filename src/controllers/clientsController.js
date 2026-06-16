@@ -3,57 +3,99 @@ const { checkDeletePermission, checkUpdatePermission } = require('../utils/permi
 
 class clientsController {
 
-  // Obtener todos los clientes de una sucursal
-  static async getAll(req, res) {
+  static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
+    const {
+      validateSucuId = false,
+      validateClientId = false,
+      checkPermission = null,
+      successStatus = 200,
+      successMessage = 'Operación exitosa'
+    } = options;
+
     try {
-      // Obtener el sucu_id de la sucursal seleccionada
-      const sucuId = req.query.sucu_id;
-      
-      if (!sucuId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la sucursal es requerido'
-        });
+      if (validateSucuId) {
+        const sucuId = req.query.sucu_id || req.body.sucu_id;
+        if (!sucuId) {
+          return res.status(400).json({
+            success: false,
+            message: 'ID de la sucursal es requerido'
+          });
+        }
       }
 
-      const clients = await client.getAll(sucuId);
+      if (validateClientId) {
+        const { id } = req.params;
+        if (!id) {
+          return res.status(400).json({
+            success: false,
+            message: 'ID del cliente es requerido'
+          });
+        }
+      }
+
+      if (checkPermission) {
+        const userType = req.user?.type;
+        if (userType === 'employee') {
+          const personal_id = req.user.id;
+          let hasPermission = false;
+          if (checkPermission === 'delete') {
+            hasPermission = await checkDeletePermission(personal_id);
+          } else if (checkPermission === 'update') {
+            hasPermission = await checkUpdatePermission(personal_id);
+          }
+          if (!hasPermission) {
+            return res.status(403).json({
+              success: false,
+              message: `No tienes permisos para ${checkPermission === 'delete' ? 'eliminar' : 'editar'} clientes`
+            });
+          }
+        }
+      }
+
+      const data = await handlerFn();
       
-      res.status(200).json({
+      const responseBody = {
         success: true,
-        message: 'Clientes obtenidos exitosamente',
-        data: clients
-      });
+        message: successMessage
+      };
+      if (data !== undefined) {
+        responseBody.data = data;
+      }
+
+      return res.status(successStatus).json(responseBody);
     } catch (error) {
-      console.error('Error en getAll:', error);
-      res.status(500).json({
+      console.error(`Error en ${actionName}:`, error);
+      return res.status(500).json({
         success: false,
-        message: error.message
+        message: error.message || 'Error interno del servidor'
       });
     }
   }
 
+  // Obtener todos los clientes de una sucursal
+  static async getAll(req, res) {
+    return clientsController._handleRequest(res, 'getAll', req, async () => {
+      const sucuId = req.query.sucu_id;
+      return await client.getAll(sucuId);
+    }, {
+      validateSucuId: true,
+      successMessage: 'Clientes obtenidos exitosamente'
+    });
+  }
+
   // Crear un cliente
   static async create(req, res) {
-    try {
-      const { name, phone, direccion, description, total_orders, location, sucu_id } = req.body;
+    const { name, phone, direccion, description, total_orders, location, sucu_id } = req.body;
 
-      // Validaciones básicas
-      if (!name || !name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'El nombre es obligatorio'
-        });
-      }
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre es obligatorio'
+      });
+    }
 
-      if (!sucu_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la sucursal es requerido'
-        });
-      }
-
-      // Crear el cliente
-      const newClient = await client.create({
+    return clientsController._handleRequest(res, 'create', req, async () => {
+      return await client.create({
         name: name.trim(),
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
@@ -61,99 +103,39 @@ class clientsController {
         total_orders: total_orders || 0,
         location: location || null
       }, sucu_id);
-
-      res.status(201).json({
-        success: true,
-        message: 'Cliente creado exitosamente',
-        data: newClient
-      });
-    } catch (error) {
-      console.error('Error en create:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+    }, {
+      validateSucuId: true,
+      successStatus: 201,
+      successMessage: 'Cliente creado exitosamente'
+    });
   }
 
   // Eliminar un cliente
   static async delete(req, res) {
-    try {
+    return clientsController._handleRequest(res, 'delete', req, async () => {
       const { id } = req.params;
-      const userType = req.user?.type;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del cliente es requerido'
-        });
-      }
-
-      // Verificar permisos de eliminación solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkDeletePermission(personal_id);
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'No tienes permisos para eliminar clientes'
-          });
-        }
-      }
-
-      // Eliminar el cliente
       await client.delete(id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Cliente eliminado exitosamente'
-      });
-    } catch (error) {
-      console.error('Error en delete:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+    }, {
+      validateClientId: true,
+      checkPermission: 'delete',
+      successMessage: 'Cliente eliminado exitosamente'
+    });
   }
 
   // Actualizar un cliente
   static async update(req, res) {
-    try {
+    const { name, phone, direccion, description, total_orders, location } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre es obligatorio'
+      });
+    }
+
+    return clientsController._handleRequest(res, 'update', req, async () => {
       const { id } = req.params;
-      const { name, phone, direccion, description, total_orders, location } = req.body;
-      const userType = req.user?.type;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del cliente es requerido'
-        });
-      }
-
-      if (!name || !name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'El nombre es obligatorio'
-        });
-      }
-
-      // Verificar permisos de edición solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkUpdatePermission(personal_id);
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'No tienes permisos para editar clientes'
-          });
-        }
-      }
-
-      // Actualizar el cliente
-      const updatedClient = await client.update(id, {
+      return await client.update(id, {
         name: name.trim(),
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
@@ -161,75 +143,33 @@ class clientsController {
         total_orders: total_orders || 0,
         location: location || null
       });
-
-      res.status(200).json({
-        success: true,
-        message: 'Cliente actualizado exitosamente',
-        data: updatedClient
-      });
-    } catch (error) {
-      console.error('Error en update:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+    }, {
+      validateClientId: true,
+      checkPermission: 'update',
+      successMessage: 'Cliente actualizado exitosamente'
+    });
   }
 
   // Obtener un cliente por ID
   static async getById(req, res) {
-    try {
+    return clientsController._handleRequest(res, 'getById', req, async () => {
       const { id } = req.params;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del cliente es requerido'
-        });
-      }
-
-      const clientData = await client.getById(id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Cliente obtenido exitosamente',
-        data: clientData
-      });
-    } catch (error) {
-      console.error('Error en getById:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      return await client.getById(id);
+    }, {
+      validateClientId: true,
+      successMessage: 'Cliente obtenido exitosamente'
+    });
   }
 
   // Obtener ubicación del cliente (tabla clients o último movimiento con ubicación)
   static async getLocation(req, res) {
-    try {
+    return clientsController._handleRequest(res, 'getLocation', req, async () => {
       const { id } = req.params;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del cliente es requerido'
-        });
-      }
-
-      const result = await client.getLocation(id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Ubicación obtenida',
-        data: result
-      });
-    } catch (error) {
-      console.error('Error en getLocation:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      return await client.getLocation(id);
+    }, {
+      validateClientId: true,
+      successMessage: 'Ubicación obtenida'
+    });
   }
 }
 

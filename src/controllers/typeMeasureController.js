@@ -2,23 +2,46 @@ const typeMeasure = require('../models/typeMeasure');
 
 class typeMeasureController {
 
-  // Obtener todos los tipos de medida
-  static async getAll(req, res) {
+  static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
+    const {
+      requireAuth = true,
+      successStatus = 200,
+      errorStatus = 400
+    } = options;
+
     try {
-      const typeMeasures = await typeMeasure.getAll();
-      
-      res.status(200).json({
-        success: true,
-        message: 'Tipos de medida obtenidos exitosamente',
-        data: typeMeasures
-      });
+      if (requireAuth) {
+        const userId = req.user?.id;
+        if (!userId) {
+          return res.status(401).json({
+            success: false,
+            message: 'Usuario no autenticado'
+          });
+        }
+      }
+
+      const result = await handlerFn();
+
+      return res.status(successStatus).json(result);
     } catch (error) {
-      console.error('Error en typeMeasureController.getAll:', error);
-      res.status(500).json({
+      console.error(`Error en typeMeasureController.${actionName}:`, error);
+      return res.status(500).json({
         success: false,
         message: 'Error interno del servidor'
       });
     }
+  }
+
+  // Obtener todos los tipos de medida
+  static async getAll(req, res) {
+    return typeMeasureController._handleRequest(res, 'getAll', req, async () => {
+      const typeMeasures = await typeMeasure.getAll();
+      return {
+        success: true,
+        message: 'Tipos de medida obtenidos exitosamente',
+        data: typeMeasures
+      };
+    });
   }
 }
 

@@ -3,87 +3,151 @@ const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = 
 
 class productsAcopioController {
 
-  // Obtener todos los productos de la empresa
-  static async getAll(req, res) {
+  static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
+    const {
+      requireAuth = true,
+      validateEmpresaId = false,
+      validateProductId = false,
+      checkPermission = null,
+      successStatus = 200,
+      errorStatus = 400
+    } = options;
+
     try {
-      // Obtener parámetros de la query
-      const empresaId = req.query.empresa_id;
-      
-      if (!empresaId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la empresa es requerido'
-        });
-      }
-
-      // Obtener empresas asociadas si se proporcionan
-      let empresasAsociadasIds = [];
-      if (req.query['empresas_asociadas[]']) {
-        const asociadas = Array.isArray(req.query['empresas_asociadas[]']) 
-          ? req.query['empresas_asociadas[]'] 
-          : [req.query['empresas_asociadas[]']];
-        empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined');
-      }
-
-      const products = await productsAcopio.getAll(empresaId, empresasAsociadasIds);
-      
-      res.status(200).json({
-        success: true,
-        message: 'Productos obtenidos exitosamente',
-        data: products
-      });
-    } catch (error) {
-      console.error('Error en getAll:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
-
-  // Crear un producto
-  static async create(req, res) {
-    try {
-      const { name, description, quantity, type_measure_id, category_id, stock_minimo, receta, empresa_id } = req.body;
-      const userType = req.user?.type;
-
-      // Validaciones básicas
-      if (!name || !name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'El nombre es obligatorio'
-        });
-      }
-
-
-      if (!type_measure_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'El tipo de medida es obligatorio'
-        });
-      }
-
-      if (!empresa_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la empresa es requerido'
-        });
-      }
-
-      // Verificar permisos de creación solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkCreatePermission(personal_id);
-        if (!hasPermission) {
-          return res.status(403).json({
+      if (requireAuth) {
+        const userId = req.user?.id;
+        if (!userId) {
+          return res.status(401).json({
             success: false,
-            message: 'No tienes permisos para crear productos'
+            message: 'Usuario no autenticado'
           });
         }
       }
 
-      // Crear el producto
+      if (validateEmpresaId) {
+        const empresaId = req.query.empresa_id || req.body.empresa_id || req.user?.empresa_id;
+        if (!empresaId) {
+          return res.status(400).json({
+            success: false,
+            message: 'ID de la empresa es requerido'
+          });
+        }
+        if (req.query) req.query.empresa_id = empresaId;
+        if (req.body) req.body.empresa_id = empresaId;
+      }
+
+      if (validateProductId) {
+        const { id } = req.params;
+        if (!id) {
+          return res.status(400).json({
+            success: false,
+            message: 'ID del producto es requerido'
+          });
+        }
+      }
+
+      if (checkPermission) {
+        const userType = req.user?.type;
+        if (userType === 'employee') {
+          const personal_id = req.user.id;
+          let hasPermission = false;
+          let message = '';
+          if (checkPermission === 'create') {
+            hasPermission = await checkCreatePermission(personal_id);
+            message = 'No tienes permisos para crear productos';
+          } else if (checkPermission === 'update') {
+            hasPermission = await checkUpdatePermission(personal_id);
+            message = 'No tienes permisos para editar productos';
+          } else if (checkPermission === 'delete') {
+            hasPermission = await checkDeletePermission(personal_id);
+            message = 'No tienes permisos para eliminar productos';
+          }
+          if (!hasPermission) {
+            return res.status(403).json({
+              success: false,
+              message
+            });
+          }
+        }
+      }
+
+      const result = await handlerFn();
+
+      if (!result.success) {
+        const finalErrorStatus = result.status || errorStatus;
+        return res.status(finalErrorStatus).json(result);
+      }
+
+      return res.status(successStatus).json(result);
+    } catch (error) {
+      console.error(`Error en productsAcopioController.${actionName}:`, error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener todos los productos de la empresa
+  static async getAll(req, res) {
+    return productsAcopioController._handleRequest(res, 'getAll', req, async () => {
+      const empresaId = req.query.empresa_id;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 30;
+      const search = req.query.search || null;
+      const categoryId = req.query.category_id || null;
+      const sortOrder = req.query.sort_order || 'name_asc';
+      
+      let empresasAsociadasIds = [];
+      if (req.query['empresas_asociadas[]'] || req.query.empresas_asociadas) {
+        const asociadas = req.query.empresas_asociadas 
+          ? (Array.isArray(req.query.empresas_asociadas) ? req.query.empresas_asociadas : [req.query.empresas_asociadas])
+          : (Array.isArray(req.query['empresas_asociadas[]']) ? req.query['empresas_asociadas[]'] : [req.query['empresas_asociadas[]']]);
+        empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined');
+      }
+
+      const result = await productsAcopio.getAll(
+        empresaId, 
+        empresasAsociadasIds,
+        page,
+        limit,
+        search,
+        categoryId,
+        sortOrder
+      );
+      
+      return {
+        success: true,
+        message: 'Productos obtenidos exitosamente',
+        data: result.data,
+        pagination: result.pagination,
+        sizeInfo: result.sizeInfo
+      };
+    }, {
+      validateEmpresaId: true
+    });
+  }
+
+  // Crear un producto
+  static async create(req, res) {
+    const { name, description, quantity, type_measure_id, category_id, stock_minimo, receta } = req.body;
+
+    // Validaciones básicas
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre es obligatorio'
+      });
+    }
+
+    if (!type_measure_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'El tipo de medida es obligatorio'
+      });
+    }
+
+    return productsAcopioController._handleRequest(res, 'create', req, async () => {
       const newProduct = await productsAcopio.create({
         name: name.trim(),
         description: description?.trim() || null,
@@ -92,95 +156,51 @@ class productsAcopioController {
         category_id: category_id || null,
         stock_minimo: stock_minimo || 0,
         receta: receta
-      }, empresa_id);
+      }, req.body.empresa_id);
 
-      // Obtener el producto creado con sus relaciones
-      const productWithRelations = await productsAcopio.getById(newProduct.id, empresa_id);
+      const productWithRelations = await productsAcopio.getById(newProduct.id, req.body.empresa_id);
 
-      res.status(201).json({
+      return {
         success: true,
         message: 'Producto creado exitosamente',
         data: productWithRelations
-      });
-    } catch (error) {
-      console.error('Error en create:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      };
+    }, {
+      validateEmpresaId: true,
+      checkPermission: 'create',
+      successStatus: 201
+    });
   }
 
   // Eliminar un producto
   static async delete(req, res) {
-    try {
+    return productsAcopioController._handleRequest(res, 'delete', req, async () => {
       const { id } = req.params;
-      const userType = req.user?.type;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del producto es requerido'
-        });
-      }
-
-      // Verificar permisos de eliminación solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkDeletePermission(personal_id);
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'No tienes permisos para eliminar productos'
-          });
-        }
-      }
-
-      // Eliminar el producto
       await productsAcopio.delete(id);
 
-      res.status(200).json({
+      return {
         success: true,
         message: 'Producto eliminado exitosamente'
-      });
-    } catch (error) {
-      console.error('Error en delete:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      };
+    }, {
+      validateProductId: true,
+      checkPermission: 'delete'
+    });
   }
 
   // Actualizar un producto
   static async update(req, res) {
-    try {
-      const { id } = req.params;
-      const { name, description, quantity, type_measure_id, category_id, stock_minimo, receta } = req.body;
-      const userType = req.user?.type;
+    const { id } = req.params;
+    const { name, description, quantity, type_measure_id, category_id, stock_minimo, receta } = req.body;
 
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del producto es requerido'
-        });
-      }
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID del producto es requerido'
+      });
+    }
 
-      // Verificar permisos de edición solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkUpdatePermission(personal_id);
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'No tienes permisos para editar productos'
-          });
-        }
-      }
-
-      // Actualizar el producto
+    return productsAcopioController._handleRequest(res, 'update', req, async () => {
       await productsAcopio.update(id, {
         name: name.trim(),
         description: description?.trim() || null,
@@ -191,128 +211,85 @@ class productsAcopioController {
         receta: receta
       }, null);
 
-      // Obtener el producto actualizado con sus relaciones
       const updatedProduct = await productsAcopio.getById(id);
 
-      res.status(200).json({
+      return {
         success: true,
         message: 'Producto actualizado exitosamente',
         data: updatedProduct
-      });
-    } catch (error) {
-      console.error('Error en update:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      };
+    }, {
+      checkPermission: 'update'
+    });
   }
 
-
-
-
-  
   // Obtener un producto por ID
   static async getById(req, res) {
-    try {
+    return productsAcopioController._handleRequest(res, 'getById', req, async () => {
       const { id } = req.params;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del producto es requerido'
-        });
-      }
-
       const product = await productsAcopio.getById(id);
 
       if (!product) {
-        return res.status(404).json({
+        return {
           success: false,
+          status: 404,
           message: 'Producto no encontrado'
-        });
+        };
       }
 
-      res.status(200).json({
+      return {
         success: true,
         message: 'Producto obtenido exitosamente',
         data: product
-      });
-    } catch (error) {
-      console.error('Error en getById:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      };
+    }, {
+      validateProductId: true
+    });
   }
 
   // Obtener productos por categoría
   static async getByCategory(req, res) {
-    try {
-      const { categoryId } = req.params;
+    const { categoryId } = req.params;
 
+    if (!categoryId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de la categoría es requerido'
+      });
+    }
 
-      if (!categoryId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      if (!categoryId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la categoría es requerido'
-        });
-      }
-
+    return productsAcopioController._handleRequest(res, 'getByCategory', req, async () => {
       const products = await productsAcopio.getByCategory(categoryId);
 
-      res.status(200).json({
+      return {
         success: true,
         message: 'Productos obtenidos exitosamente',
         data: products
-      });
-    } catch (error) {
-      console.error('Error en getByCategory:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      };
+    });
   }
 
   // Verificar si un producto tiene movimientos
   static async hasMovements(req, res) {
-    try {
-      const { id } = req.params;
+    const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID del producto es requerido'
+      });
+    }
 
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del producto es requerido'
-        });
-      }
-
+    return productsAcopioController._handleRequest(res, 'hasMovements', req, async () => {
       const hasMovements = await productsAcopio.hasMovements(id);
 
-      res.status(200).json({
+      return {
         success: true,
         message: 'Verificación completada',
         data: { hasMovements }
-      });
-    } catch (error) {
-      console.error('Error en hasMovements:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      };
+    });
   }
-
-  
 }
 
 module.exports = productsAcopioController;

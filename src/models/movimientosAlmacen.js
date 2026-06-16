@@ -12,7 +12,6 @@ const normalizeText = (text) => {
         .trim();
 };
 
-// Función para generar código aleatorio de 8 caracteres alfanuméricos
 const generarCodigoAleatorio = () => {
     const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let codigo = '';
@@ -22,12 +21,19 @@ const generarCodigoAleatorio = () => {
     return codigo;
 };
 
-// Función para generar código de movimiento
-const generarCodigoMovimiento = (type) => {
-    const prefijo = type === 'salida' ? 'VEN' : 'ENT';
-    const codigoAleatorio = generarCodigoAleatorio();
-    return `#${prefijo}-${codigoAleatorio}`;
+const getInitials = (name) => {
+    if (!name) return 'XXXX';
+    const words = name.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
+    if (words.length === 0) return 'XXXX';
+    if (words.length === 1) {
+        return (words[0] + 'XXXX').substring(0, 4);
+    }
+    const first = words[0].substring(0, 2);
+    const second = words[1].substring(0, 2);
+    return (first.padEnd(2, 'X') + second.padEnd(2, 'X'));
 };
+
+
 
 class movimientosAlmacen {
     // Crear un nuevo movimiento de almacén
@@ -99,10 +105,42 @@ class movimientosAlmacen {
                 ? Number(numero_orden)
                 : null;
 
-            const numeroOrdenNormalizado = Number.isNaN(numeroOrdenProporcionado) ? null : numeroOrdenProporcionado;
+            let numeroOrdenNormalizado = Number.isNaN(numeroOrdenProporcionado) ? null : numeroOrdenProporcionado;
+            let nombreEntidad = '';
 
-            // Generar código único para el movimiento
-            const codigoMovimiento = generarCodigoMovimiento(type);
+            if (numeroOrdenNormalizado === null) {
+                if (type === 'salida' && cliente_id) {
+                    const { data: cliente } = await supabase.from('clients').select('name, total_orders').eq('id', cliente_id).single();
+                    if (cliente) {
+                        numeroOrdenNormalizado = (cliente.total_orders || 0) + 1;
+                        nombreEntidad = cliente.name;
+                        await supabase.from('clients').update({ total_orders: numeroOrdenNormalizado }).eq('id', cliente_id);
+                    }
+                } else if (type === 'entrada' && proveedor_id) {
+                    const { data: proveedor } = await supabase.from('proveedores').select('name, total_orders').eq('id', proveedor_id).single();
+                    if (proveedor) {
+                        numeroOrdenNormalizado = (proveedor.total_orders || 0) + 1;
+                        nombreEntidad = proveedor.name;
+                        await supabase.from('proveedores').update({ total_orders: numeroOrdenNormalizado }).eq('id', proveedor_id);
+                    }
+                }
+            }
+
+            let codigoMovimiento = null;
+            const prefix = type === 'entrada' ? 'MAE-' : 'MAV-';
+            const genAlfanumerico = () => {
+                const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+                const nums = '0123456789';
+                const l = () => letras[Math.floor(Math.random() * letras.length)];
+                const n = () => nums[Math.floor(Math.random() * nums.length)];
+                return `${l()}${l()}${n()}${n()}${n()}`;
+            };
+            if (numeroOrdenNormalizado !== null) {
+                const initials = nombreEntidad ? getInitials(nombreEntidad) : 'XXXX';
+                codigoMovimiento = `${prefix}${initials}${String(numeroOrdenNormalizado).padStart(5, '0')}`;
+            } else {
+                codigoMovimiento = `${prefix}${genAlfanumerico()}`;
+            }
 
             // Iniciar transacción - OPTIMIZADO: Solo campos necesarios, sin defaults
             const insertData = {
@@ -549,48 +587,7 @@ class movimientosAlmacen {
             }
             
 
-            // Para salidas con cliente: incrementar total_orders PRIMERO, luego guardar el valor actualizado en numero_orden
-            if (type === 'salida' && cliente_id) {
-                try {
-                    // 1) PRIMERO: Incrementar total_orders del cliente
-                    const incrementResult = await this.incrementarTotalOrdersCliente(cliente_id);
-                    if (!incrementResult.success) {
-                        console.warn('Error incrementando total_orders del cliente:', incrementResult.message);
-                    } else {
-                        // 2) SEGUNDO: Obtener el total_orders actualizado del cliente
-                        const { data: clienteActualizado, error: clienteError } = await supabase
-                            .from('clients')
-                            .select('total_orders')
-                            .eq('id', cliente_id)
-                            .single();
-
-                        if (clienteError) {
-                            console.warn('Error obteniendo total_orders actualizado del cliente:', clienteError);
-                        } else {
-                            const numeroOrdenActualizado = clienteActualizado?.total_orders || 0;
-                            
-                            // 3) TERCERO: Actualizar el movimiento con el numero_orden (total_orders actualizado del cliente)
-                            if (numeroOrdenNormalizado === null) {
-                                const { error: updateMovimientoError } = await supabase
-                                    .from('movimientos_almacen')
-                                    .update({ numero_orden: numeroOrdenActualizado })
-                                    .eq('id', movimiento.id);
-
-                                if (updateMovimientoError) {
-                                    console.warn('Error actualizando numero_orden del movimiento:', updateMovimientoError);
-                                } else {
-                                    numeroOrdenAsignado = numeroOrdenActualizado;
-                                }
-                            } else {
-                                numeroOrdenAsignado = numeroOrdenNormalizado;
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error procesando numero_orden:', error);
-                }
-            }
-
+            // Eliminar lógica redundante de incremento de total_orders, ya se hizo al principio
             movimientoBasico.numero_orden = numeroOrdenAsignado;
 
             // 6️⃣ ENVIAR EMAIL CON LOGS (solo para empresa "hhco")
@@ -638,6 +635,163 @@ class movimientosAlmacen {
 
         } catch (error) {
             console.error('Error en MovimientosAlmacen.create:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
+    // Inserción de golpe rápida
+    static async createFast(movimientoData) {
+        try {
+            const { user_id, personal_id, sucu_id, type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado } = movimientoData;
+            
+            let numeroOrdenFinal = null;
+            let nombreEntidad = '';
+
+            if (type === 'salida' && cliente_id) {
+                const { data: cliente } = await supabase.from('clients').select('name, total_orders').eq('id', cliente_id).single();
+                if (cliente) {
+                    numeroOrdenFinal = (cliente.total_orders || 0) + 1;
+                    nombreEntidad = cliente.name;
+                    await supabase.from('clients').update({ total_orders: numeroOrdenFinal }).eq('id', cliente_id);
+                }
+            } else if (type === 'entrada' && proveedor_id) {
+                const { data: proveedor } = await supabase.from('proveedores').select('name, total_orders').eq('id', proveedor_id).single();
+                if (proveedor) {
+                    numeroOrdenFinal = (proveedor.total_orders || 0) + 1;
+                    nombreEntidad = proveedor.name;
+                    await supabase.from('proveedores').update({ total_orders: numeroOrdenFinal }).eq('id', proveedor_id);
+                }
+            }
+
+            let codigoMovimiento = null;
+            const prefix = type === 'entrada' ? 'MAE-' : 'MAV-';
+            const genAlfanumerico = () => {
+                const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+                const nums = '0123456789';
+                const l = () => letras[Math.floor(Math.random() * letras.length)];
+                const n = () => nums[Math.floor(Math.random() * nums.length)];
+                return `${l()}${l()}${n()}${n()}${n()}`;
+            };
+            if (numeroOrdenFinal !== null) {
+                const initials = nombreEntidad ? getInitials(nombreEntidad) : 'XXXX';
+                codigoMovimiento = `${prefix}${initials}${String(numeroOrdenFinal).padStart(5, '0')}`;
+            } else {
+                codigoMovimiento = `${prefix}${genAlfanumerico()}`;
+            }
+
+            const fechaMovimientoISO = new Date().toISOString();
+
+            const insertData = {
+                sucu_id,
+                type,
+                metodo_pago,
+                cliente_id,
+                proveedor_id,
+                precio_id,
+                user_id,
+                descuento,
+                aumento,
+                concepto,
+                porcentaje,
+                agrupado: !!agrupado,
+                fecha: fechaMovimientoISO,
+                estado: 'finalizado',
+                numero_orden: numeroOrdenFinal,
+                codigo: codigoMovimiento
+            };
+
+            // 1. Insertar movimiento
+            const { data: movimiento, error: movimientoError } = await supabase
+                .from('movimientos_almacen')
+                .insert(insertData)
+                .select('id')
+                .single();
+
+            if (movimientoError) {
+                console.error('❌ Supabase error en createFast:', JSON.stringify(movimientoError));
+                console.error('❌ insertData:', JSON.stringify(insertData));
+                return { success: false, message: 'Error al crear el movimiento rápido', error: movimientoError, detail: movimientoError?.message };
+            }
+
+            // 2. Insertar productos del movimiento
+            const productosData = productos.map(producto => {
+                const precio = Number(producto.precio) || 0;
+                const cantidad = Number(producto.cantidad);
+                return {
+                    movimiento_almacen_id: movimiento.id,
+                    producto_almacen_id: producto.id,
+                    cantidad: cantidad,
+                    precio_unitario: precio,
+                    subtotal: precio * cantidad
+                };
+            });
+
+            const { error: productosError } = await supabase
+                .from('movimiento_almacen_producto')
+                .insert(productosData);
+
+            if (productosError) {
+                await supabase.from('movimientos_almacen').delete().eq('id', movimiento.id);
+                return { success: false, message: 'Error al crear detalles de productos', error: productosError };
+            }
+
+            // 3. Obtener stock actual de la sucursal para estos productos
+            const productIds = productos.map(p => p.id);
+            const { data: stocksActuales, error: errorStocks } = await supabase
+                .from('productos_sucursal')
+                .select('id, producto_id, stock')
+                .eq('sucursal_id', sucu_id)
+                .in('producto_id', productIds);
+
+            if (errorStocks) {
+                return { success: false, message: 'Error al obtener stocks para actualizar', error: errorStocks };
+            }
+
+            const stocksMap = new Map();
+            stocksActuales.forEach(s => stocksMap.set(s.producto_id, s));
+
+            // 4. Preparar upserts de stock
+            const upserts = [];
+            for (const producto of productos) {
+                const stockActual = stocksMap.get(producto.id);
+                const stockActualValue = stockActual ? Number(stockActual.stock) : 0;
+                
+                let nuevaCantidad;
+                if (type === 'entrada') {
+                    nuevaCantidad = stockActualValue + Number(producto.cantidad);
+                } else {
+                    nuevaCantidad = stockActualValue - Number(producto.cantidad);
+                }
+
+                if (stockActual) {
+                    upserts.push({
+                        id: stockActual.id,
+                        producto_id: producto.id,
+                        sucursal_id: sucu_id,
+                        stock: nuevaCantidad
+                    });
+                } else {
+                    upserts.push({
+                        producto_id: producto.id,
+                        sucursal_id: sucu_id,
+                        stock: nuevaCantidad
+                    });
+                }
+            }
+
+            if (upserts.length > 0) {
+                const { error: upsertError } = await supabase
+                    .from('productos_sucursal')
+                    .upsert(upserts, { onConflict: 'producto_id, sucursal_id' });
+
+                if (upsertError) {
+                    return { success: false, message: 'Error actualizando stocks', error: upsertError };
+                }
+            }
+
+            return { success: true, data: { id: movimiento.id, codigo: codigoMovimiento, numero_orden: numeroOrdenFinal } };
+        } catch (error) {
+            console.error('Error en MovimientosAlmacen.createFast:', error);
             return { success: false, message: 'Error interno del servidor', error };
         }
     }
@@ -1584,7 +1738,7 @@ class movimientosAlmacen {
                 console.log('❌ [ANULAR] No se puede anular: stock insuficiente en algunos productos');
                 return { 
                     success: false, 
-                    message: 'No se puede anular el movimiento: stock insuficiente para algunos productos', 
+                    message: 'No es posible anular esta entrada por que algunos productos ya no existen en stock o se vendieron', 
                     productosConStockInsuficiente 
                 };
             }

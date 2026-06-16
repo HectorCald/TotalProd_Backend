@@ -257,16 +257,16 @@ class Personal {
   // Método para crear personal
   static async create(personalData) {
     try {
-      const { first_name, last_name, codigo, cargo, empresa_id, sucursal_id, modules = [], permisos = {}, ubicacion = null, rastrear = false } = personalData;
+      const { first_name, last_name, codigo, cargo, cargo_id, empresa_id, sucursal_id, permisos = {}, ubicacion = null, rastrear = false } = personalData;
 
-      if (!first_name || !last_name || !codigo || !cargo || !empresa_id) {
+      if (!first_name || !last_name || !codigo || (!cargo && !cargo_id) || !empresa_id) {
         throw new Error('Datos requeridos faltantes');
       }
 
       // Verificar que el código no exista
       const codigoExiste = await this.codigoExists(codigo, empresa_id);
       if (codigoExiste) {
-        throw new Error('El código ya existe en esta empresa');
+        throw new Error('El correo electrónico ya existe en esta empresa');
       }
 
       // Crear el personal
@@ -277,6 +277,7 @@ class Personal {
           last_name,
           codigo,
           cargo,
+          cargo_id: cargo_id || null,
           empresa_id,
           sucursal_id: sucursal_id || null,
           ubicacion: ubicacion,
@@ -321,21 +322,7 @@ class Personal {
         }
       }
 
-      // Crear relaciones con submódulos si existen
-      if (modules && modules.length > 0) {
-        const personalModuloData = modules.map(moduleId => ({
-          personal_id: newPersonal.id,
-          sub_modulo_id: moduleId
-        }));
 
-        const { error: moduleError } = await supabase
-          .from('personal_modulo_permiso')
-          .insert(personalModuloData);
-
-        if (moduleError) {
-          // No lanzar error aquí, solo log
-        }
-      }
 
       // Obtener los datos completos del personal creado
       const completePersonal = await this.getById(newPersonal.id);
@@ -349,7 +336,7 @@ class Personal {
   // Método para actualizar personal
   static async update(id, personalData) {
     try {
-      const { first_name, last_name, codigo, cargo, is_active, sucursal_id, modules = [], permisos = {}, ubicacion, rastrear } = personalData;
+      const { first_name, last_name, codigo, cargo, cargo_id, is_active, sucursal_id, permisos = {}, ubicacion, rastrear } = personalData;
 
       if (!id) {
         throw new Error('ID del personal es requerido');
@@ -365,7 +352,7 @@ class Personal {
       if (codigo && codigo !== currentPersonal.codigo) {
         const codigoExiste = await this.codigoExists(codigo, currentPersonal.empresa_id, id);
         if (codigoExiste) {
-          throw new Error('El código ya existe en esta empresa');
+          throw new Error('El correo electrónico ya existe en esta empresa');
         }
       }
 
@@ -375,6 +362,7 @@ class Personal {
       if (last_name) updateData.last_name = last_name;
       if (codigo) updateData.codigo = codigo;
       if (cargo !== undefined) updateData.cargo = cargo;
+      if (cargo_id !== undefined) updateData.cargo_id = cargo_id;
       if (is_active !== undefined) updateData.is_active = is_active;
       if (sucursal_id !== undefined) updateData.sucursal_id = sucursal_id;
       if (ubicacion !== undefined) updateData.ubicacion = ubicacion;
@@ -423,34 +411,7 @@ class Personal {
         }
       }
 
-      // Actualizar relaciones con submódulos
-      if (modules !== undefined) {
-        // Eliminar relaciones existentes
-        const { error: deleteError } = await supabase
-          .from('personal_modulo_permiso')
-          .delete()
-          .eq('personal_id', id);
 
-        if (deleteError) {
-          // No lanzar error aquí, solo log
-        }
-
-        // Crear nuevas relaciones si existen módulos
-        if (modules.length > 0) {
-          const personalModuloData = modules.map(moduleId => ({
-            personal_id: id,
-            sub_modulo_id: moduleId
-          }));
-
-          const { error: moduleError } = await supabase
-            .from('personal_modulo_permiso')
-            .insert(personalModuloData);
-
-          if (moduleError) {
-            // No lanzar error aquí, solo log
-          }
-        }
-      }
 
       // Obtener los datos completos del personal actualizado
       const completePersonal = await this.getById(id);

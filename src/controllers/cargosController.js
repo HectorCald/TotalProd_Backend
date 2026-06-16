@@ -1,12 +1,12 @@
-const pricesTypes = require('../models/pricesTypes');
+const Cargos = require('../models/Cargos');
 const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
 
-class pricesTypesController {
+class cargosController {
 
   static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
     const {
       validateEmpresaId = false,
-      validatePriceTypeId = false,
+      validateCargoId = false,
       checkPermission = null,
       successStatus = 200,
       successMessage = 'Operación exitosa'
@@ -22,13 +22,12 @@ class pricesTypesController {
           });
         }
       }
-
-      if (validatePriceTypeId) {
+      if (validateCargoId) {
         const { id } = req.params;
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del tipo de precio es requerido'
+            message: 'ID del cargo es requerido'
           });
         }
       }
@@ -49,7 +48,7 @@ class pricesTypesController {
             const actionTranslate = { create: 'crear', update: 'editar', delete: 'eliminar' };
             return res.status(403).json({
               success: false,
-              message: `No tienes permisos para ${actionTranslate[checkPermission]} tipos de precios`
+              message: `No tienes permisos para ${actionTranslate[checkPermission]} cargos`
             });
           }
         }
@@ -75,20 +74,20 @@ class pricesTypesController {
     }
   }
 
-  // Obtener todos los tipos de precios
+  // Obtener todos los cargos
   static async getAll(req, res) {
-    return pricesTypesController._handleRequest(res, 'getAll', req, async () => {
+    return cargosController._handleRequest(res, 'getAll', req, async () => {
       const empresaId = req.query.empresa_id;
-      return await pricesTypes.getAll(empresaId);
+      return await Cargos.getAll(empresaId);
     }, {
       validateEmpresaId: true,
-      successMessage: 'Tipos de precios obtenidos exitosamente'
+      successMessage: 'Cargos obtenidos exitosamente'
     });
   }
 
-  // Crear un tipo de precio
+  // Crear un cargo
   static async create(req, res) {
-    const { name, description, empresa_id } = req.body;
+    const { name, description, modules, empresa_id } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -97,22 +96,23 @@ class pricesTypesController {
       });
     }
 
-    return pricesTypesController._handleRequest(res, 'create', req, async () => {
-      return await pricesTypes.create({
+    return cargosController._handleRequest(res, 'create', req, async () => {
+      return await Cargos.create({
         name: name.trim(),
-        description: description ? description.trim() : null
+        description: description ? description.trim() : null,
+        modules: modules || []
       }, empresa_id);
     }, {
       validateEmpresaId: true,
       checkPermission: 'create',
       successStatus: 201,
-      successMessage: 'Tipo de precio creado exitosamente'
+      successMessage: 'Cargo creado exitosamente'
     });
   }
 
-  // Actualizar un tipo de precio
+  // Actualizar un cargo
   static async update(req, res) {
-    const { name, description } = req.body;
+    const { name, description, modules } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -121,30 +121,31 @@ class pricesTypesController {
       });
     }
 
-    return pricesTypesController._handleRequest(res, 'update', req, async () => {
+    return cargosController._handleRequest(res, 'update', req, async () => {
       const { id } = req.params;
-      return await pricesTypes.update(id, {
+      return await Cargos.update(id, {
         name: name.trim(),
-        description: description ? description.trim() : null
+        description: description ? description.trim() : null,
+        modules: modules
       });
     }, {
-      validatePriceTypeId: true,
+      validateCargoId: true,
       checkPermission: 'update',
-      successMessage: 'Tipo de precio actualizado exitosamente'
+      successMessage: 'Cargo actualizado exitosamente'
     });
   }
 
-  // Eliminar un tipo de precio
+  // Eliminar un cargo
   static async delete(req, res) {
-    return pricesTypesController._handleRequest(res, 'delete', req, async () => {
+    return cargosController._handleRequest(res, 'delete', req, async () => {
       const { id } = req.params;
-      await pricesTypes.delete(id);
+      await Cargos.delete(id);
     }, {
-      validatePriceTypeId: true,
+      validateCargoId: true,
       checkPermission: 'delete',
-      successMessage: 'Tipo de precio eliminado exitosamente'
+      successMessage: 'Cargo eliminado exitosamente'
     });
   }
 }
 
-module.exports = pricesTypesController;
+module.exports = cargosController;

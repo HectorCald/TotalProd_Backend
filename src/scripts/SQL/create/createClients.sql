@@ -3,9 +3,9 @@ CREATE TABLE clients (
     name VARCHAR(255) NOT NULL,
     phone VARCHAR(20),
     location POINT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    description TEXT,
     total_orders INT NOT NULL,
     sucu_id UUID NOT NULL,
-    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT clients_sucu_id_fkey FOREIGN KEY (sucu_id) REFERENCES sucursales (id)
 );

@@ -10,23 +10,17 @@ class pricesTypes {
     this.created_at = data.created_at;
   }
 
-  // Método para obtener todos los tipos de precios de una empresa y empresas asociadas
-  static async getAll(empresaId, empresasAsociadasIds = []) {
+  // Método para obtener todos los tipos de precios de una empresa
+  static async getAll(empresaId) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
       }
 
-      // Construir array de IDs de empresas (empresa actual + asociadas)
-      const empresaIds = [empresaId];
-      if (Array.isArray(empresasAsociadasIds) && empresasAsociadasIds.length > 0) {
-        empresaIds.push(...empresasAsociadasIds);
-      }
-
       const { data, error } = await supabase
         .from('prices_types')
         .select('*')
-        .in('empresa_id', empresaIds)
+        .eq('empresa_id', empresaId)
         .order('name', { ascending: true });
 
       if (error) {

@@ -3,203 +3,160 @@ const { checkDeletePermission, checkUpdatePermission } = require('../utils/permi
 
 class proveedoresController {
 
-  // Obtener todos los proveedores de una sucursal
-  static async getAll(req, res) {
+  static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
+    const {
+      validateSucuId = false,
+      validateProveedorId = false,
+      checkPermission = null,
+      successStatus = 200,
+      successMessage = 'Operación exitosa'
+    } = options;
+
     try {
-      // Obtener el sucu_id de la query
-      const sucuId = req.query.sucu_id;
-      
-      if (!sucuId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la sucursal es requerido'
-        });
+      if (validateSucuId) {
+        const sucuId = req.query.sucu_id || req.body.sucu_id;
+        if (!sucuId) {
+          return res.status(400).json({
+            success: false,
+            message: 'ID de la sucursal es requerido'
+          });
+        }
       }
 
-      const proveedores = await proveedor.getAll(sucuId);
+      if (validateProveedorId) {
+        const { id } = req.params;
+        if (!id) {
+          return res.status(400).json({
+            success: false,
+            message: 'ID del proveedor es requerido'
+          });
+        }
+      }
+
+      if (checkPermission) {
+        const userType = req.user?.type;
+        if (userType === 'employee') {
+          const personal_id = req.user.id;
+          let hasPermission = false;
+          if (checkPermission === 'delete') {
+            hasPermission = await checkDeletePermission(personal_id);
+          } else if (checkPermission === 'update') {
+            hasPermission = await checkUpdatePermission(personal_id);
+          }
+          if (!hasPermission) {
+            return res.status(403).json({
+              success: false,
+              message: `No tienes permisos para ${checkPermission === 'delete' ? 'eliminar' : 'editar'} proveedores`
+            });
+          }
+        }
+      }
+
+      const data = await handlerFn();
       
-      res.status(200).json({
+      const responseBody = {
         success: true,
-        message: 'Proveedores obtenidos exitosamente',
-        data: proveedores
-      });
+        message: successMessage
+      };
+      if (data !== undefined) {
+        responseBody.data = data;
+      }
+
+      return res.status(successStatus).json(responseBody);
     } catch (error) {
-      console.error('Error en getAll:', error);
-      res.status(500).json({
+      console.error(`Error en ${actionName}:`, error);
+      return res.status(500).json({
         success: false,
-        message: error.message
+        message: error.message || 'Error interno del servidor'
       });
     }
   }
 
+  // Obtener todos los proveedores de una sucursal
+  static async getAll(req, res) {
+    return proveedoresController._handleRequest(res, 'getAll', req, async () => {
+      const sucuId = req.query.sucu_id;
+      return await proveedor.getAll(sucuId);
+    }, {
+      validateSucuId: true,
+      successMessage: 'Proveedores obtenidos exitosamente'
+    });
+  }
+
   // Crear un proveedor
   static async create(req, res) {
-    try {
-      const { name, phone, direccion, description, location, sucu_id } = req.body;
+    const { name, phone, direccion, description, location, sucu_id } = req.body;
 
-      // Validaciones básicas
-      if (!name || !name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'El nombre es obligatorio'
-        });
-      }
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre es obligatorio'
+      });
+    }
 
-      if (!sucu_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la sucursal es requerido'
-        });
-      }
-
-      // Crear el proveedor
-      const newProveedor = await proveedor.create({
+    return proveedoresController._handleRequest(res, 'create', req, async () => {
+      return await proveedor.create({
         name: name.trim(),
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
         location: location || null
       }, sucu_id);
-
-      res.status(201).json({
-        success: true,
-        message: 'Proveedor creado exitosamente',
-        data: newProveedor
-      });
-    } catch (error) {
-      console.error('Error en create:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+    }, {
+      validateSucuId: true,
+      successStatus: 201,
+      successMessage: 'Proveedor creado exitosamente'
+    });
   }
 
   // Eliminar un proveedor
   static async delete(req, res) {
-    try {
+    return proveedoresController._handleRequest(res, 'delete', req, async () => {
       const { id } = req.params;
-      const userType = req.user?.type;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del proveedor es requerido'
-        });
-      }
-
-      // Verificar permisos de eliminación solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkDeletePermission(personal_id);
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'No tienes permisos para eliminar proveedores'
-          });
-        }
-      }
-
-      // Eliminar el proveedor
       await proveedor.delete(id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Proveedor eliminado exitosamente'
-      });
-    } catch (error) {
-      console.error('Error en delete:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+    }, {
+      validateProveedorId: true,
+      checkPermission: 'delete',
+      successMessage: 'Proveedor eliminado exitosamente'
+    });
   }
 
   // Actualizar un proveedor
   static async update(req, res) {
-    try {
+    const { name, phone, direccion, description, location } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre es obligatorio'
+      });
+    }
+
+    return proveedoresController._handleRequest(res, 'update', req, async () => {
       const { id } = req.params;
-      const { name, phone, direccion, description, location } = req.body;
-      const userType = req.user?.type;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del proveedor es requerido'
-        });
-      }
-
-      if (!name || !name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'El nombre es obligatorio'
-        });
-      }
-
-      // Verificar permisos de edición solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkUpdatePermission(personal_id);
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'No tienes permisos para editar proveedores'
-          });
-        }
-      }
-
-      // Actualizar el proveedor
-      const updatedProveedor = await proveedor.update(id, {
+      return await proveedor.update(id, {
         name: name.trim(),
         phone: phone?.trim() || null,
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
         location: location || null
       });
-
-      res.status(200).json({
-        success: true,
-        message: 'Proveedor actualizado exitosamente',
-        data: updatedProveedor
-      });
-    } catch (error) {
-      console.error('Error en update:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+    }, {
+      validateProveedorId: true,
+      checkPermission: 'update',
+      successMessage: 'Proveedor actualizado exitosamente'
+    });
   }
 
   // Obtener un proveedor por ID
   static async getById(req, res) {
-    try {
+    return proveedoresController._handleRequest(res, 'getById', req, async () => {
       const { id } = req.params;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del proveedor es requerido'
-        });
-      }
-
-      const proveedorData = await proveedor.getById(id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Proveedor obtenido exitosamente',
-        data: proveedorData
-      });
-    } catch (error) {
-      console.error('Error en getById:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      return await proveedor.getById(id);
+    }, {
+      validateProveedorId: true,
+      successMessage: 'Proveedor obtenido exitosamente'
+    });
   }
 }
 

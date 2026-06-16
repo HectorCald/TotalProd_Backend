@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const { calculateProductsSizes, logProductsSizes } = require('../utils/dataSizeHelper');
 
 class productsAcopio {
 
@@ -73,7 +74,7 @@ class productsAcopio {
   }
 
   // Método para obtener todos los productos
-  static async getAll(empresaId, empresasAsociadasIds = []) {
+  static async getAll(empresaId, empresasAsociadasIds = [], page = 1, limit = 30, search = null, categoryId = null, sortOrder = 'name_asc') {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
@@ -85,7 +86,9 @@ class productsAcopio {
         empresaIds.push(...empresasAsociadasIds);
       }
 
-      const { data, error } = await supabase
+      const offset = (page - 1) * limit;
+
+      let query = supabase
         .from('products_acopio')
         .select(`
           *,
@@ -110,23 +113,75 @@ class productsAcopio {
                 id,
                 name,
                 quantity,
-                type_measure:type_measure_id (
-                  id,
-                  name,
-                  code
-                )
+                  type_measure:type_measure_id (
+                    id,
+                    name,
+                    code,
+                    code_menor,
+                    value
+                  )
               )
             )
           )
-        `)
-        .in('empresa_id', empresaIds)
-        .order('name', { ascending: true });
+        `, { count: 'exact' })
+        .in('empresa_id', empresaIds);
+
+      // Search filter
+      if (search && search.trim() !== '') {
+        query = query.ilike('name', `%${search.trim()}%`);
+      }
+
+      // Category filter
+      if (categoryId) {
+        if (Array.isArray(categoryId)) {
+          const validIds = categoryId.filter(id => id && String(id).trim() !== '');
+          if (validIds.length > 0) {
+            query = query.in('category_id', validIds);
+          }
+        } else if (typeof categoryId === 'string' && categoryId.trim() !== '') {
+          if (categoryId.includes(',')) {
+            const ids = categoryId.split(',').map(id => id.trim()).filter(id => id);
+            query = query.in('category_id', ids);
+          } else {
+            query = query.eq('category_id', categoryId.trim());
+          }
+        }
+      }
+
+      // Sorting
+      if (sortOrder === 'name_desc') {
+        query = query.order('name', { ascending: false });
+      } else {
+        query = query.order('name', { ascending: true }); // Default
+      }
+
+      // Pagination
+      query = query.range(offset, offset + limit - 1);
+
+      const { data, error, count } = await query;
 
       if (error) {
+        console.error('Error explícito de Supabase en productsAcopio getAll:', error);
         throw new Error('No se pudo obtener los productos');
       }
 
-      return data || [];
+      let productosFinales = data || [];
+      
+      let sizeInfo = null;
+      // Calcular y loggear tamaños de datos
+      if (productosFinales && productosFinales.length > 0) {
+        const sizes = calculateProductsSizes(productosFinales);
+        logProductsSizes(sizes, 'getAll_Acopio');
+        sizeInfo = sizes;
+      }
+
+      return {
+        data: productosFinales,
+        pagination: {
+          hasNextPage: (offset + limit) < count
+        },
+        sizeInfo
+      };
     } catch (error) {
       console.error('Error al obtener los productos:', error);
       throw new Error('No se pudo obtener los productos');

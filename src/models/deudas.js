@@ -186,7 +186,13 @@ class deudas {
 
             // Aplicar filtro de cliente
             if (clienteId) {
-                query = query.eq('cliente_id', clienteId);
+                if (typeof clienteId === 'string' && clienteId.includes(',')) {
+                    query = query.in('cliente_id', clienteId.split(','));
+                } else if (Array.isArray(clienteId)) {
+                    query = query.in('cliente_id', clienteId);
+                } else {
+                    query = query.eq('cliente_id', clienteId);
+                }
             }
 
             // Aplicar filtro de fecha si se proporciona
@@ -369,6 +375,18 @@ class deudas {
         try {
             const { fecha_deuda, fecha_vencimiento, monto_total, saldo_pendiente, concepto, estado, cliente_id } = updateData;
 
+            // Obtener la deuda actual para verificar saldos, fechas y estados previos
+            const { data: deudaActual, error: getError } = await supabase
+                .from('deudas')
+                .select('*')
+                .eq('id', id)
+                .single();
+
+            if (getError || !deudaActual) {
+                console.error('Error al obtener deuda actual:', getError);
+                throw new Error('Deuda no encontrada');
+            }
+
             const dbData = {};
 
             if (concepto !== undefined) {
@@ -387,14 +405,13 @@ class deudas {
                 }
             }
 
+            let vencimientoNormalizado = null;
             if (fecha_vencimiento) {
-                const vencimientoNormalizado = formatDateInput(fecha_vencimiento);
+                vencimientoNormalizado = formatDateInput(fecha_vencimiento);
                 if (!vencimientoNormalizado) {
                     throw new Error('Fecha de vencimiento inválida');
                 }
-                if (vencimientoNormalizado) {
-                    dbData.fecha_vencimiento = vencimientoNormalizado;
-                }
+                dbData.fecha_vencimiento = vencimientoNormalizado;
             }
 
             if (monto_total !== undefined) {
@@ -408,9 +425,28 @@ class deudas {
                 dbData.saldo_pendiente = saldo_pendiente;
             }
 
-            if (estado) {
-                dbData.estado = estado;
+            // Recalcular estado de forma inteligente si cambia saldo, vencimiento o estado
+            const finalSaldo = dbData.saldo_pendiente !== undefined ? dbData.saldo_pendiente : parseFloat(deudaActual.saldo_pendiente);
+            const finalVencimiento = vencimientoNormalizado || deudaActual.fecha_vencimiento;
+            let finalEstado = estado || deudaActual.estado;
+
+            if (parseFloat(finalSaldo) === 0) {
+                finalEstado = 'pagada';
+            } else {
+                // Obtener fecha actual en Bolivia (GMT-4)
+                const ahora = new Date();
+                const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+                const hoy = ahoraBolivia.toISOString().split('T')[0];
+
+                if (finalVencimiento < hoy) {
+                    finalEstado = 'vencida';
+                } else if (finalEstado === 'vencida') {
+                    // Si el vencimiento es a futuro y estaba vencida, cambiar a pendiente
+                    finalEstado = 'pendiente';
+                }
             }
+
+            dbData.estado = finalEstado;
 
             const { data, error } = await supabase
                 .from('deudas')

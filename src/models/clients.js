@@ -32,7 +32,6 @@ class clients {
 
       return data || [];
     } catch (error) {
-      console.error('Error al obtener los clientes:', error);
       throw new Error('No se pudo obtener los clientes');
     }
   }
@@ -74,7 +73,6 @@ class clients {
 
       return { location: mov.ubicacion };
     } catch (error) {
-      console.error('Error al obtener ubicación del cliente:', error);
       return { location: null };
     }
   }
@@ -103,7 +101,6 @@ class clients {
         .select();
 
       if (error) {
-        console.error('Error de Supabase:', error);
         throw new Error('No se pudo crear el cliente');
       }
 
@@ -113,7 +110,6 @@ class clients {
         throw new Error('No se pudo crear el cliente');
       }
     } catch (error) {
-      console.error('Error al crear el cliente:', error);
       throw error;
     }
   }
@@ -130,13 +126,11 @@ class clients {
         .eq('id', id)
 
       if (error) {
-        console.error('Error de Supabase:', error);
         throw new Error('No se pudo eliminar el cliente');
       }
 
       return true;
     } catch (error) {
-      console.error('Error al eliminar el cliente:', error);
       throw error;
     }
   }
@@ -168,7 +162,6 @@ class clients {
         .select();
 
       if (error) {
-        console.error('Error de Supabase:', error);
         throw new Error('No se pudo actualizar el cliente');
       }
 
@@ -178,7 +171,6 @@ class clients {
         throw new Error('No se pudo actualizar el cliente');
       }
     } catch (error) {
-      console.error('Error al actualizar el cliente:', error);
       throw error;
     }
   }
@@ -197,7 +189,6 @@ class clients {
         .single();
 
       if (error) {
-        console.error('Error de Supabase:', error);
         throw new Error('No se pudo obtener el cliente');
       }
 
@@ -207,7 +198,6 @@ class clients {
 
       return data;
     } catch (error) {
-      console.error('Error al obtener el cliente:', error);
       throw error;
     }
   }

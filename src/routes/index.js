@@ -19,7 +19,6 @@ const planRoutes = require('./planRoutes');
 const codigoPromocionalRoutes = require('./codigoPromocionalRoutes');
 const sucursalesRoutes = require('./sucursalesRoutes');
 const personalRoutes = require('./personalRoutes');
-const comentariosRoutes = require('./comentariosRoutes');
 const gastosRoutes = require('./gastosRoutes');
 const deudasRoutes = require('./deudasRoutes');
 const registrosProduccionDamabravaRoutes = require('./registrosProduccionDamabravaRoutes');
@@ -28,10 +27,10 @@ const pagosDamabravaRoutes = require('./pagosDamabravaRoutes');
 const permissionsRoutes = require('./permissionsRoutes');
 const conteosRoutes = require('./conteosRoutes');
 const cotizacionesRoutes = require('./cotizacionesRoutes');
-const transferenciasAlmacenRoutes = require('./transferenciasAlmacenRoutes');
 const empresaImagenRoutes = require('./empresaImagenRoutes');
 const empresaRoutes = require('./empresaRoutes');
 const historialRoutes = require('./historialRoutes');
+const cargosRoutes = require('./cargosRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -103,11 +102,12 @@ router.use('/codigo-promocional', codigoPromocionalRoutes);
 // Rutas de sucursales
 router.use('/sucursales', sucursalesRoutes);
 
+// Rutas de cargos
+router.use('/cargos', cargosRoutes);
+
 // Rutas de personal
 router.use('/personal', personalRoutes);
 
-// Rutas de comentarios
-router.use('/comentarios', comentariosRoutes);
 
 // Rutas de gastos
 router.use('/gastos', gastosRoutes);
@@ -133,8 +133,6 @@ router.use('/conteos', conteosRoutes);
 // Rutas de cotizaciones
 router.use('/cotizaciones', cotizacionesRoutes);
 
-// Rutas de transferencias de almacén
-router.use('/transferencias-almacen', transferenciasAlmacenRoutes);
 
 // Rutas de imágenes de empresa
 router.use('/empresa-imagen', empresaImagenRoutes);

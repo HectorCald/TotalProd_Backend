@@ -3,29 +3,105 @@ const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = 
 
 class productsAlmacenController {
 
-  // Obtener todos los productos de la empresa
-  static async getAll(req, res) {
+  static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
+    const {
+      validateEmpresaId = false,
+      validateSucuId = false,
+      validateProductId = false,
+      checkPermission = null,
+      successStatus = 200,
+      successMessage = 'Operación exitosa'
+    } = options;
+
     try {
-      // Obtener parámetros de la query
-      const empresaId = req.query.empresa_id;
-      const sucuId = req.query.sucu_id;
-      const ocultarStockCero = req.query.ocultar_stock_cero === 'true' || req.query.ocultar_stock_cero === true;
-      
-      if (!empresaId) {
+      const empresaId = req.query.empresa_id || req.body.empresa_id;
+      const sucuId = req.query.sucu_id || req.body.sucu_id;
+
+      if (validateEmpresaId && !empresaId) {
         return res.status(400).json({
           success: false,
           message: 'ID de la empresa es requerido'
         });
       }
 
-      if (!sucuId) {
+      if (validateSucuId && !sucuId) {
         return res.status(400).json({
           success: false,
           message: 'ID de la sucursal es requerido'
         });
       }
 
-      // Obtener empresas asociadas si se proporcionan
+      if (validateProductId) {
+        const { id } = req.params;
+        if (!id) {
+          return res.status(400).json({
+            success: false,
+            message: 'ID del producto es requerido'
+          });
+        }
+      }
+
+      if (checkPermission) {
+        const userType = req.user?.type;
+        if (userType === 'employee') {
+          const personal_id = req.user.id;
+          let hasPermission = false;
+          if (checkPermission === 'create') {
+            hasPermission = await checkCreatePermission(personal_id);
+          } else if (checkPermission === 'update') {
+            hasPermission = await checkUpdatePermission(personal_id);
+          } else if (checkPermission === 'delete') {
+            hasPermission = await checkDeletePermission(personal_id);
+          }
+          if (!hasPermission) {
+            return res.status(403).json({
+              success: false,
+              message: `No tienes permisos para ${checkPermission === 'delete' ? 'eliminar' : checkPermission === 'update' ? 'editar' : 'crear'} productos`
+            });
+          }
+        }
+      }
+
+      const result = await handlerFn();
+      
+      const responseBody = {
+        success: true,
+        message: successMessage
+      };
+
+      if (result !== undefined) {
+        // Manejar estructura { data, pagination, sizeInfo }
+        if (result && typeof result === 'object' && result.hasOwnProperty('data')) {
+          responseBody.data = result.data;
+          if (result.pagination) responseBody.pagination = result.pagination;
+          if (result.sizeInfo) responseBody.sizeInfo = result.sizeInfo;
+        } else {
+          responseBody.data = result;
+        }
+      }
+
+      return res.status(successStatus).json(responseBody);
+    } catch (error) {
+      console.error(`Error en ${actionName}:`, error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener todos los productos de la empresa
+  static async getAll(req, res) {
+    return productsAlmacenController._handleRequest(res, 'getAll', req, async () => {
+      const empresaId = req.query.empresa_id;
+      const sucuId = req.query.sucu_id;
+      const ocultarStockCero = req.query.ocultar_stock_cero === 'true' || req.query.ocultar_stock_cero === true;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 30;
+      const search = req.query.search || null;
+      const categoryId = req.query.category_id || null;
+      const sortOrder = req.query.sort_order || 'name_asc';
+
       let empresasAsociadasIds = [];
       if (req.query.empresas_asociadas) {
         const asociadas = Array.isArray(req.query.empresas_asociadas) 
@@ -34,442 +110,184 @@ class productsAlmacenController {
         empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
       }
 
-      const products = await productsAlmacen.getAll(empresaId, sucuId, empresasAsociadasIds, ocultarStockCero);
-      
-      // Extraer información de tamaños si existe
-      let sizeInfo = null;
-      let productsData = products;
-      if (products && products._sizeInfo) {
-        sizeInfo = products._sizeInfo;
-        // Remover _sizeInfo del array antes de enviarlo
-        delete products._sizeInfo;
-        productsData = products;
-      }
-      
-      res.status(200).json({
-        success: true,
-        message: 'Productos obtenidos exitosamente',
-        data: productsData,
-        sizeInfo: sizeInfo // Incluir información de tamaños en la respuesta
-      });
-    } catch (error) {
-      console.error('Error en productsAlmacenController.getAll:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      return await productsAlmacen.getAll(
+        empresaId, 
+        sucuId, 
+        empresasAsociadasIds, 
+        ocultarStockCero,
+        page,
+        limit,
+        search,
+        categoryId,
+        sortOrder
+      );
+    }, {
+      validateEmpresaId: true,
+      validateSucuId: true,
+      successMessage: 'Productos obtenidos exitosamente'
+    });
   }
 
   // Obtener productos ligeros (solo id y name) para formularios de producción
   static async getAllForProduction(req, res) {
-    try {
+    return productsAlmacenController._handleRequest(res, 'getAllForProduction', req, async () => {
       const empresaId = req.query.empresa_id;
-      
-      if (!empresaId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la empresa es requerido'
-        });
-      }
-
-      const products = await productsAlmacen.getAllForProduction(empresaId);
-      
-      res.status(200).json({
-        success: true,
-        message: 'Productos obtenidos exitosamente',
-        data: products
-      });
-    } catch (error) {
-      console.error('Error en productsAlmacenController.getAllForProduction:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      return await productsAlmacen.getAllForProduction(empresaId);
+    }, {
+      validateEmpresaId: true,
+      successMessage: 'Productos obtenidos exitosamente'
+    });
   }
 
   // Obtener un producto por ID
   static async getById(req, res) {
-    try {
+    return productsAlmacenController._handleRequest(res, 'getById', req, async () => {
       const { id } = req.params;
       const sucuId = req.query.sucu_id;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del producto es requerido'
-        });
-      }
-
-      if (!sucuId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la sucursal es requerido'
-        });
-      }
-
       const product = await productsAlmacen.getById(id, sucuId);
-      
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: 'Producto no encontrado'
-        });
-      }
-
-      res.status(200).json({
-        success: true,
-        message: 'Producto obtenido exitosamente',
-        data: product
-      });
-    } catch (error) {
-      console.error('Error en productsAlmacenController.getById:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      if (!product) throw new Error('Producto no encontrado');
+      return product;
+    }, {
+      validateSucuId: true,
+      validateProductId: true,
+      successMessage: 'Producto obtenido exitosamente'
+    });
   }
 
   // Obtener múltiples productos por IDs con recetas
   static async getByIds(req, res) {
-    try {
+    return productsAlmacenController._handleRequest(res, 'getByIds', req, async () => {
       const empresaId = req.query.empresa_id;
-      
-      if (!empresaId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la empresa es requerido'
-        });
-      }
-
-      // Obtener IDs de los parámetros de query
-      // Express puede recibir múltiples valores del mismo nombre de diferentes formas:
-      // - Como array si está configurado para hacerlo
-      // - Como string único si solo hay un valor
-      // - Como string con múltiples valores separados (dependiendo del parser)
       let ids = req.query.ids || req.query['ids[]'];
       
-      // Si ids es undefined o null
-      if (!ids) {
-        return res.status(400).json({
-          success: false,
-          message: 'IDs de productos son requeridos'
-        });
-      }
+      if (!ids) throw new Error('IDs de productos son requeridos');
       
-      // Si ids es un string, puede ser un solo ID o múltiples separados por comas
       if (typeof ids === 'string') {
-        // Si contiene comas, separar por comas
-        if (ids.includes(',')) {
-          ids = ids.split(',').map(id => id.trim());
-        } else {
-          // Es un solo ID
-          ids = [ids];
-        }
+        if (ids.includes(',')) ids = ids.split(',').map(id => id.trim());
+        else ids = [ids];
       }
       
-      // Asegurar que es un array
-      if (!Array.isArray(ids)) {
-        ids = [ids];
-      }
-      
-      // Filtrar valores vacíos, null o undefined
+      if (!Array.isArray(ids)) ids = [ids];
       ids = ids.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
       
-      if (ids.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'IDs de productos son requeridos'
-        });
-      }
+      if (ids.length === 0) throw new Error('IDs de productos son requeridos');
 
-      const products = await productsAlmacen.getByIds(ids, empresaId);
-      
-      res.status(200).json({
-        success: true,
-        message: 'Productos obtenidos exitosamente',
-        data: products
-      });
-    } catch (error) {
-      console.error('Error en productsAlmacenController.getByIds:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      return await productsAlmacen.getByIds(ids, empresaId);
+    }, {
+      validateEmpresaId: true,
+      successMessage: 'Productos obtenidos exitosamente'
+    });
   }
 
   // Crear un producto
   static async create(req, res) {
-    try {
-      const { name, stock, codigo_barras, category_id, grup, stock_minimo, costo_produccion, prices, receta, empresa_id, sucu_id } = req.body;
-      const userType = req.user?.type;
+    const { name, description, stock, codigo_barras, category_id, category_ids, grup, stock_minimo, costo_produccion, prices, receta, empresa_id, sucu_id } = req.body;
 
-      // Validaciones básicas
-      if (!name || !name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'El nombre es obligatorio'
-        });
-      }
+    if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'El nombre es obligatorio' });
+    if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
+      return res.status(400).json({ success: false, message: 'El stock es obligatorio y debe ser un número válido mayor o igual a 0' });
+    }
 
-      if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'El stock es obligatorio y debe ser un número válido mayor o igual a 0'
-        });
-      }
-
-      if (!empresa_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la empresa es requerido'
-        });
-      }
-
-      if (!sucu_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la sucursal es requerido'
-        });
-      }
-
-      // Verificar permisos de creación solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkCreatePermission(personal_id);
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'No tienes permisos para crear productos'
-          });
-        }
-      }
-
-      // Numéricos opcionales: vacío → null (no 0) para consistencia crear/actualizar
+    return productsAlmacenController._handleRequest(res, 'create', req, async () => {
       const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
-
-      // Crear el producto
-      const newProduct = await productsAlmacen.create({
+      return await productsAlmacen.create({
         name: name.trim(),
+        description: description || null,
         stock: parseInt(stock),
         codigo_barras: codigo_barras ? codigo_barras.trim() : null,
         category_id: category_id || null,
+        category_ids: category_ids || [],
         grup: optionalNum(grup),
         stock_minimo: optionalNum(stock_minimo),
         costo_produccion: optionalNum(costo_produccion),
         prices: prices || {},
         receta: receta || null
       }, empresa_id, sucu_id);
-
-      res.status(201).json({
-        success: true,
-        message: 'Producto creado exitosamente',
-        data: newProduct
-      });
-    } catch (error) {
-      console.error('Error en create:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+    }, {
+      validateEmpresaId: true,
+      validateSucuId: true,
+      checkPermission: 'create',
+      successStatus: 201,
+      successMessage: 'Producto creado exitosamente'
+    });
   }
 
   // Actualizar un producto
   static async update(req, res) {
-    try {
+    const { name, description, stock, codigo_barras, category_id, category_ids, grup, stock_minimo, costo_produccion, prices, receta, sucu_id } = req.body;
+
+    if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'El nombre es obligatorio' });
+    if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
+      return res.status(400).json({ success: false, message: 'El stock es obligatorio y debe ser un número válido mayor o igual a 0' });
+    }
+
+    return productsAlmacenController._handleRequest(res, 'update', req, async () => {
       const { id } = req.params;
-      const { name, stock, codigo_barras, category_id, grup, stock_minimo, costo_produccion, prices, receta, sucu_id } = req.body;
-      const userType = req.user?.type;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del producto es requerido'
-        });
-      }
-
-      if (!name || !name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'El nombre es obligatorio'
-        });
-      }
-
-      if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'El stock es obligatorio y debe ser un número válido mayor o igual a 0'
-        });
-      }
-
-      if (!sucu_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la sucursal es requerido'
-        });
-      }
-
-      // Verificar permisos de edición solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkUpdatePermission(personal_id);
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'No tienes permisos para editar productos'
-          });
-        }
-      }
-
-      // Numéricos opcionales: vacío → null (consistencia con create)
       const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
-
-      // Actualizar el producto
-      const updatedProduct = await productsAlmacen.update(id, {
+      return await productsAlmacen.update(id, {
         name: name.trim(),
+        description: description || null,
         stock: parseInt(stock),
         codigo_barras: codigo_barras ? codigo_barras.trim() : null,
         category_id: category_id || null,
+        category_ids: category_ids || [],
         grup: optionalNum(grup),
         stock_minimo: optionalNum(stock_minimo),
         costo_produccion: optionalNum(costo_produccion),
         prices: prices || {},
         receta: receta || null
       }, sucu_id);
-      res.status(200).json({
-        success: true,
-        message: 'Producto actualizado exitosamente',
-        data: updatedProduct
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+    }, {
+      validateSucuId: true,
+      validateProductId: true,
+      checkPermission: 'update',
+      successMessage: 'Producto actualizado exitosamente'
+    });
   }
 
   // Eliminar un producto
   static async delete(req, res) {
-    try {
+    return productsAlmacenController._handleRequest(res, 'delete', req, async () => {
       const { id } = req.params;
-      const userType = req.user?.type;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID del producto es requerido'
-        });
-      }
-
-      // Verificar permisos de eliminación solo si es empleado
-      if (userType === 'employee') {
-        const personal_id = req.user.id; // El personal_id viene del token
-
-        const hasPermission = await checkDeletePermission(personal_id);
-        
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'No tienes permisos para eliminar productos'
-          });
-        }
-      }
-
-      // Eliminar el producto
       await productsAlmacen.delete(id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Producto eliminado exitosamente'
-      });
-    } catch (error) {
-      console.error('Error en delete:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+    }, {
+      validateProductId: true,
+      checkPermission: 'delete',
+      successMessage: 'Producto eliminado exitosamente'
+    });
   }
 
   // Actualizar múltiples productos en lote (para importación)
   static async bulkUpdate(req, res) {
-    try {
+    return productsAlmacenController._handleRequest(res, 'bulkUpdate', req, async () => {
       const { productosData, empresa_id, sucu_id } = req.body;
       const empresaId = req.user?.empresa_id || empresa_id;
       const sucuId = req.user?.sucu_id || sucu_id;
 
-      if (!empresaId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la empresa es requerido'
-        });
-      }
-
-      if (!productosData || !Array.isArray(productosData)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Array de productos es requerido'
-        });
-      }
-
+      if (!productosData || !Array.isArray(productosData)) throw new Error('Array de productos es requerido');
       const resultado = await productsAlmacen.bulkUpdate(productosData, empresaId, sucuId);
-
-      res.status(200).json({
-        success: true,
-        message: resultado.message,
-        data: resultado.data
-      });
-    } catch (error) {
-      console.error('Error en bulkUpdate:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      return resultado.data; // El middleware de handleRequest pondrá successMessage, pero si quieres usar el que retorna `resultado.message` tendrás que ajustarlo
+    }, {
+      validateEmpresaId: true,
+      successMessage: 'Productos actualizados en lote exitosamente'
+    });
   }
 
   // Crear múltiples productos en lote (para plantillas)
   static async bulkCreate(req, res) {
-    try {
+    return productsAlmacenController._handleRequest(res, 'bulkCreate', req, async () => {
       const { productosData, empresa_id, sucu_id } = req.body;
       const empresaId = req.user?.empresa_id || empresa_id;
       const sucuId = req.user?.sucu_id || sucu_id;
 
-      if (!empresaId) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de la empresa es requerido'
-        });
-      }
-
-      if (!productosData || !Array.isArray(productosData)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Array de productos es requerido'
-        });
-      }
-
+      if (!productosData || !Array.isArray(productosData)) throw new Error('Array de productos es requerido');
       const resultado = await productsAlmacen.bulkCreate(productosData, empresaId, sucuId);
-
-      res.status(201).json({
-        success: true,
-        message: resultado.message,
-        data: resultado.data
-      });
-    } catch (error) {
-      console.error('Error en bulkCreate:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
+      return resultado.data;
+    }, {
+      validateEmpresaId: true,
+      successStatus: 201,
+      successMessage: 'Productos creados en lote exitosamente'
+    });
   }
 }
 

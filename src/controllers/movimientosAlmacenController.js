@@ -3,102 +3,94 @@ const transferenciasAlmacen = require('../models/transferenciasAlmacen');
 const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
 
 class movimientosAlmacenController {
+
+    static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
+        const {
+            validateSucuId = false,
+            validateId = false,
+            checkPermission = null,
+            successStatus = 200,
+            passRawResult = false
+        } = options;
+
+        try {
+            if (validateSucuId) {
+                const sucuId = req.query.sucu_id || req.headers['x-sucu-id'] || req.body.sucu_id;
+                if (!sucuId) {
+                    return res.status(400).json({ success: false, message: 'ID de la sucursal es requerido' });
+                }
+            }
+
+            if (validateId) {
+                const { id } = req.params;
+                if (!id) {
+                    return res.status(400).json({ success: false, message: 'ID del movimiento es requerido' });
+                }
+            }
+
+            if (checkPermission) {
+                const userType = req.user?.type;
+                const esEdicion = req.body?.esEdicion;
+                if (userType === 'employee' && !esEdicion) {
+                    const personal_id = req.user.id;
+                    let hasPermission = false;
+                    if (checkPermission === 'delete') hasPermission = await checkDeletePermission(personal_id);
+                    else if (checkPermission === 'anular') hasPermission = await checkAnularPermission(personal_id);
+                    if (!hasPermission) {
+                        return res.status(403).json({
+                            success: false,
+                            message: `No tienes permisos para ${checkPermission === 'delete' ? 'eliminar' : 'anular'} movimientos`
+                        });
+                    }
+                }
+            }
+
+            const result = await handlerFn();
+
+            if (passRawResult) {
+                return res.status(successStatus).json(result);
+            }
+
+            if (result && result.success === false) {
+                return res.status(400).json(result);
+            }
+
+            return res.status(successStatus).json(result);
+        } catch (error) {
+            console.error(`Error en ${actionName}:`, error);
+            return res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
+        }
+    }
+
     // Crear un nuevo movimiento
     static async create(req, res) {
-        
         try {
-            const tValidationStart = Date.now();
             const { sucu_id, personal_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden, concepto, ubicacion, porcentaje } = req.body;
             const user_id = req.user?.id;
-            const userType = req.user?.type; // Verificar si es empleado o usuario normal
+            const userType = req.user?.type;
 
-            // Si es empleado, usar personal_id, si es usuario normal, usar user_id
             const finalUserId = userType === 'employee' ? null : user_id;
             const finalPersonalId = userType === 'employee' ? personal_id : null;
 
-            // Validar que se proporcione sucu_id
-            if (!sucu_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la sucursal es requerido'
-                });
-            }
-            
-            // Validaciones básicas
-            if (!type || !['entrada', 'salida'].includes(type)) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El tipo de movimiento es obligatorio y debe ser "entrada" o "salida"'
-                });
-            }
+            if (!sucu_id) return res.status(400).json({ success: false, message: 'ID de la sucursal es requerido' });
+            if (!type || !['entrada', 'salida'].includes(type)) return res.status(400).json({ success: false, message: 'El tipo de movimiento es obligatorio y debe ser "entrada" o "salida"' });
+            if (!productos || !Array.isArray(productos) || productos.length === 0) return res.status(400).json({ success: false, message: 'Debe incluir al menos un producto en el movimiento' });
 
-            if (!productos || !Array.isArray(productos) || productos.length === 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Debe incluir al menos un producto en el movimiento'
-                });
-            }
-
-            // Validar que los productos tengan los campos requeridos
             for (const producto of productos) {
-                if (!producto.id) {
-                    return res.status(400).json({
-                        success: false,
-                        message: 'Todos los productos deben tener un ID válido'
-                    });
-                }
-                if (!producto.cantidad || producto.cantidad <= 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: 'Todos los productos deben tener una cantidad válida mayor a 0'
-                    });
-                }
-                if (producto.precio === undefined || producto.precio === null || producto.precio < 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: 'Todos los productos deben tener un precio válido mayor o igual a 0'
-                    });
-                }
+                if (!producto.id) return res.status(400).json({ success: false, message: 'Todos los productos deben tener un ID válido' });
+                if (!producto.cantidad || producto.cantidad <= 0) return res.status(400).json({ success: false, message: 'Todos los productos deben tener una cantidad válida mayor a 0' });
+                if (producto.precio === undefined || producto.precio === null || producto.precio < 0) return res.status(400).json({ success: false, message: 'Todos los productos deben tener un precio válido mayor o igual a 0' });
             }
 
-            // Validaciones específicas por tipo
-            if (type === 'entrada' && proveedor_id && typeof proveedor_id !== 'string') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El ID del proveedor debe ser válido'
-                });
-            }
-
-            if (type === 'salida' && cliente_id && typeof cliente_id !== 'string') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El ID del cliente debe ser válido'
-                });
-            }
-
-            if (type === 'salida' && metodo_pago && !['qr', 'transferencia', 'tarjeta', 'efectivo','credito'].includes(metodo_pago)) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El método de pago debe ser uno de: qr, transferencia, tarjeta, efectivo'
-                });
-            }
-
-            // Si es un ingreso de producción y no se especifica precio_id, usar un precio por defecto
             let finalPrecioId = precio_id;
-            if (!precio_id && produccion_damabrava_id) {
-                // Para ingresos de producción, podemos usar null o buscar un precio por defecto
-                // Por ahora usaremos null y el backend debe manejarlo
-                finalPrecioId = null;
-            }
+            if (!precio_id && produccion_damabrava_id) finalPrecioId = null;
 
-            // Preparar datos del movimiento
             const movimientoData = {
                 user_id: finalUserId,
                 personal_id: finalPersonalId,
                 sucu_id,
                 type,
                 observaciones: observaciones || null,
-                // Permitir metodo_pago también en entradas cuando se registra gasto
                 metodo_pago: metodo_pago || null,
                 cliente_id: type === 'salida' ? (cliente_id || null) : null,
                 proveedor_id: type === 'entrada' ? (proveedor_id || null) : null,
@@ -121,87 +113,75 @@ class movimientosAlmacenController {
                 ...(ubicacion ? { ubicacion } : {})
             };
 
-            // VALIDAR INGREDIENTES ANTES de crear el movimiento si es entrada con restar_ingredientes
             if (type === 'entrada' && restar_ingredientes) {
                 try {
-                    // Obtener productos con recetas en una sola query (bulk)
                     const productsAlmacen = require('../models/productsAlmacen');
                     const productIds = productos.map(p => p.id);
-                    
-                    // Query bulk para obtener todos los productos con sus recetas
                     const productosConRecetas = await productsAlmacen.getByIds(productIds, req.user?.empresa_id || null);
-                    
-                    // Procesar ingredientes para productos que tienen recetas
                     const ingredientesParaRestar = [];
-                    
+
                     for (const productoData of productos) {
                         const producto = productosConRecetas.find(p => p.id === productoData.id);
-                        
-                        if (producto && producto.recetas && producto.recetas.length > 0) {
-                            const receta = producto.recetas[0];
-                            
-                            if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
-                                // Agregar ingredientes a la lista para validación
-                                ingredientesParaRestar.push({
-                                    producto,
-                                    cantidad: parseFloat(productoData.cantidad),
-                                    ingredientes: receta.recetas_detalle
-                                });
-                            }
+                        if (producto?.recetas?.[0]?.recetas_detalle?.length > 0) {
+                            ingredientesParaRestar.push({ producto, cantidad: parseFloat(productoData.cantidad), ingredientes: producto.recetas[0].recetas_detalle });
                         }
                     }
-                    
-                    // VALIDAR stock de ingredientes ANTES de crear el movimiento
+
                     if (ingredientesParaRestar.length > 0) {
-                        const validacionIngredientes = await movimientosAlmacen.restarIngredientesBatch(
-                            ingredientesParaRestar,
-                            req.user.empresa_id
-                        );
-                        
-                        // Si la validación falla, retornar error sin crear el movimiento
-                        if (!validacionIngredientes.success) {
-                            return res.status(400).json({
-                                success: false,
-                                message: validacionIngredientes.message,
-                                ingredientesConStockInsuficiente: validacionIngredientes.ingredientesConStockInsuficiente
-                            });
+                        const validacion = await movimientosAlmacen.restarIngredientesBatch(ingredientesParaRestar, req.user.empresa_id);
+                        if (!validacion.success) {
+                            return res.status(400).json({ success: false, message: validacion.message, ingredientesConStockInsuficiente: validacion.ingredientesConStockInsuficiente });
                         }
                     }
                 } catch (error) {
-                    console.error('Error validando ingredientes:', error);
-                    return res.status(400).json({
-                        success: false,
-                        message: 'Error al validar el stock de ingredientes: ' + error.message
-                    });
+                    return res.status(400).json({ success: false, message: 'Error al validar el stock de ingredientes: ' + error.message });
                 }
             }
 
-            // Crear el movimiento (solo si la validación de ingredientes pasó)
             const result = await movimientosAlmacen.create(movimientoData);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-
-            res.status(201).json({
-                success: true,
-                id: result.data.id
-            });
+            if (!result.success) return res.status(400).json(result);
+            return res.status(201).json({ success: true, id: result.data.id });
 
         } catch (error) {
             console.error('Error en movimientosAlmacenController.create:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
+            return res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
         }
+    }
+
+    // Crear movimiento rápido (entrada o salida)
+    static async createFast(req, res) {
+        const { type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado } = req.body;
+        const sucu_id = req.headers['x-sucu-id'] || req.body.sucu_id;
+        const user_id = req.user?.id || null;
+
+        if (!sucu_id) return res.status(400).json({ success: false, message: 'Sucursal no especificada' });
+        if (!type) return res.status(400).json({ success: false, message: 'Tipo de movimiento requerido' });
+        if (!metodo_pago) return res.status(400).json({ success: false, message: 'Método de pago requerido' });
+        if (!precio_id) return res.status(400).json({ success: false, message: 'Precio requerido' });
+        if (!productos || productos.length === 0) return res.status(400).json({ success: false, message: 'Debe incluir al menos un producto' });
+
+        return movimientosAlmacenController._handleRequest(res, 'createFast', req, async () => {
+            return await movimientosAlmacen.createFast({
+                user_id,
+                sucu_id,
+                type,
+                metodo_pago,
+                cliente_id: cliente_id || null,
+                proveedor_id: proveedor_id || null,
+                precio_id,
+                productos,
+                descuento: parseFloat(descuento) || 0,
+                aumento: parseFloat(aumento) || 0,
+                concepto: concepto || null,
+                porcentaje: !!porcentaje,
+                agrupado: !!agrupado
+            });
+        }, { successStatus: 201, passRawResult: true });
     }
 
     // Obtener todos los movimientos de la sucursal
     static async getAll(req, res) {
-        try {
+        return movimientosAlmacenController._handleRequest(res, 'getAll', req, async () => {
             const sucu_id = req.query.sucu_id;
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 30;
@@ -210,631 +190,171 @@ class movimientosAlmacenController {
             const ordenamiento = req.query.ordenamiento || 'fecha_desc';
             const search = req.query.search || null;
             const cliente = req.query.cliente || null;
-            
-            // Extraer filtro de fecha
-            let filtroFecha = null;
-            if (req.query.fecha_inicio || req.query.fecha_fin) {
-                filtroFecha = {
-                    inicio: req.query.fecha_inicio || null,
-                    fin: req.query.fecha_fin || null
-                };
-            }
+            const filtroFecha = (req.query.fecha_inicio || req.query.fecha_fin)
+                ? { inicio: req.query.fecha_inicio || null, fin: req.query.fecha_fin || null }
+                : null;
 
-            if (!sucu_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la sucursal es requerido'
-                });
-            }
-
-            // Para combinar y paginar correctamente, necesitamos obtener TODOS los datos de cada fuente
-            // porque después de combinar y ordenar, necesitamos aplicar la paginación sobre el resultado combinado
-            // Usamos un límite muy alto para obtener todos los registros
             const bufferLimit = 99999;
-            
-            // Obtener movimientos (solo si no hay filtro de tipo o si el tipo es 'entrada' o 'salida', pero NO 'transferencia')
-            let resultMovimientos = { success: true, data: [], pagination: { total: 0, hasNextPage: false } };
+
+            let resultMovimientos = { success: true, data: [], pagination: { total: 0 } };
             let totalMovimientos = 0;
             if (tipo !== 'transferencia') {
-                // Obtener con buffer más grande para tener suficientes datos después de combinar
                 resultMovimientos = await movimientosAlmacen.getAll(sucu_id, 1, bufferLimit, tipo, estado, ordenamiento, search, cliente, filtroFecha);
-
-                if (!resultMovimientos.success) {
-                    return res.status(400).json(resultMovimientos);
-                }
-                
-                // Obtener el total real de movimientos para calcular hasNextPage correctamente
+                if (!resultMovimientos.success) throw new Error(resultMovimientos.message);
                 totalMovimientos = resultMovimientos.pagination?.total || resultMovimientos.data?.length || 0;
             }
 
-            // Obtener transferencias (solo si no hay filtro de tipo o si el tipo es 'transferencia')
             let transferencias = [];
             let totalTransferencias = 0;
             if (!tipo || tipo === 'transferencia') {
-                const estadoTransferencia = estado === 'finalizado' ? 'Finalizado' : estado === 'anulado' ? 'Anulado' : null;
-                const clienteIdTransferencia = cliente || null; // Usar el mismo filtro de cliente
-                // Obtener con buffer más grande
-                const resultTransferencias = await transferenciasAlmacen.getAll(sucu_id, 1, bufferLimit, estadoTransferencia, ordenamiento, search, filtroFecha, clienteIdTransferencia);
-                
-                if (resultTransferencias.success && resultTransferencias.data) {
-                    // Obtener el total real de transferencias
-                    totalTransferencias = resultTransferencias.pagination?.total || resultTransferencias.data?.length || 0;
-                    
-                    // Formatear transferencias como movimientos
-                    transferencias = resultTransferencias.data.map(transferencia => ({
-                        id: transferencia.id,
-                        type: 'transferencia',
-                        fecha: transferencia.fecha,
-                        estado: transferencia.estado === 'Anulado' ? 'anulado' : 'finalizado',
-                        concepto: transferencia.concepto || `${transferencia.sucursal_origen?.name || 'Origen'} > ${transferencia.sucursal_destino?.name || 'Destino'}`,
-                        sucu_id: transferencia.sucu_origen_id,
-                        sucu_origen_id: transferencia.sucu_origen_id,
-                        sucu_destino_id: transferencia.sucu_destino_id,
-                        sucursal: transferencia.sucursal_origen,
-                        sucursal_origen: transferencia.sucursal_origen,
-                        sucursal_destino: transferencia.sucursal_destino,
-                        precio: transferencia.precio,
-                        precio_id: transferencia.precio_id,
-                        agrupado: transferencia.agrupado,
-                        productos: transferencia.productos || [],
-                        user: transferencia.user,
-                        personal: transferencia.personal,
-                        cliente: transferencia.cliente || null,
-                        cliente_id: transferencia.cliente_id || null,
-                        descuento: 0,
-                        aumento: 0,
-                        numero_orden: null,
-                        metodo_pago: null,
-                        proveedor: null
+                const estadoT = estado === 'finalizado' ? 'Finalizado' : estado === 'anulado' ? 'Anulado' : null;
+                const resultT = await transferenciasAlmacen.getAll(sucu_id, 1, bufferLimit, estadoT, ordenamiento, search, filtroFecha, cliente || null);
+                if (resultT.success && resultT.data) {
+                    totalTransferencias = resultT.pagination?.total || resultT.data?.length || 0;
+                    transferencias = resultT.data.map(t => ({
+                        id: t.id, type: 'transferencia', fecha: t.fecha,
+                        estado: t.estado === 'Anulado' ? 'anulado' : 'finalizado',
+                        concepto: t.concepto || `${t.sucursal_origen?.name || 'Origen'} > ${t.sucursal_destino?.name || 'Destino'}`,
+                        sucu_id: t.sucu_origen_id, sucu_origen_id: t.sucu_origen_id, sucu_destino_id: t.sucu_destino_id,
+                        sucursal: t.sucursal_origen, sucursal_origen: t.sucursal_origen, sucursal_destino: t.sucursal_destino,
+                        precio: t.precio, precio_id: t.precio_id, agrupado: t.agrupado,
+                        productos: t.productos || [], user: t.user, personal: t.personal,
+                        cliente: t.cliente || null, cliente_id: t.cliente_id || null,
+                        descuento: 0, aumento: 0, numero_orden: null, metodo_pago: null, proveedor: null
                     }));
                 }
             }
 
-            // Combinar movimientos y transferencias
             const allData = [...(resultMovimientos.data || []), ...transferencias];
-            
-            // Ordenar por fecha
             allData.sort((a, b) => {
-                const fechaA = new Date(a.fecha);
-                const fechaB = new Date(b.fecha);
-                return ordenamiento === 'fecha_asc' ? fechaA - fechaB : fechaB - fechaA;
+                const diff = new Date(a.fecha) - new Date(b.fecha);
+                return ordenamiento === 'fecha_asc' ? diff : -diff;
             });
 
-            // Calcular el total real combinado
-            // Si hay búsqueda, el total es la cantidad de items filtrados en memoria
-            // Si no hay búsqueda, sumamos los totales de cada fuente
-            const totalItemsCombinados = search 
-                ? allData.length 
-                : (totalMovimientos + totalTransferencias);
-
-            // Aplicar paginación sobre el resultado combinado y ordenado
+            const totalCombinado = search ? allData.length : (totalMovimientos + totalTransferencias);
             const startIndex = (page - 1) * limit;
-            const endIndex = startIndex + limit;
-            const paginatedData = allData.slice(startIndex, endIndex);
+            const paginatedData = allData.slice(startIndex, startIndex + limit);
 
-            // Calcular hasNextPage correctamente
-            // Si hay búsqueda, verificamos si hay más items en allData
-            // Si no hay búsqueda, verificamos si hay más items en total combinado
-            const hasNextPage = search 
-                ? endIndex < allData.length 
-                : endIndex < totalItemsCombinados;
-
-            res.json({
+            return {
                 success: true,
                 data: paginatedData,
-                pagination: {
-                    total: totalItemsCombinados,
-                    page,
-                    limit,
-                    hasNextPage: hasNextPage
-                }
-            });
-
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.getAll:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+                pagination: { total: totalCombinado, page, limit, hasNextPage: (startIndex + limit) < totalCombinado }
+            };
+        }, { validateSucuId: true, passRawResult: true });
     }
 
-    // Obtener estadísticas optimizadas para gráficos
+    // Obtener estadísticas para gráficos
     static async getStatsForCharts(req, res) {
-        try {
-            const sucu_id = req.query.sucu_id;
-
-            if (!sucu_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la sucursal es requerido'
-                });
-            }
-
-            const result = await movimientosAlmacen.getStatsForCharts(sucu_id);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.json({
-                success: true,
-                data: result.data
-            });
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.getStatsForCharts:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+        return movimientosAlmacenController._handleRequest(res, 'getStatsForCharts', req, async () => {
+            return await movimientosAlmacen.getStatsForCharts(req.query.sucu_id);
+        }, { validateSucuId: true, passRawResult: true });
     }
 
     // Obtener movimientos por tipo
     static async getByType(req, res) {
-        try {
-            const sucu_id = req.query.sucu_id;
+        return movimientosAlmacenController._handleRequest(res, 'getByType', req, async () => {
             const { tipo } = req.params;
+            const sucu_id = req.query.sucu_id;
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 30;
-
-            if (!sucu_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la sucursal es requerido'
-                });
-            }
-
-            if (!['entrada', 'salida'].includes(type)) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El tipo debe ser "entrada" o "salida"'
-                });
-            }
-
-            const result = await movimientosAlmacen.getByType(sucu_id, tipo, page, limit);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.json({
-                success: true,
-                data: result.data,
-                pagination: result.pagination
-            });
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.getByType:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+            return await movimientosAlmacen.getAll(sucu_id, page, limit, tipo);
+        }, { validateSucuId: true, passRawResult: true });
     }
 
-    // Obtener un movimiento por ID
+    // Obtener movimiento por ID
     static async getById(req, res) {
-        try {
+        return movimientosAlmacenController._handleRequest(res, 'getById', req, async () => {
             const { id } = req.params;
             const sucu_id = req.query.sucu_id;
-
-            if (!sucu_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la sucursal es requerido'
-                });
-            }
-
             const result = await movimientosAlmacen.getById(id);
+            if (!result.success) return res.status(404).json(result);
 
-            if (!result.success) {
-                return res.status(404).json(result);
-            }
-
-            // Verificar que el movimiento pertenece a la sucursal O está relacionado con un pedido entre sucursales
-            const movimientoPerteneceASucursal = result.data.sucu_id === sucu_id;
-            
-            if (!movimientoPerteneceASucursal) {
-                // Verificar si el movimiento está relacionado con un pedido donde la sucursal actual participa
-                const { data: pedidos, error: pedidosError } = await require('../config/supabase').supabase
+            if (result.data.sucu_id !== sucu_id) {
+                const { data: pedidos, error } = await require('../config/supabase').supabase
                     .from('pedidos_almacen')
-                    .select('id, sucursal_id, sucursal_destino_id, movimiento_salida_id, movimiento_entrada_id')
+                    .select('sucursal_id, sucursal_destino_id')
                     .or(`movimiento_salida_id.eq.${id},movimiento_entrada_id.eq.${id}`)
                     .limit(1);
 
-                if (!pedidosError && pedidos && pedidos.length > 0) {
-                    const pedido = pedidos[0];
-                    // Permitir acceso si la sucursal actual es la que solicita o la que entrega el pedido
-                    const sucursalParticipaEnPedido = 
-                        pedido.sucursal_id === sucu_id || 
-                        pedido.sucursal_destino_id === sucu_id;
-                    
-                    if (!sucursalParticipaEnPedido) {
-                        return res.status(403).json({
-                            success: false,
-                            message: 'No tienes permisos para ver este movimiento'
-                        });
-                    }
-                } else {
-                    // Si no está relacionado con un pedido, no tiene acceso
-                    return res.status(403).json({
-                        success: false,
-                        message: 'No tienes permisos para ver este movimiento'
-                    });
-                }
+                const participa = !error && pedidos?.length > 0 &&
+                    (pedidos[0].sucursal_id === sucu_id || pedidos[0].sucursal_destino_id === sucu_id);
+
+                if (!participa) return res.status(403).json({ success: false, message: 'No tienes permisos para ver este movimiento' });
             }
-
-            res.json({
-                success: true,
-                data: result.data
-            });
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.getById:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+            return result;
+        }, { validateSucuId: true, passRawResult: true });
     }
 
-    // Anular un movimiento
+    // Anular movimiento
     static async anular(req, res) {
-        
-        try {
-            const { id } = req.params;
-            const { desdePedido, esEdicion } = req.body; // esEdicion indica si es una edición (omitir validación de permisos)
-            const userType = req.user?.type;
-
-            // Verificar permisos de anulación solo si es empleado Y NO es edición
-            if (userType === 'employee' && !esEdicion) {
-                const personal_id = req.user.id; // El personal_id viene del token
-
-                const hasPermission = await checkAnularPermission(personal_id);
-                
-                if (!hasPermission) {
-                    return res.status(403).json({
-                        success: false,
-                        message: 'No tienes permisos para anular movimientos'
-                    });
-                }
-            }
-
-            const result = await movimientosAlmacen.anular(id, desdePedido);
-
-            if (!result.success) {
-                return res.status(400).json({
-                    success: false,
-                    message: result.message
-                });
-            }
-
-
-            res.json({
-                success: true,
-                message: 'Movimiento anulado correctamente',
-                data: result.data
-            });
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.anular:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+        return movimientosAlmacenController._handleRequest(res, 'anular', req, async () => {
+            const result = await movimientosAlmacen.anular(req.params.id, req.body.desdePedido);
+            if (!result.success) throw new Error(result.message);
+            return { success: true, message: 'Movimiento anulado correctamente', data: result.data };
+        }, { validateId: true, checkPermission: 'anular', passRawResult: true });
     }
 
-    // Eliminar un movimiento
+    // Eliminar movimiento
     static async eliminar(req, res) {
-        try {
-            const { id } = req.params;
-            const { esEdicion } = req.body || {}; // esEdicion indica si es una edición (omitir validación de permisos)
-            const userType = req.user?.type;
-
-            // Verificar permisos de eliminación solo si es empleado Y NO es edición
-            if (userType === 'employee' && !esEdicion) {
-                const personal_id = req.user.id; // El personal_id viene del token
-
-                const hasPermission = await checkDeletePermission(personal_id);
-                if (!hasPermission) {
-                    return res.status(403).json({
-                        success: false,
-                        message: 'No tienes permisos para eliminar movimientos'
-                    });
-                }
-            }
-
-            const result = await movimientosAlmacen.eliminar(id);
-
-            if (!result.success) {
-                return res.status(400).json({
-                    success: false,
-                    message: result.message
-                });
-            }
-
-            res.json({
-                success: true,
-                message: 'Movimiento eliminado correctamente'
-            });
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.eliminar:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+        return movimientosAlmacenController._handleRequest(res, 'eliminar', req, async () => {
+            const result = await movimientosAlmacen.eliminar(req.params.id);
+            if (!result.success) throw new Error(result.message);
+            return { success: true, message: 'Movimiento eliminado correctamente' };
+        }, { validateId: true, checkPermission: 'delete', passRawResult: true });
     }
 
-    // Verificar si un producto tiene movimientos (ULTRA OPTIMIZADO)
+    // Verificar si un producto tiene movimientos
     static async hasMovements(req, res) {
-        try {
+        return movimientosAlmacenController._handleRequest(res, 'hasMovements', req, async () => {
             const { productId } = req.params;
-            const sucu_id = req.query.sucu_id;
-
-            if (!sucu_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la sucursal es requerido'
-                });
-            }
-
-            if (!productId) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del producto es requerido'
-                });
-            }
-
-            const result = await movimientosAlmacen.hasMovements(productId, sucu_id);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.json({
-                success: true,
-                hasMovements: result.hasMovements
-            });
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.hasMovements:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+            if (!productId) throw new Error('ID del producto es requerido');
+            const result = await movimientosAlmacen.hasMovements(productId, req.query.sucu_id);
+            return { success: true, hasMovements: result.hasMovements };
+        }, { validateSucuId: true, passRawResult: true });
     }
 
     // Obtener movimientos por producto
     static async getByProduct(req, res) {
-        try {
-            const { productId } = req.params;
-            const sucu_id = req.query.sucu_id;
-
-            if (!sucu_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la sucursal es requerido'
-                });
-            }
-
-            if (!productId) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del producto es requerido'
-                });
-            }
-
-            const result = await movimientosAlmacen.getByProduct(productId, sucu_id);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.json({
-                success: true,
-                data: result.data
-            });
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.getByProduct:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+        return movimientosAlmacenController._handleRequest(res, 'getByProduct', req, async () => {
+            return await movimientosAlmacen.getByProduct(req.params.productId, req.query.sucu_id);
+        }, { validateSucuId: true, passRawResult: true });
     }
 
     // Obtener movimientos por cliente
     static async getByCliente(req, res) {
-        try {
-            const { clienteId } = req.params;
-            const sucu_id = req.query.sucu_id;
-
-            if (!sucu_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la sucursal es requerido'
-                });
-            }
-
-            if (!clienteId) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del cliente es requerido'
-                });
-            }
-
-            const result = await movimientosAlmacen.getByCliente(clienteId, sucu_id);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.json({
-                success: true,
-                data: result.data
-            });
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.getByCliente:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+        return movimientosAlmacenController._handleRequest(res, 'getByCliente', req, async () => {
+            return await movimientosAlmacen.getByCliente(req.params.clienteId, req.query.sucu_id);
+        }, { validateSucuId: true, passRawResult: true });
     }
 
     // Obtener movimientos por producción Damabrava
     static async getByProduccionDamabrava(req, res) {
-        try {
-            const { produccionId } = req.params;
-            const sucu_id = req.query.sucu_id;
-
-            if (!sucu_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la sucursal es requerido'
-                });
-            }
-
-            if (!produccionId) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de la producción es requerido'
-                });
-            }
-
-            const result = await movimientosAlmacen.getByProduccionDamabrava(produccionId, sucu_id);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.json({
-                success: true,
-                data: result.data
-            });
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.getByProduccionDamabrava:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor',
-                error: error.message
-            });
-        }
+        return movimientosAlmacenController._handleRequest(res, 'getByProduccionDamabrava', req, async () => {
+            return await movimientosAlmacen.getByProduccionDamabrava(req.params.produccionId, req.query.sucu_id);
+        }, { validateSucuId: true, passRawResult: true });
     }
 
-    // Actualizar un movimiento
+    // Actualizar movimiento
     static async update(req, res) {
-        try {
-            const { id } = req.params;
-            const updateData = req.body;
-
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del movimiento es requerido'
-                });
-            }
-
-            const result = await movimientosAlmacen.update(id, updateData);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.json(result);
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.update:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor'
-            });
-        }
+        return movimientosAlmacenController._handleRequest(res, 'update', req, async () => {
+            return await movimientosAlmacen.update(req.params.id, req.body);
+        }, { validateId: true, passRawResult: true });
     }
 
     // Eliminar productos de un movimiento
     static async deleteProductos(req, res) {
-        try {
-            const { id } = req.params;
-
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del movimiento es requerido'
-                });
-            }
-
-            const result = await movimientosAlmacen.deleteProductos(id);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.json(result);
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.deleteProductos:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor'
-            });
-        }
+        return movimientosAlmacenController._handleRequest(res, 'deleteProductos', req, async () => {
+            return await movimientosAlmacen.deleteProductos(req.params.id);
+        }, { validateId: true, passRawResult: true });
     }
 
     // Crear productos de un movimiento
     static async createProductos(req, res) {
-        try {
-            const { id } = req.params;
+        return movimientosAlmacenController._handleRequest(res, 'createProductos', req, async () => {
             const { productos } = req.body;
-
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del movimiento es requerido'
-                });
-            }
-
-            if (!productos || !Array.isArray(productos)) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Productos son requeridos'
-                });
-            }
-
-            const result = await movimientosAlmacen.createProductos(id, productos);
-
-            if (!result.success) {
-                return res.status(400).json(result);
-            }
-
-            res.json(result);
-
-        } catch (error) {
-            console.error('Error en movimientosAlmacenController.createProductos:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor'
-            });
-        }
+            if (!productos || !Array.isArray(productos)) throw new Error('Productos son requeridos');
+            return await movimientosAlmacen.createProductos(req.params.id, productos);
+        }, { validateId: true, passRawResult: true });
     }
 }
 

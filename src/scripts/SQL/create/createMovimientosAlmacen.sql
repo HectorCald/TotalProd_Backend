@@ -11,7 +11,7 @@ CREATE TABLE movimientos_almacen (
     estado VARCHAR,
     type VARCHAR NOT NULL,
     precio_id UUID NOT NULL,
-    deuda_id UUID NULL,
+    deuda_id UUID NULL, --en revisión
     produccion_damabrava_id UUID NULL,
     restar_ingredientes BOOLEAN NOT NULL DEFAULT FALSE,
     agrupado BOOLEAN NOT NULL DEFAULT FALSE,

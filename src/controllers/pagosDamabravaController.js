@@ -70,106 +70,143 @@ const formatPersonaFromRequest = (user = null) => {
 };
 
 class pagosDamabravaController {
-    static async create(req, res) {
+    static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
+        const {
+            requireAuth = true,
+            validateEmpresaId = false,
+            validatePagoId = false,
+            successStatus = 200,
+            errorStatus = 400
+        } = options;
+
         try {
+            if (requireAuth) {
+                const userId = req.user?.id;
+                if (!userId) {
+                    return res.status(401).json({
+                        success: false,
+                        message: 'Usuario no autenticado'
+                    });
+                }
+            }
+
+            if (validateEmpresaId) {
+                const empresaId = req.user?.empresa_id || req.body?.empresa_id || req.query?.empresa_id;
+                if (!empresaId) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'El usuario no tiene una empresa asociada.'
+                    });
+                }
+                if (req.query) req.query.empresa_id = empresaId;
+                if (req.body) req.body.empresa_id = empresaId;
+            }
+
+            if (validatePagoId) {
+                const { id } = req.params;
+                if (!id) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'ID del pago es requerido.'
+                    });
+                }
+            }
+
+            const result = await handlerFn();
+
+            if (!result.success) {
+                const finalErrorStatus = result.status || errorStatus;
+                return res.status(finalErrorStatus).json(result);
+            }
+
+            return res.status(successStatus).json(result);
+        } catch (error) {
+            console.error(`[pagosDamabravaController.${actionName}] Error inesperado:`, error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor.'
+            });
+        }
+    }
+
+    static async create(req, res) {
+        const {
+            responsable_id,
+            fecha_inicio,
+            fecha_fin,
+            totales = {},
+            registros = [],
+            extras = 0,
+            descuento = 0,
+            aumento = 0
+        } = req.body;
+
+        if (!responsable_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Debes seleccionar un responsable válido.'
+            });
+        }
+
+        if (!fecha_inicio || !fecha_fin) {
+            return res.status(400).json({
+                success: false,
+                message: 'Debes especificar el rango de fechas del pago.'
+            });
+        }
+
+        const inicioDate = parseDateOnly(fecha_inicio);
+        const finDate = parseDateOnly(fecha_fin);
+
+        if (!inicioDate || !finDate || Number.isNaN(inicioDate.getTime()) || Number.isNaN(finDate.getTime())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Las fechas proporcionadas no son válidas.'
+            });
+        }
+
+        if (inicioDate > finDate) {
+            return res.status(400).json({
+                success: false,
+                message: 'La fecha de inicio no puede ser mayor que la fecha de fin.'
+            });
+        }
+
+        const cernido = Number(totales.cernido) || 0;
+        const sellado = Number(totales.sellado) || 0;
+        const envasado = Number(totales.envasado) || 0;
+        const etiquetado = Number(totales.etiquetado) || 0;
+        const total = Number(totales.total) || 0;
+        const extrasValor = Math.max(0, Number(extras) || 0);
+        const descuentoValor = Math.max(0, Number(descuento) || 0);
+        const aumentoValor = Math.max(0, Number(aumento) || 0);
+
+        if (total <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'El total a pagar debe ser mayor a cero.'
+            });
+        }
+
+        const formattedFechaInicio = formatDateOnly(inicioDate);
+        const formattedFechaFin = formatDateOnly(finDate);
+
+        if (!formattedFechaInicio || !formattedFechaFin) {
+            return res.status(400).json({
+                success: false,
+                message: 'No se pudieron procesar las fechas proporcionadas.'
+            });
+        }
+
+        return pagosDamabravaController._handleRequest(res, 'create', req, async () => {
             const userType = req.user?.type || null;
-            const empresaId = req.user?.empresa_id || req.body?.empresa_id || null;
+            const empresaId = req.body.empresa_id;
 
             const inferredUserId = req.user?.user_id || req.user?.id || null;
             const inferredPersonalId = req.user?.personal_id || req.user?.personal?.id || null;
 
             const finalUserId = userType === 'employee' ? null : inferredUserId;
             const finalPersonalId = userType === 'employee' ? (inferredPersonalId || inferredUserId) : null;
-
-            if (!empresaId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'El usuario no tiene una empresa asociada.'
-                });
-            }
-
-            const {
-                responsable_id,
-                fecha_inicio,
-                fecha_fin,
-                totales = {},
-                registros = [],
-                extras = 0,
-                descuento = 0,
-                aumento = 0
-            } = req.body;
-
-            console.log('[pagosDamabravaController.create] Payload recibido:', {
-                responsable_id,
-                fecha_inicio,
-                fecha_fin,
-                totales,
-                registrosCount: Array.isArray(registros) ? registros.length : 0,
-                extras,
-                descuento,
-                aumento,
-                finalUserId,
-                finalPersonalId,
-                userType,
-                empresaId
-            });
-
-            if (!responsable_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Debes seleccionar un responsable válido.'
-                });
-            }
-
-            if (!fecha_inicio || !fecha_fin) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Debes especificar el rango de fechas del pago.'
-                });
-            }
-
-            const inicioDate = parseDateOnly(fecha_inicio);
-            const finDate = parseDateOnly(fecha_fin);
-
-            if (!inicioDate || !finDate || Number.isNaN(inicioDate.getTime()) || Number.isNaN(finDate.getTime())) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Las fechas proporcionadas no son válidas.'
-                });
-            }
-
-            if (inicioDate > finDate) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'La fecha de inicio no puede ser mayor que la fecha de fin.'
-                });
-            }
-
-            const cernido = Number(totales.cernido) || 0;
-            const sellado = Number(totales.sellado) || 0;
-            const envasado = Number(totales.envasado) || 0;
-            const etiquetado = Number(totales.etiquetado) || 0;
-            const total = Number(totales.total) || 0;
-            const extrasValor = Math.max(0, Number(extras) || 0);
-            const descuentoValor = Math.max(0, Number(descuento) || 0);
-            const aumentoValor = Math.max(0, Number(aumento) || 0);
-
-            if (total <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El total a pagar debe ser mayor a cero.'
-                });
-            }
-
-            const formattedFechaInicio = formatDateOnly(inicioDate);
-            const formattedFechaFin = formatDateOnly(finDate);
-
-            if (!formattedFechaInicio || !formattedFechaFin) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'No se pudieron procesar las fechas proporcionadas.'
-                });
-            }
 
             const result = await pagosDamabrava.create({
                 user_id: finalUserId,
@@ -190,18 +227,11 @@ class pagosDamabravaController {
                 registros
             });
 
-            console.log('[pagosDamabravaController.create] Resultado modelo:', {
-                success: result.success,
-                hasData: !!result.data,
-                dataKeys: result.data ? Object.keys(result.data) : [],
-                message: result.message
-            });
-
             if (!result.success) {
-                return res.status(400).json({
+                return {
                     success: false,
                     message: result.message || 'No se pudo registrar el pago.'
-                });
+                };
             }
 
             const responseData = { ...(result.data || {}) };
@@ -227,17 +257,9 @@ class pagosDamabravaController {
             const responsableInfo = composePersona(responseData.responsable);
             const fallbackRegistrador = formatPersonaFromRequest(req.user);
 
-            if (personalInfo) {
-                responseData.personal = personalInfo;
-            }
-
-            if (userInfo) {
-                responseData.user = userInfo;
-            }
-
-            if (responsableInfo) {
-                responseData.responsable = responsableInfo;
-            }
+            if (personalInfo) responseData.personal = personalInfo;
+            if (userInfo) responseData.user = userInfo;
+            if (responsableInfo) responseData.responsable = responsableInfo;
 
             if (userType === 'employee') {
                 responseData.personal = responseData.personal || fallbackRegistrador;
@@ -251,37 +273,20 @@ class pagosDamabravaController {
                 responseData.registrado_por = responseData.personal || responseData.user || fallbackRegistrador || null;
             }
 
-            console.log('[pagosDamabravaController.create] Respuesta enviada:', {
-                registrado_por: responseData.registrado_por,
-                user: responseData.user,
-                personal: responseData.personal
-            });
-
-            res.status(201).json({
+            return {
                 success: true,
                 data: responseData,
                 message: 'Pago registrado correctamente.'
-            });
-        } catch (error) {
-            console.error('[pagosDamabravaController.create] Error inesperado:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor.'
-            });
-        }
+            };
+        }, {
+            validateEmpresaId: true,
+            successStatus: 201
+        });
     }
 
     static async getAll(req, res) {
-        try {
-            const empresaId = req.user?.empresa_id || req.query?.empresa_id || null;
-
-            if (!empresaId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'El usuario no tiene una empresa asociada.'
-                });
-            }
-
+        return pagosDamabravaController._handleRequest(res, 'getAll', req, async () => {
+            const empresaId = req.query.empresa_id;
             const page = parseInt(req.query.page, 10) || 1;
             const limit = parseInt(req.query.limit, 10) || 30;
             const estado = req.query.estado && req.query.estado !== 'todos' ? req.query.estado : null;
@@ -289,192 +294,145 @@ class pagosDamabravaController {
             const search = req.query.search ? String(req.query.search).trim() : null;
 
             const result = await pagosDamabrava.getAll(empresaId, { page, limit, estado, responsableId, search });
-
             if (!result.success) {
-                return res.status(400).json({
+                return {
                     success: false,
                     message: result.message || 'No se pudieron obtener los pagos.'
-                });
+                };
             }
 
-            res.json({
+            return {
                 success: true,
                 data: result.data,
                 pagination: result.pagination
-            });
-        } catch (error) {
-            console.error('[pagosDamabravaController.getAll] Error inesperado:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor.'
-            });
-        }
+            };
+        }, {
+            validateEmpresaId: true
+        });
     }
 
     static async getById(req, res) {
-        try {
+        return pagosDamabravaController._handleRequest(res, 'getById', req, async () => {
             const { id } = req.params;
-
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del pago es requerido.'
-                });
-            }
-
             const result = await pagosDamabrava.getById(id);
-
             if (!result.success) {
-                return res.status(404).json({
+                return {
                     success: false,
+                    status: 404,
                     message: result.message || 'Pago no encontrado.'
-                });
+                };
             }
 
-            res.json({
+            return {
                 success: true,
                 data: result.data
-            });
-        } catch (error) {
-            console.error('[pagosDamabravaController.getById] Error inesperado:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor.'
-            });
-        }
+            };
+        }, {
+            validatePagoId: true
+        });
     }
 
     static async getRegistros(req, res) {
-        try {
+        return pagosDamabravaController._handleRequest(res, 'getRegistros', req, async () => {
             const { id } = req.params;
-
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del pago es requerido.'
-                });
-            }
-
             const result = await pagosDamabrava.getRegistros(id);
-
             if (!result.success) {
-                console.error('[pagosDamabravaController.getRegistros] Error desde modelo:', result.error || result.message);
-                return res.status(400).json({
+                return {
                     success: false,
                     message: result.message || 'No se pudieron obtener los registros asociados.'
-                });
+                };
             }
 
-            console.log('[pagosDamabravaController.getRegistros] Registros retornados:', Array.isArray(result.data) ? result.data.length : 'sin datos');
-
-            res.json({
+            return {
                 success: true,
                 data: result.data
-            });
-        } catch (error) {
-            console.error('[pagosDamabravaController.getRegistros] Error inesperado:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor.'
-            });
-        }
+            };
+        }, {
+            validatePagoId: true
+        });
     }
 
     static async updateEstado(req, res) {
-        try {
-            const { id } = req.params;
-            const { estado } = req.body || {};
+        const { id } = req.params;
+        const { estado } = req.body || {};
 
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del pago es requerido.'
-                });
-            }
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID del pago es requerido.'
+            });
+        }
 
-            if (!estado) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Estado es requerido.'
-                });
-            }
+        if (!estado) {
+            return res.status(400).json({
+                success: false,
+                message: 'Estado es requerido.'
+            });
+        }
 
-            const estadoNormalizado = estado.toLowerCase();
+        const estadoNormalizado = estado.toLowerCase();
 
-            if (!['pendiente', 'pagado'].includes(estadoNormalizado)) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Estado no válido. Usa "pendiente" o "pagado".'
-                });
-            }
+        if (!['pendiente', 'pagado'].includes(estadoNormalizado)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Estado no válido. Usa "pendiente" o "pagado".'
+            });
+        }
 
+        return pagosDamabravaController._handleRequest(res, 'updateEstado', req, async () => {
             const result = await pagosDamabrava.updateEstado(id, estadoNormalizado);
-
             if (!result.success) {
-                return res.status(400).json({
+                return {
                     success: false,
                     message: result.message || 'No se pudo actualizar el estado del pago.'
-                });
+                };
             }
 
-            res.json({
+            return {
                 success: true,
                 data: result.data,
                 message: 'Estado actualizado correctamente.'
-            });
-        } catch (error) {
-            console.error('[pagosDamabravaController.updateEstado] Error inesperado:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor.'
-            });
-        }
+            };
+        });
     }
 
     static async delete(req, res) {
-        try {
-            const { id } = req.params;
+        const { id } = req.params;
 
-            if (!id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID del pago es requerido.'
-                });
-            }
-
-            const userType = req.user?.type || null;
-            if (userType === 'employee') {
-                const personalId = req.user?.id || req.user?.personal_id || null;
-                const hasPermission = await checkDeletePermission(personalId);
-
-                if (!hasPermission) {
-                    return res.status(403).json({
-                        success: false,
-                        message: 'No tienes permisos para eliminar pagos'
-                    });
-                }
-            }
-
-            const result = await pagosDamabrava.delete(id);
-
-            if (!result.success) {
-                return res.status(400).json({
-                    success: false,
-                    message: result.message || 'No se pudo eliminar el pago.'
-                });
-            }
-
-            res.json({
-                success: true,
-                message: result.message || 'Pago eliminado correctamente.'
-            });
-        } catch (error) {
-            console.error('[pagosDamabravaController.delete] Error inesperado:', error);
-            res.status(500).json({
+        if (!id) {
+            return res.status(400).json({
                 success: false,
-                message: 'Error interno del servidor.'
+                message: 'ID del pago es requerido.'
             });
         }
+
+        const userType = req.user?.type || null;
+        if (userType === 'employee') {
+            const personalId = req.user?.id || req.user?.personal_id || null;
+            const hasPermission = await checkDeletePermission(personalId);
+
+            if (!hasPermission) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tienes permisos para eliminar pagos'
+                });
+            }
+        }
+
+        return pagosDamabravaController._handleRequest(res, 'delete', req, async () => {
+            const result = await pagosDamabrava.delete(id);
+            if (!result.success) {
+                return {
+                    success: false,
+                    message: result.message || 'No se pudo eliminar el pago.'
+                };
+            }
+
+            return {
+                success: true,
+                message: result.message || 'Pago eliminado correctamente.'
+            };
+        });
     }
 }
 

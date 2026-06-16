@@ -30,6 +30,14 @@ class productsAlmacen {
             id,
             name
           ),
+          producto_categoria (
+            id,
+            categoria_id,
+            category_almacen:categoria_id (
+              id,
+              name
+            )
+          ),
           price_product (
             id,
             valor,
@@ -81,9 +89,15 @@ class productsAlmacen {
         data.stock = stockSucursal ? stockSucursal.stock : 0;
       }
 
-      // Agregar category_name
+      // Agregar category_name (desde producto_categoria N:M o legacy category_id)
       if (data) {
-        data.category_name = data.category_almacen?.name || 'Sin categoría';
+        if (data.producto_categoria && data.producto_categoria.length > 0) {
+          data.category_names = data.producto_categoria.map(pc => pc.category_almacen?.name).filter(Boolean);
+          data.category_name = data.category_names.join(', ') || 'Sin categoría';
+        } else {
+          data.category_name = data.category_almacen?.name || 'Sin categoría';
+          data.category_names = data.category_almacen?.name ? [data.category_almacen.name] : [];
+        }
       }
 
       return data;
@@ -107,6 +121,14 @@ class productsAlmacen {
           category_almacen:category_id (
             id,
             name
+          ),
+          producto_categoria (
+            id,
+            categoria_id,
+            category_almacen:categoria_id (
+              id,
+              name
+            )
           ),
           price_product (
             id,
@@ -150,10 +172,16 @@ class productsAlmacen {
         throw new Error('No se pudieron obtener los productos');
       }
 
-      // Agregar category_name a cada producto
+      // Agregar category_name a cada producto (N:M o legacy)
       if (data) {
         data.forEach(producto => {
-          producto.category_name = producto.category_almacen?.name || 'Sin categoría';
+          if (producto.producto_categoria && producto.producto_categoria.length > 0) {
+            producto.category_names = producto.producto_categoria.map(pc => pc.category_almacen?.name).filter(Boolean);
+            producto.category_name = producto.category_names.join(', ') || 'Sin categoría';
+          } else {
+            producto.category_name = producto.category_almacen?.name || 'Sin categoría';
+            producto.category_names = producto.category_almacen?.name ? [producto.category_almacen.name] : [];
+          }
         });
       }
 
@@ -165,7 +193,7 @@ class productsAlmacen {
   }
 
   // Método para obtener todos los productos de una empresa con stock de sucursal
-  static async getAll(empresaId, sucuId = null, empresasAsociadasIds = [], ocultarStockCero = false) {
+  static async getAll(empresaId, sucuId = null, empresasAsociadasIds = [], ocultarStockCero = false, page = 1, limit = 30, search = null, categoryId = null, sortOrder = 'name_asc') {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
@@ -177,11 +205,14 @@ class productsAlmacen {
         empresaIds.push(...empresasAsociadasIds);
       }
 
-      const { data, error } = await supabase
+      const offset = (page - 1) * limit;
+
+      let query = supabase
         .from('products_almacen')
         .select(`
           id,
           name,
+          description,
           codigo_barras,
           category_id,
           created_at,
@@ -192,6 +223,14 @@ class productsAlmacen {
           category_almacen:category_id (
             id,
             name
+          ),
+          producto_categoria (
+            id,
+            categoria_id,
+            category_almacen:categoria_id (
+              id,
+              name
+            )
           ),
           price_product (
             id,
@@ -227,9 +266,54 @@ class productsAlmacen {
             stock,
             sucursal_id
           )
-        `)
-        .in('empresa_id', empresaIds)
-        .order('name', { ascending: true });
+        `, { count: 'exact' })
+        .in('empresa_id', empresaIds);
+
+      // Search filter
+      if (search && search.trim() !== '') {
+        query = query.ilike('name', `%${search.trim()}%`);
+      }
+
+      // Category filter - buscar en tabla intermedia producto_categoria
+      if (categoryId) {
+        let filterCatIds = [];
+        if (Array.isArray(categoryId)) {
+          filterCatIds = categoryId.filter(id => id && String(id).trim() !== '');
+        } else if (typeof categoryId === 'string' && categoryId.trim() !== '') {
+          if (categoryId.includes(',')) {
+            filterCatIds = categoryId.split(',').map(id => id.trim()).filter(id => id);
+          } else {
+            filterCatIds = [categoryId.trim()];
+          }
+        }
+        if (filterCatIds.length > 0) {
+          // Obtener IDs de productos que tienen esas categorías en la tabla intermedia
+          const { data: pcRows } = await supabase
+            .from('producto_categoria')
+            .select('producto_id')
+            .in('categoria_id', filterCatIds);
+          const productIdsFromCat = pcRows ? [...new Set(pcRows.map(r => r.producto_id))] : [];
+          
+          if (productIdsFromCat.length > 0) {
+            query = query.in('id', productIdsFromCat);
+          } else {
+            // No hay productos con esas categorías en la tabla intermedia, forzar resultado vacío
+            query = query.in('id', ['00000000-0000-0000-0000-000000000000']);
+          }
+        }
+      }
+
+      // Sorting
+      if (sortOrder === 'name_desc') {
+        query = query.order('name', { ascending: false });
+      } else {
+        query = query.order('name', { ascending: true }); // Default
+      }
+
+      // Pagination
+      query = query.range(offset, offset + limit - 1);
+
+      const { data, error, count } = await query;
 
       if (error) {
         console.error('Error de Supabase:', error);
@@ -244,10 +328,43 @@ class productsAlmacen {
         });
       }
 
-      // Agregar category_name y es_asociado a cada producto
+      // Agregar category_name (N:M) y es_asociado a cada producto
       if (data) {
+        // [MIGRACION INICIO] Migrar categorías legacy a tabla intermedia (eliminar esto en el futuro)
+        const productsToMigrate = data.filter(p => p.category_id && (!p.producto_categoria || p.producto_categoria.length === 0));
+        
+        if (productsToMigrate.length > 0) {
+          const insertData = productsToMigrate.map(p => ({
+            producto_id: p.id,
+            categoria_id: p.category_id
+          }));
+          
+          const { error: insertError } = await supabase
+            .from('producto_categoria')
+            .insert(insertData);
+            
+          if (insertError) {
+            console.error('Error migrando categorías a producto_categoria:', insertError);
+          } else {
+            // Simular el join para la respuesta actual
+            productsToMigrate.forEach(p => {
+              if (!p.producto_categoria) p.producto_categoria = [];
+              p.producto_categoria.push({
+                category_almacen: p.category_almacen
+              });
+            });
+          }
+        }
+        // [MIGRACION FIN]
+
         data.forEach(producto => {
-          producto.category_name = producto.category_almacen?.name;
+          if (producto.producto_categoria && producto.producto_categoria.length > 0) {
+            producto.category_names = producto.producto_categoria.map(pc => pc.category_almacen?.name).filter(Boolean);
+            producto.category_name = producto.category_names.join(', ');
+          } else {
+            producto.category_name = '';
+            producto.category_names = [];
+          }
           producto.es_asociado = producto.empresa_id !== empresaId;
         });
       }
@@ -258,16 +375,21 @@ class productsAlmacen {
         productosFinales = data.filter(producto => (Number(producto.stock) || 0) > 0);
       }
 
+      let sizeInfo = null;
       // Calcular y loggear tamaños de datos
       if (productosFinales && productosFinales.length > 0) {
         const sizes = calculateProductsSizes(productosFinales);
         logProductsSizes(sizes, 'getAll');
-        
-        // Agregar información de tamaños a los productos para que el controller pueda enviarla
-        productosFinales._sizeInfo = sizes;
+        sizeInfo = sizes;
       }
 
-      return productosFinales;
+      return {
+        data: productosFinales,
+        pagination: {
+          hasNextPage: (offset + limit) < count
+        },
+        sizeInfo
+      };
     } catch (error) {
       console.error('Error al obtener los productos:', error);
       throw new Error('No se pudo obtener los productos');
@@ -338,6 +460,7 @@ class productsAlmacen {
 
       const dbProductData = {
         name: nombreProducto,
+        description: productData.description || null,
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
         empresa_id: empresaId,
@@ -364,7 +487,7 @@ class productsAlmacen {
 
       const productId = product[0].id;
 
-      // 2. Crear stock y precios en paralelo (OPTIMIZADO)
+      // 2. Crear stock, precios y categorías N:M en paralelo (OPTIMIZADO)
       const tParallelStart = Date.now();
       const parallelOperations = [];
 
@@ -396,11 +519,27 @@ class productsAlmacen {
         );
       }
 
+      // Preparar operación de categorías N:M
+      const categoryIds = productData.category_ids || (productData.category_id ? [productData.category_id] : []);
+      if (categoryIds.length > 0) {
+        const catInserts = categoryIds.filter(id => id).map(catId => ({
+          producto_id: productId,
+          categoria_id: catId
+        }));
+        if (catInserts.length > 0) {
+          parallelOperations.push(
+            supabase
+              .from('producto_categoria')
+              .insert(catInserts)
+          );
+        }
+      }
+
       // Ejecutar operaciones en paralelo
       if (parallelOperations.length > 0) {
         const results = await Promise.allSettled(parallelOperations);
         const tParallelMs = Date.now() - tParallelStart;
-        console.log(`⏱️ [CREATE PRODUCT] Crear stock y precios en paralelo: ${tParallelMs}ms`);
+        console.log(`⏱️ [CREATE PRODUCT] Crear stock, precios y categorías en paralelo: ${tParallelMs}ms`);
 
         // Verificar errores
         results.forEach((result, index) => {
@@ -451,18 +590,21 @@ class productsAlmacen {
       // Devolver producto básico sin JOINs pesados (OPTIMIZADO)
       const tCompleteStart = Date.now();
       
-      // Obtener información de la categoría si existe
-      let categoryName = 'Sin categoría';
-      let categoryAlmacen = null;
-      if (productData.category_id) {
-        const { data: categoria } = await supabase
+      // Obtener información de las categorías N:M
+      let categoryNames = [];
+      let productoCategoriaData = [];
+      const resolvedCategoryIds = productData.category_ids || (productData.category_id ? [productData.category_id] : []);
+      if (resolvedCategoryIds.length > 0) {
+        const { data: cats } = await supabase
           .from('category_almacen')
           .select('id, name')
-          .eq('id', productData.category_id)
-          .single();
-        if (categoria) {
-          categoryName = categoria.name;
-          categoryAlmacen = categoria;
+          .in('id', resolvedCategoryIds);
+        if (cats) {
+          categoryNames = cats.map(c => c.name);
+          productoCategoriaData = cats.map(c => ({
+            categoria_id: c.id,
+            category_almacen: { id: c.id, name: c.name }
+          }));
         }
       }
       
@@ -470,8 +612,10 @@ class productsAlmacen {
       const basicProduct = {
         ...product[0],
         stock: productData.stock || 0,
-        category_name: categoryName,
-        category_almacen: categoryAlmacen,
+        category_name: categoryNames.join(', ') || 'Sin categoría',
+        category_names: categoryNames,
+        category_almacen: null,
+        producto_categoria: productoCategoriaData,
         price_product: productData.prices ? Object.entries(productData.prices).map(([price_id, valor]) => ({
           producto_almacen_id: productId,
           price_id: price_id,
@@ -522,6 +666,7 @@ class productsAlmacen {
 
       const updateData = {
         name: productData.name,
+        description: productData.description || null,
         codigo_barras: productData.codigo_barras || null,
         category_id: productData.category_id || null,
         grup: optionalNum(productData.grup),
@@ -549,7 +694,31 @@ class productsAlmacen {
 
       const productId = data[0].id;
 
-      // Actualizar stock y precios en paralelo (OPTIMIZADO)
+      // Migrar category_id legacy a producto_categoria si existe
+      if (data[0].category_id && productData.category_ids) {
+        // Verificar si ya existe en la tabla intermedia
+        const { data: existingPc } = await supabase
+          .from('producto_categoria')
+          .select('id')
+          .eq('producto_id', productId)
+          .eq('categoria_id', data[0].category_id);
+        
+        if (!existingPc || existingPc.length === 0) {
+          // Migrar: agregar la categoría legacy a la tabla intermedia si no está ya en category_ids
+          if (!productData.category_ids.includes(data[0].category_id)) {
+            // Solo migrar si no está incluida en las nuevas categorías
+            // (si ya está, se insertará con las demás)
+          }
+        }
+        
+        // Limpiar category_id legacy del producto
+        await supabase
+          .from('products_almacen')
+          .update({ category_id: null })
+          .eq('id', productId);
+      }
+
+      // Actualizar stock, precios y categorías en paralelo (OPTIMIZADO)
       const tParallelStart = Date.now();
       const parallelOperations = [];
 
@@ -582,16 +751,12 @@ class productsAlmacen {
         }
 
         if (preciosArray.length > 0) {
-          // Crear operación de precios (eliminar + insertar)
           parallelOperations.push(
             (async () => {
-              // Eliminar precios existentes
               await supabase
                 .from('price_product')
                 .delete()
                 .eq('producto_almacen_id', productId);
-
-              // Insertar nuevos precios
               return await supabase
                 .from('price_product')
                 .insert(preciosArray);
@@ -600,17 +765,42 @@ class productsAlmacen {
         }
       }
 
+      // Preparar operación de categorías N:M (delete + insert)
+      if (productData.category_ids) {
+        parallelOperations.push(
+          (async () => {
+            // Eliminar relaciones existentes
+            await supabase
+              .from('producto_categoria')
+              .delete()
+              .eq('producto_id', productId);
+            
+            // Insertar nuevas relaciones
+            const catIds = productData.category_ids.filter(id => id);
+            if (catIds.length > 0) {
+              const catInserts = catIds.map(catId => ({
+                producto_id: productId,
+                categoria_id: catId
+              }));
+              return await supabase
+                .from('producto_categoria')
+                .insert(catInserts);
+            }
+          })()
+        );
+      }
+
       // Ejecutar operaciones en paralelo
       if (parallelOperations.length > 0) {
         const results = await Promise.allSettled(parallelOperations);
         const tParallelMs = Date.now() - tParallelStart;
-        console.log(`⏱️ [UPDATE PRODUCT] Actualizar stock y precios en paralelo: ${tParallelMs}ms`);
+        console.log(`⏱️ [UPDATE PRODUCT] Actualizar stock, precios y categorías en paralelo: ${tParallelMs}ms`);
 
         // Verificar errores
         results.forEach((result, index) => {
           if (result.status === 'rejected' || result.value?.error) {
             console.error(`Error en operación paralela ${index}:`, result.value?.error || result.reason);
-            throw new Error('Error al actualizar stock o precios');
+            throw new Error('Error al actualizar stock, precios o categorías');
           }
         });
       }
@@ -676,21 +866,34 @@ class productsAlmacen {
         console.log(`⏱️ [UPDATE PRODUCT] Actualizar receta: ${tRecetaMs}ms`);
       }
 
-      // Obtener nombre de la categoría
-      const { data: categoria } = await supabase
-        .from('category_almacen')
-        .select('id, name')
-        .eq('id', productData.category_id)
-        .single();
+      // Obtener categorías N:M actualizadas
+      const resolvedCategoryIds = productData.category_ids || [];
+      let categoryNames = [];
+      let productoCategoriaData = [];
+      if (resolvedCategoryIds.length > 0) {
+        const { data: cats } = await supabase
+          .from('category_almacen')
+          .select('id, name')
+          .in('id', resolvedCategoryIds);
+        if (cats) {
+          categoryNames = cats.map(c => c.name);
+          productoCategoriaData = cats.map(c => ({
+            categoria_id: c.id,
+            category_almacen: { id: c.id, name: c.name }
+          }));
+        }
+      }
 
       const productoActualizado = {
-        ...data[0], // Datos básicos del producto actualizado en BD
-        stock: productData.stock || 0, // Stock actualizado
-        category_name: categoria?.name || 'Sin categoría', // Nombre de la categoría
-        // Devolver precios con JOIN para obtener nombres
+        ...data[0],
+        category_id: null, // Ya no se usa, migrado a N:M
+        stock: productData.stock || 0,
+        category_name: categoryNames.join(', ') || 'Sin categoría',
+        category_names: categoryNames,
+        category_almacen: null,
+        producto_categoria: productoCategoriaData,
         price_product: productData.prices ? await Promise.all(
           Object.entries(productData.prices).map(async ([price_id, valor]) => {
-            // Obtener información del tipo de precio
             const { data: priceType } = await supabase
               .from('prices_types')
               .select('id, name, description')
@@ -705,14 +908,12 @@ class productsAlmacen {
             };
           })
         ) : [],
-        // Devolver exactamente la receta que me enviaron
         recetas: productData.receta ? [{
-          id: 'temp_id', // ID temporal ya que se creó en BD
+          id: 'temp_id',
           producto_almacen_id: productId,
           descripcion: productData.receta.descripcion || '',
           recetas_detalle: productData.receta.productos ? await Promise.all(
             productData.receta.productos.map(async (prod) => {
-              // Obtener información del producto de acopio
               const { data: productoAcopio } = await supabase
                 .from('products_acopio')
                 .select('id, name, type_measure(id, name, code, code_menor, value)')
@@ -732,7 +933,6 @@ class productsAlmacen {
             })
           ) : []
         }] : [],
-        // Información de sucursal
         productos_sucursal: sucuId ? [{
           producto_id: productId,
           sucursal_id: sucuId,
