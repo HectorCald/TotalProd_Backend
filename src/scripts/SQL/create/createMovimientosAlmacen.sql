@@ -4,18 +4,18 @@ CREATE TABLE movimientos_almacen (
     sucu_id UUID NOT NULL,
     personal_id TEXT,
     fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
-    observaciones VARCHAR,
+    observaciones VARCHAR, --delete
     metodo_pago TEXT,
     cliente_id UUID,
     proveedor_id UUID,
     estado VARCHAR,
     type VARCHAR NOT NULL,
     precio_id UUID NOT NULL,
-    deuda_id UUID NULL, --en revisión
+    deuda_id UUID NULL, --delete
     produccion_damabrava_id UUID NULL,
     restar_ingredientes BOOLEAN NOT NULL DEFAULT FALSE,
     agrupado BOOLEAN NOT NULL DEFAULT FALSE,
-    gasto_id UUID NULL,
+    gasto_id UUID NULL, --delete
     numero_orden INTEGER NULL,
     descuento NUMERIC DEFAULT 0,
     aumento NUMERIC DEFAULT 0,

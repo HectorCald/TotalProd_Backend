@@ -9,6 +9,7 @@ CREATE TABLE gastos (
     user_id UUID NULL,
     personal_id UUID NULL,
     sucu_id UUID NULL,
+    movimiento_entrada_id UUID NULL,
     CONSTRAINT gastos_proveedor_id_fkey 
         FOREIGN KEY (proveedor_id) REFERENCES proveedores (id) ON DELETE SET NULL,
     CONSTRAINT gastos_user_id_fkey 

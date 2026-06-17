@@ -42,6 +42,9 @@ router.put('/:id', (req, res) => movimientosAlmacenController.update(req, res));
 // Ruta para anular un movimiento
 router.put('/:id/anular', (req, res) => movimientosAlmacenController.anular(req, res));
 
+// Ruta para anular un movimiento rápido de golpe
+router.put('/:id/anular-fast', (req, res) => movimientosAlmacenController.anularFast(req, res));
+
 // Ruta para eliminar un movimiento
 router.delete('/:id', (req, res) => movimientosAlmacenController.eliminar(req, res));
 

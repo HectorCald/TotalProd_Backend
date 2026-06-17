@@ -4,7 +4,7 @@ CREATE TABLE products_almacen (
     codigo_barras VARCHAR,
     category_id UUID,
     description VARCHAR,
-    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(), 
     empresa_id UUID NOT NULL,
     grup NUMERIC,
     stock_minimo NUMERIC,

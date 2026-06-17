@@ -183,7 +183,8 @@ class gastosController {
         valor: parseFloat(valor),
         concepto: concepto.trim(),
         metodo_pago: metodo_pago.trim(),
-        proveedor_id: proveedor_id || null
+        proveedor_id: proveedor_id || null,
+        movimiento_entrada_id: req.body.movimiento_entrada_id || null
       };
 
       return await gastos.create(gastoData);

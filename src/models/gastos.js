@@ -4,7 +4,7 @@ class gastos {
     // Crear un nuevo gasto
     static async create(gastoData) {
         try {
-            const { user_id, personal_id, sucu_id, fecha_gasto, valor, concepto, metodo_pago, proveedor_id } = gastoData;
+            const { user_id, personal_id, sucu_id, fecha_gasto, valor, concepto, metodo_pago, proveedor_id, movimiento_entrada_id } = gastoData;
 
             // Usar la fecha proporcionada directamente (formato YYYY-MM-DD)
             let fechaFinal;
@@ -26,7 +26,8 @@ class gastos {
                 valor,
                 concepto,
                 metodo_pago,
-                proveedor_id: proveedor_id || null
+                proveedor_id: proveedor_id || null,
+                movimiento_entrada_id: movimiento_entrada_id || null
             };
 
             // Solo agregar user_id o personal_id si tienen valor

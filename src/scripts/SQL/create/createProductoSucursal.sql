@@ -4,7 +4,7 @@ CREATE TABLE productos_sucursal (
     producto_id UUID NOT NULL,
     sucursal_id UUID NOT NULL,
     stock NUMERIC NOT NULL DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), --delete
 
     CONSTRAINT productos_sucursal_producto_id_fkey
         FOREIGN KEY (producto_id) REFERENCES products_almacen (id) ON DELETE CASCADE,

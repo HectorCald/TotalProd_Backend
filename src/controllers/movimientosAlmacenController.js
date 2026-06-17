@@ -150,13 +150,13 @@ class movimientosAlmacenController {
 
     // Crear movimiento rápido (entrada o salida)
     static async createFast(req, res) {
-        const { type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado } = req.body;
+        const { type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado, restar_ingredientes } = req.body;
         const sucu_id = req.headers['x-sucu-id'] || req.body.sucu_id;
         const user_id = req.user?.id || null;
 
         if (!sucu_id) return res.status(400).json({ success: false, message: 'Sucursal no especificada' });
         if (!type) return res.status(400).json({ success: false, message: 'Tipo de movimiento requerido' });
-        if (!metodo_pago) return res.status(400).json({ success: false, message: 'Método de pago requerido' });
+        if (!metodo_pago && type === 'salida') return res.status(400).json({ success: false, message: 'Método de pago requerido' });
         if (!precio_id) return res.status(400).json({ success: false, message: 'Precio requerido' });
         if (!productos || productos.length === 0) return res.status(400).json({ success: false, message: 'Debe incluir al menos un producto' });
 
@@ -174,7 +174,8 @@ class movimientosAlmacenController {
                 aumento: parseFloat(aumento) || 0,
                 concepto: concepto || null,
                 porcentaje: !!porcentaje,
-                agrupado: !!agrupado
+                agrupado: !!agrupado,
+                restar_ingredientes: !!restar_ingredientes
             });
         }, { successStatus: 201, passRawResult: true });
     }
@@ -289,6 +290,41 @@ class movimientosAlmacenController {
     static async anular(req, res) {
         return movimientosAlmacenController._handleRequest(res, 'anular', req, async () => {
             const result = await movimientosAlmacen.anular(req.params.id, req.body.desdePedido);
+            if (!result.success) throw new Error(result.message);
+            return { success: true, message: 'Movimiento anulado correctamente', data: result.data };
+        }, { validateId: true, checkPermission: 'anular', passRawResult: true });
+    }
+
+    // Anular movimiento de golpe
+    static async anularFast(req, res) {
+        return movimientosAlmacenController._handleRequest(res, 'anularFast', req, async () => {
+            const { id } = req.params;
+
+            // Verificar si tiene deudas asociadas
+            const { data: deudasRelacionadas, error: deudasError } = await require('../config/supabase').supabase
+                .from('deudas')
+                .select('id')
+                .or(`movimiento_salida_id.eq.${id}`)
+                .limit(1)
+                .maybeSingle();
+
+            if (deudasRelacionadas) {
+                return { success: false, message: 'El movimiento tiene deudas asociadas. Primero debe eliminar las deudas correspondientes.' };
+            }
+
+            // Verificar si tiene pagos (gastos) asociados
+            const { data: gastosRelacionados, error: gastosError } = await require('../config/supabase').supabase
+                .from('gastos')
+                .select('id')
+                .or(`movimiento_entrada_id.eq.${id}`)
+                .limit(1)
+                .maybeSingle();
+
+            if (gastosRelacionados) {
+                return { success: false, message: 'El movimiento tiene un pago registrado asociado. Primero debe eliminar el pago correspondiente.' };
+            }
+
+            const result = await movimientosAlmacen.anularFast(id);
             if (!result.success) throw new Error(result.message);
             return { success: true, message: 'Movimiento anulado correctamente', data: result.data };
         }, { validateId: true, checkPermission: 'anular', passRawResult: true });
