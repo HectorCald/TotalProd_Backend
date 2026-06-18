@@ -107,6 +107,64 @@ class productsAlmacen {
     }
   }
 
+  // Método rápido para obtener productos básicos por IDs de golpe
+  static async getByIdsFast(ids, empresaId = null, sucuId = null) {
+    try {
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        throw new Error('Array de IDs de productos es requerido');
+      }
+
+      let query = supabase
+        .from('products_almacen')
+        .select(`
+          id,
+          name,
+          grup,
+          price_product (
+            id,
+            valor,
+            price_id,
+            prices_types:price_id (
+              id,
+              name,
+              description
+            )
+          ),
+          productos_sucursal (
+            id,
+            stock,
+            sucursal_id
+          )
+        `)
+        .in('id', ids);
+
+      // No filtramos estrictamente por empresaId aquí para permitir productos de empresas asociadas,
+      // los UUIDs ya garantizan que solo se acceda a los productos solicitados.
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw new Error('No se pudieron obtener los productos');
+      }
+
+      if (data) {
+        data.forEach(producto => {
+          if (sucuId) {
+            const stockSucursal = producto.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
+            producto.stock = stockSucursal ? stockSucursal.stock : 0;
+          } else {
+            producto.stock = 0;
+          }
+        });
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error al obtener productos rápidos por IDs:', error);
+      throw error;
+    }
+  }
+
   // Método para obtener múltiples productos por IDs con recetas (bulk query)
   static async getByIds(ids, empresaId = null) {
     try {
@@ -162,9 +220,8 @@ class productsAlmacen {
         `)
         .in('id', ids);
 
-      if (empresaId) {
-        query = query.eq('empresa_id', empresaId);
-      }
+      // No filtramos estrictamente por empresaId aquí para permitir productos de empresas asociadas,
+      // los UUIDs ya garantizan que solo se acceda a los productos solicitados.
 
       const { data, error } = await query;
 

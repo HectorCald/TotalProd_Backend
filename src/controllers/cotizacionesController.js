@@ -146,6 +146,41 @@ class cotizacionesController {
         });
     }
 
+    // Crear cotización rápida de golpe
+    static async createFast(req, res) {
+        const { metodo_pago, cliente_id, precio_id, productos, fecha_vencimiento, agrupado, descuento, aumento, porcentaje } = req.body;
+        const sucu_id = req.headers['x-sucu-id'] || req.body.sucu_id;
+
+        if (!sucu_id) return res.status(400).json({ success: false, message: 'Sucursal no especificada' });
+        if (!metodo_pago) return res.status(400).json({ success: false, message: 'Método de pago requerido' });
+        if (!precio_id) return res.status(400).json({ success: false, message: 'Precio requerido' });
+        if (!productos || productos.length === 0) return res.status(400).json({ success: false, message: 'Debe incluir al menos un producto' });
+
+        return cotizacionesController._handleRequest(res, 'createFast', req, async () => {
+            const user_id = req.user?.id || null;
+            const userType = req.user?.type;
+            const personal_id = userType === 'employee' ? (req.body.personal_id || null) : null;
+            const finalUserId = userType === 'employee' ? null : user_id;
+
+            const result = await cotizaciones.createFast({
+                user_id: finalUserId,
+                personal_id,
+                sucu_id,
+                metodo_pago,
+                cliente_id: cliente_id || null,
+                precio_id,
+                productos,
+                fecha_vencimiento: fecha_vencimiento || null,
+                agrupado: !!agrupado,
+                descuento: parseFloat(descuento) || 0,
+                aumento: parseFloat(aumento) || 0,
+                porcentaje: !!porcentaje
+            });
+
+            return result;
+        }, { successStatus: 201 });
+    }
+
     // Obtener una cotización por ID
     static async getById(req, res) {
         return cotizacionesController._handleRequest(res, 'getById', req, async () => {

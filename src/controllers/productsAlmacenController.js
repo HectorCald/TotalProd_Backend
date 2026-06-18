@@ -179,6 +179,32 @@ class productsAlmacenController {
     });
   }
 
+  // Obtener múltiples productos por IDs de forma rápida
+  static async getByIdsFast(req, res) {
+    return productsAlmacenController._handleRequest(res, 'getByIdsFast', req, async () => {
+      const empresaId = req.query.empresa_id;
+      const sucuId = req.query.sucu_id;
+      let ids = req.query.ids || req.query['ids[]'];
+      
+      if (!ids) throw new Error('IDs de productos son requeridos');
+      
+      if (typeof ids === 'string') {
+        if (ids.includes(',')) ids = ids.split(',').map(id => id.trim());
+        else ids = [ids];
+      }
+      
+      if (!Array.isArray(ids)) ids = [ids];
+      ids = ids.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
+      
+      if (ids.length === 0) throw new Error('IDs de productos son requeridos');
+
+      return await productsAlmacen.getByIdsFast(ids, empresaId, sucuId);
+    }, {
+      validateEmpresaId: true,
+      successMessage: 'Productos obtenidos exitosamente'
+    });
+  }
+
   // Crear un producto
   static async create(req, res) {
     const { name, description, stock, codigo_barras, category_id, category_ids, grup, stock_minimo, costo_produccion, prices, receta, empresa_id, sucu_id } = req.body;

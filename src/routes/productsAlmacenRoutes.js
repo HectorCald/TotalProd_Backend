@@ -15,6 +15,9 @@ router.get('/for-production', productsAlmacenController.getAllForProduction);
 // GET /api/products-almacen/by-ids - Obtener múltiples productos por IDs con recetas
 router.get('/by-ids', productsAlmacenController.getByIds);
 
+// GET /api/products-almacen/by-ids-fast - Obtener múltiples productos por IDs de forma rápida
+router.get('/by-ids-fast', productsAlmacenController.getByIdsFast);
+
 // GET /api/products-almacen/:id - Obtener un producto por ID
 router.get('/:id', productsAlmacenController.getById);
 

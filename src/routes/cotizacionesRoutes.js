@@ -17,6 +17,9 @@ router.use(requireModuleAccess('Cotizaciones'));
 // Obtener todas las cotizaciones
 router.get('/', cotizacionesController.getAll);
 
+// Crear una nueva cotización rápida de golpe
+router.post('/fast', cotizacionesController.createFast);
+
 // Crear una nueva cotización
 router.post('/', cotizacionesController.create);
 

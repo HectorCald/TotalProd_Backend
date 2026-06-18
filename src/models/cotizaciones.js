@@ -27,6 +27,9 @@ const COTIZACION_SELECT = `
     total,
     fecha_vencimiento,
     agrupado,
+    descuento,
+    aumento,
+    porcentaje,
     precio_id,
     user_id,
     personal_id,
@@ -40,10 +43,132 @@ const COTIZACION_SELECT = `
 `;
 
 class cotizaciones {
+    // Crear cotización rápida de golpe (igual que createFast de movimientos)
+    static async createFast(cotizacionData) {
+        try {
+            const {
+                user_id, personal_id, sucu_id,
+                metodo_pago, cliente_id, precio_id,
+                productos, fecha_vencimiento,
+                agrupado, descuento, aumento, porcentaje
+            } = cotizacionData;
+
+            // Obtener último número de cotización de la sucursal
+            const { data: ultimaCotizacion, error: errorNumero } = await supabase
+                .from('cotizaciones')
+                .select('numero_cotizacion')
+                .eq('sucu_id', sucu_id)
+                .order('numero_cotizacion', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const numeroCotizacion = (!errorNumero && ultimaCotizacion)
+                ? (ultimaCotizacion.numero_cotizacion || 0) + 1
+                : 1;
+
+            // Generar código CA-XXNNN
+            const genAlfanumerico = () => {
+                const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+                const nums = '0123456789';
+                const l = () => letras[Math.floor(Math.random() * letras.length)];
+                const n = () => nums[Math.floor(Math.random() * nums.length)];
+                return `${l()}${l()}${n()}${n()}${n()}`;
+            };
+            const codigoCotizacion = `CA-${genAlfanumerico()}`;
+
+            const normalizarDecimal = (valor, decimales = 2) => {
+                const numero = Number(valor);
+                if (!Number.isFinite(numero)) return 0;
+                return Number(numero.toFixed(decimales));
+            };
+
+            const productosNormalizados = (productos || []).map(producto => {
+                const cantidad = Number(producto.cantidad) || 0;
+                const precioUnitario = normalizarDecimal(producto.precio);
+                const subtotal = normalizarDecimal(precioUnitario * cantidad);
+                return { ...producto, cantidad, precioNormalizado: precioUnitario, subtotalNormalizado: subtotal };
+            });
+
+            const insertData = {
+                sucu_id,
+                metodo_pago: metodo_pago ? metodo_pago.toUpperCase() : null,
+                cliente_id: cliente_id || null,
+                precio_id: precio_id || null,
+                agrupado: !!agrupado,
+                fecha: new Date().toISOString(),
+                fecha_vencimiento: fecha_vencimiento || null,
+                estado: 'pendiente',
+                numero_cotizacion: numeroCotizacion,
+                codigo: codigoCotizacion,
+                descuento: normalizarDecimal(descuento),
+                aumento: normalizarDecimal(aumento),
+                porcentaje: (() => {
+                    const tieneDescuentoAumento = normalizarDecimal(descuento) > 0 || normalizarDecimal(aumento) > 0;
+                    if (!tieneDescuentoAumento) return null;
+                    return porcentaje === true ? true : (porcentaje === false ? false : null);
+                })()
+            };
+
+            if (user_id) insertData.user_id = user_id;
+            if (personal_id) insertData.personal_id = personal_id;
+
+            // 1. Insertar cotización
+            const { data: cotizacion, error: cotizacionError } = await supabase
+                .from('cotizaciones')
+                .insert(insertData)
+                .select('id, numero_cotizacion, codigo, sucu_id, estado, fecha, metodo_pago, cliente_id, precio_id, agrupado, fecha_vencimiento, descuento, aumento, porcentaje')
+                .single();
+
+            if (cotizacionError) {
+                console.error('Error en createFast - insertar cotización:', cotizacionError);
+                return { success: false, message: 'Error al crear la cotización', error: cotizacionError };
+            }
+
+            // 2. Insertar detalles
+            if (productosNormalizados.length > 0) {
+                const productosData = productosNormalizados.map(producto => ({
+                    cotizacion_id: cotizacion.id,
+                    producto_almacen_id: producto.id,
+                    cantidad: producto.cantidad,
+                    precio_unitario: producto.precioNormalizado,
+                    subtotal: producto.subtotalNormalizado
+                }));
+
+                const { error: productosError } = await supabase
+                    .from('cotizacion_detalle')
+                    .insert(productosData)
+                    .select('id');
+
+                if (productosError) {
+                    console.error('Error en createFast - insertar detalle:', productosError);
+                    await this.cleanupCotizacion(cotizacion.id);
+                    return { success: false, message: 'Error al crear los detalles de la cotización', error: productosError };
+                }
+            }
+
+            return {
+                success: true,
+                data: {
+                    ...cotizacion,
+                    productos: productosNormalizados.map(p => ({
+                        id: p.id,
+                        cantidad: p.cantidad,
+                        precio: p.precioNormalizado,
+                        subtotal: p.subtotalNormalizado
+                    }))
+                }
+            };
+
+        } catch (error) {
+            console.error('Error en Cotizaciones.createFast:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
     // Crear una nueva cotización
     static async create(cotizacionData) {
         try {
-            const { user_id, personal_id, sucu_id, observaciones, metodo_pago, cliente_id, productos, fecha_vencimiento, agrupado, precio_id } = cotizacionData;
+            const { user_id, personal_id, sucu_id, observaciones, metodo_pago, cliente_id, productos, fecha_vencimiento, agrupado, precio_id, descuento, aumento, porcentaje } = cotizacionData;
 
             // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
             const ahora = new Date();
@@ -105,7 +230,14 @@ class cotizaciones {
                 fecha_vencimiento: fecha_vencimiento || null,
                 agrupado: agrupado || false,
                 precio_id: precio_id || null,
-                codigo: codigoCotizacion
+                codigo: codigoCotizacion,
+                descuento: parseFloat(descuento) || 0,
+                aumento: parseFloat(aumento) || 0,
+                porcentaje: (() => {
+                    const tieneDescuentoAumento = (parseFloat(descuento) || 0) > 0 || (parseFloat(aumento) || 0) > 0;
+                    if (!tieneDescuentoAumento) return null;
+                    return porcentaje === true ? true : (porcentaje === false ? false : null);
+                })()
             };
 
             // Solo agregar campos que tienen valor

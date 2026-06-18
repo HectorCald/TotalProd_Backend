@@ -4,16 +4,19 @@ CREATE TABLE cotizaciones (
     sucu_id UUID NOT NULL,
     personal_id UUID,
     fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
-    observaciones VARCHAR,
+    observaciones VARCHAR, --delete
     metodo_pago TEXT,
     cliente_id UUID,
     estado VARCHAR NOT NULL DEFAULT 'pendiente',     -- Ej: pendiente, aprobada, rechazada
-    total NUMERIC(12,2) NOT NULL DEFAULT 0,
+    total NUMERIC(12,2) NOT NULL DEFAULT 0, --delete
     numero_cotizacion INTEGER NULL,
     fecha_vencimiento DATE NULL,                     -- Fecha hasta la cual es válida la cotización
     agrupado BOOLEAN NOT NULL DEFAULT FALSE,
     precio_id UUID,
     codigo TEXT NULL,
+    descuento NUMERIC DEFAULT 0,
+    aumento NUMERIC DEFAULT 0,
+    porcentaje BOOLEAN NULL,
     CONSTRAINT cotizaciones_precio_id_fkey
         FOREIGN KEY (precio_id) REFERENCES prices_types (id),
     CONSTRAINT cotizaciones_cliente_id_fkey
