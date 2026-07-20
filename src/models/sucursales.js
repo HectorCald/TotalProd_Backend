@@ -20,7 +20,8 @@ class sucursales {
                         id,
                         name,
                         propietario_id,
-                        tipo
+                        tipo,
+                        codigo
                     ),
                     sucursal_precios (
                         precio_id,
@@ -59,7 +60,8 @@ class sucursales {
                             id,
                             name,
                             propietario_id,
-                            tipo
+                            tipo,
+                            codigo
                         ),
                         sucursal_precios (
                             precio_id,
@@ -116,7 +118,8 @@ class sucursales {
                         id,
                         name,
                         propietario_id,
-                        tipo
+                        tipo,
+                        codigo
                     ),
                     sucursal_precios (
                         precio_id,
@@ -159,7 +162,8 @@ class sucursales {
                     empresas!inner (
                         id,
                         name,
-                        propietario_id
+                        propietario_id,
+                        codigo
                     )
                 `)
                 .single();
@@ -202,7 +206,8 @@ class sucursales {
                     empresas!inner (
                         id,
                         name,
-                        propietario_id
+                        propietario_id,
+                        codigo
                     )
                 `)
                 .single();

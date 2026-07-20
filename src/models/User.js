@@ -208,6 +208,12 @@ class User {
         return null;
       }
 
+      // Verificar si está activo
+      if (!user.is_active) {
+        console.log('❌ Usuario inactivo');
+        throw new Error('INACTIVE_ACCOUNT');
+      }
+
       // Verificar contraseña
       if (!user.password) {
         console.log('❌ Usuario sin contraseña');
@@ -267,6 +273,7 @@ class User {
             description,
             logo_tipo,
             tipo,
+            codigo,
             sucursales (*)
           )
         `)
@@ -333,6 +340,16 @@ class User {
         user.empresa_id = user.empresas[0].id;
         user.logo_tipo = user.empresas[0].logo_tipo; // Incluir el logo de la empresa
         user.empresa.tipo = user.empresas[0].tipo; // Incluir el tipo de la empresa
+        
+        // Obtener el plan de la empresa
+        try {
+          const empresaPlan = await User.getPlanByEmpresaId(user.empresa_id);
+          user.empresa.plan = empresaPlan;
+        } catch (planError) {
+          console.error('Error al obtener plan de la empresa en getById:', planError);
+          user.empresa.plan = null;
+        }
+
         delete user.empresas; // Limpiar datos innecesarios
       } else {
         user.empresa = null;
@@ -530,6 +547,64 @@ class User {
       return true;
     } catch (error) {
       console.error('Error en updatePlan:', error);
+      throw error;
+    }
+  }
+
+  // Método estático para actualizar datos de usuario y empresa
+  static async updateConfig(userId, empresaId, userData, empresaData) {
+    try {
+      // 1. Actualizar usuario
+      const { data: updatedUser, error: userError } = await supabase
+        .from('users')
+        .update({
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          phone: userData.phone,
+          email: userData.email
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+
+      if (userError) {
+        console.error('Error al actualizar usuario:', userError);
+        throw new Error('No se pudo actualizar los datos del usuario');
+      }
+
+      // 2. Actualizar empresa si hay empresaId
+      let updatedEmpresa = null;
+      if (empresaId && empresaData) {
+        const updateData = {
+          name: empresaData.name,
+          description: empresaData.description,
+          codigo: empresaData.codigo
+        };
+
+        if (empresaData.logo_tipo !== undefined) {
+          updateData.logo_tipo = empresaData.logo_tipo;
+        }
+
+        const { data: empresaRes, error: empresaError } = await supabase
+          .from('empresas')
+          .update(updateData)
+          .eq('id', empresaId)
+          .select()
+          .single();
+
+        if (empresaError) {
+          console.error('Error al actualizar empresa:', empresaError);
+          throw new Error('No se pudo actualizar los datos de la empresa');
+        }
+        updatedEmpresa = empresaRes;
+      }
+
+      return {
+        user: updatedUser,
+        empresa: updatedEmpresa
+      };
+    } catch (error) {
+      console.error('Error en updateConfig:', error);
       throw error;
     }
   }

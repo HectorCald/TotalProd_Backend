@@ -12,5 +12,6 @@ router.post('/getUserByEmail', UserController.getUserByEmail); // Verificar si e
 router.post('/verifyPassword', UserController.verifyCurrentPassword); // Verificar contraseña actual
 router.post('/changePassword', UserController.changePassword); // Cambiar contraseña
 router.get('/:id', UserController.getCurrentUser); // Obtener usuario por ID
+router.put('/config', requireAuth, UserController.updateConfig); // Actualizar configuracion usuario y empresa
 
 module.exports = router;

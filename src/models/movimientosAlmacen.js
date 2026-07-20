@@ -40,12 +40,12 @@ class movimientosAlmacen {
     static async create(movimientoData) {
         // Crear instancia de log service
         const logService = new MovimientoLogService();
-        
+
         try {
             logService.addLog('info', '═══════════════════════════════════════════════════════');
             logService.addLog('info', '🚀 INICIANDO CREACIÓN DE MOVIMIENTO');
             logService.addLog('info', '═══════════════════════════════════════════════════════');
-            
+
             const { user_id, personal_id, sucu_id, type, observaciones, metodo_pago, cliente_id, proveedor_id, precio_id, productos, restar_ingredientes, produccion_damabrava_id, agrupado, gasto_id, descuento, aumento, fecha, numero_orden, concepto, ubicacion, porcentaje } = movimientoData;
 
             logService.addLog('info', `Tipo de movimiento: ${type.toUpperCase()}`);
@@ -54,7 +54,7 @@ class movimientosAlmacen {
 
             // 1️⃣ OBTENER INFORMACIÓN DE LA EMPRESA PRIMERO (para logs y email)
             logService.addLog('info', '📋 Obteniendo información de sucursal y empresa...');
-            
+
             const { data: sucursalInfo, error: sucursalError } = await supabase
                 .from('sucursales')
                 .select(`
@@ -76,16 +76,16 @@ class movimientosAlmacen {
 
             const empresaNombre = sucursalInfo.empresas?.name || 'N/A';
             const sucursalNombre = sucursalInfo.name || 'N/A';
-            
+
             logService.addLog('success', `Empresa: ${empresaNombre}`);
             logService.addLog('success', `Sucursal: ${sucursalNombre}`);
 
             // 2️⃣ OBTENER NOMBRES DE PRODUCTOS (para logs mejorados)
             logService.addLog('info', '📦 Obteniendo nombres de productos...');
-            
+
             const productIds = productos.map(p => p.id);
             const nombresProductos = await logService.getProductosNombres(productIds);
-            
+
             logService.addLog('success', `Nombres de ${Object.keys(nombresProductos).length} productos obtenidos`);
 
             // Determinar timestamp para el movimiento
@@ -186,7 +186,7 @@ class movimientosAlmacen {
             // 3️⃣ VALIDAR STOCK ANTES DE CREAR EL MOVIMIENTO (PARA SALIDAS)
             if (type === 'salida') {
                 logService.addLog('info', '🔍 Validando stock disponible ANTES de crear movimiento...');
-                
+
                 // Obtener stocks actuales
                 const { data: stocksParaValidacion, error: errorStocksValidacion } = await supabase
                     .from('productos_sucursal')
@@ -207,7 +207,7 @@ class movimientosAlmacen {
 
                 // Validar cada producto
                 const productosInvalidos = [];
-                
+
                 for (const producto of productos) {
                     const nombreProducto = nombresProductos[producto.id] || `ID: ${producto.id}`;
                     const stockActual = stocksMapValidacion.get(producto.id);
@@ -222,7 +222,7 @@ class movimientosAlmacen {
                             requerido: cantidadRequerida,
                             faltante: cantidadRequerida - stockDisponible
                         });
-                        
+
                         productosInvalidos.push({
                             id: producto.id,
                             nombre: nombreProducto,
@@ -235,11 +235,11 @@ class movimientosAlmacen {
 
                 if (productosInvalidos.length > 0) {
                     logService.addLog('error', `⛔ VALIDACIÓN FALLIDA: ${productosInvalidos.length} productos sin stock suficiente`);
-                    
-                    const detalleError = productosInvalidos.map(p => 
+
+                    const detalleError = productosInvalidos.map(p =>
                         `${p.nombre}: necesita ${p.cantidadRequerida}, disponible ${p.stockDisponible} (faltan ${p.faltante})`
                     ).join('; ');
-                    
+
                     return {
                         success: false,
                         message: 'Stock insuficiente para algunos productos',
@@ -250,7 +250,7 @@ class movimientosAlmacen {
 
                 logService.addLog('success', '✅ Validación de stock completada - todos los productos tienen stock suficiente');
             }
-            
+
             // Insertar movimiento con timeout y retry
             logService.addLog('info', '📝 Insertando movimiento en BD...');
             const { data: movimiento, error: movimientoError } = await supabase
@@ -258,7 +258,7 @@ class movimientosAlmacen {
                 .insert(insertData)
                 .select('id, sucu_id, type, fecha, estado, user_id, personal_id, precio_id, observaciones, metodo_pago, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id, agrupado, descuento, aumento, numero_orden, concepto, porcentaje, codigo')
                 .single();
-                
+
 
             if (movimientoError) {
                 logService.addLog('error', 'Error creando movimiento', { error: movimientoError.message });
@@ -269,14 +269,14 @@ class movimientosAlmacen {
 
             // Crear los detalles de productos si existen - ULTRA OPTIMIZADO
             if (productos && productos.length > 0) {
-                
+
                 // Preparar datos de productos de forma ultra eficiente
                 const productosData = productos.map(producto => {
                     const precio = Number(producto.precio) || 0;
                     const cantidad = Number(producto.cantidad);
                     return {
-                    movimiento_almacen_id: movimiento.id,
-                    producto_almacen_id: producto.id,
+                        movimiento_almacen_id: movimiento.id,
+                        producto_almacen_id: producto.id,
                         cantidad: cantidad,
                         precio_unitario: precio,
                         subtotal: precio * cantidad
@@ -288,25 +288,25 @@ class movimientosAlmacen {
                     .from('movimiento_almacen_producto')
                     .insert(productosData)
                     .select('id'); // Solo retornar IDs para verificar inserción
-                    
+
 
                 if (productosError) {
                     console.error('Error creando detalles de productos:', productosError);
-                            // Limpieza optimizada
-                            await this.cleanupMovimiento(movimiento.id);
+                    // Limpieza optimizada
+                    await this.cleanupMovimiento(movimiento.id);
                     return { success: false, message: 'Error al crear los detalles de productos', error: productosError };
                 }
 
                 // Actualizar stock de productos después de crear el movimiento - OPTIMIZADO EN LOTE
-                
+
                 // 1. Obtener todos los stocks actuales en una sola consulta (ULTRA OPTIMIZADA)
                 const productIds = productos.map(p => p.id);
-                
+
                 // Consulta ultra optimizada: usar raw SQL para mejor performance
                 const { data: stocksActuales, error: errorStocks } = await supabase
-                        .from('productos_sucursal')
+                    .from('productos_sucursal')
                     .select('id, producto_id, stock')
-                        .eq('sucursal_id', sucu_id)
+                    .eq('sucursal_id', sucu_id)
                     .in('producto_id', productIds)
                     .limit(1000); // Limitar resultados para evitar escaneos grandes
 
@@ -338,35 +338,35 @@ class movimientosAlmacen {
 
                     let nuevaCantidad;
                     let operacion = '';
-                    
+
                     if (type === 'entrada') {
                         nuevaCantidad = stockActualValue + producto.cantidad;
                         operacion = `${stockActualValue} + ${producto.cantidad} = ${nuevaCantidad}`;
                     } else if (type === 'salida') {
                         nuevaCantidad = stockActualValue - producto.cantidad;
                         operacion = `${stockActualValue} - ${producto.cantidad} = ${nuevaCantidad}`;
-                        
+
                         // Verificar que hay suficiente stock (esto no debería pasar si la validación previa funcionó)
                         if (nuevaCantidad < 0) {
                             logService.addLog('error', `Stock insuficiente para "${nombreProducto}"`, {
                                 disponible: stockActualValue,
                                 requerido: producto.cantidad
                             });
-                            
+
                             // Si falla, eliminar el movimiento y sus productos
                             await supabase
                                 .from('movimiento_almacen_producto')
                                 .delete()
                                 .eq('movimiento_almacen_id', movimiento.id);
-                            
+
                             await supabase
                                 .from('movimientos_almacen')
                                 .delete()
                                 .eq('id', movimiento.id);
-                            
-                            return { 
-                                success: false, 
-                                message: `Stock insuficiente para "${nombreProducto}". Stock disponible: ${stockActualValue}, Cantidad requerida: ${producto.cantidad}`, 
+
+                            return {
+                                success: false,
+                                message: `Stock insuficiente para "${nombreProducto}". Stock disponible: ${stockActualValue}, Cantidad requerida: ${producto.cantidad}`,
                                 error: 'Stock insuficiente',
                                 productoId: producto.id,
                                 nombreProducto,
@@ -403,9 +403,9 @@ class movimientosAlmacen {
                     } else {
                         // Preparar nueva inserción
                         nuevasInserciones.push({
-                                producto_id: producto.id,
-                                sucursal_id: sucu_id,
-                                stock: nuevaCantidad
+                            producto_id: producto.id,
+                            sucursal_id: sucu_id,
+                            stock: nuevaCantidad
                         });
                         logService.addLog('info', `🆕 Nuevo stock para "${nombreProducto}": ${nuevaCantidad}`);
                     }
@@ -413,10 +413,10 @@ class movimientosAlmacen {
 
                 // 4. Ejecutar actualizaciones en lote con control robusto de errores
                 const stocksActualizadosParaRollback = [];
-                
+
                 if (actualizaciones.length > 0) {
                     logService.addLog('info', `🔄 Procesando ${actualizaciones.length} actualizaciones de stock...`);
-                    
+
                     try {
                         // Intentar usar función RPC primero (más eficiente)
                         const rpcResult = await retryOperation(async () => {
@@ -427,35 +427,35 @@ class movimientosAlmacen {
                                     stock: a.stock
                                 }))
                             });
-                            
+
                             if (rpcError) {
                                 throw rpcError;
                             }
-                            
+
                             return { success: true };
                         });
-                        
+
                         logService.addLog('success', '✅ Stocks actualizados con RPC atómica');
-                        
+
                     } catch (rpcError) {
                         logService.addLog('warning', `RPC no disponible, usando método por lotes: ${rpcError.message}`);
-                        
+
                         // Fallback: usar método por lotes con control de concurrencia
-                        const updateOperations = actualizaciones.map(actualizacion => 
+                        const updateOperations = actualizaciones.map(actualizacion =>
                             retryOperation(async () => {
                                 logService.addLog('info', `Actualizando "${actualizacion.nombreProducto}"...`);
-                                
+
                                 const { data, error } = await supabase
                                     .from('productos_sucursal')
                                     .update({ stock: actualizacion.stock })
                                     .eq('id', actualizacion.id)
                                     .select('id, stock');
-                                
+
                                 if (error) {
                                     logService.addLog('error', `Error actualizando "${actualizacion.nombreProducto}"`, { error: error.message });
                                     throw error;
                                 }
-                                
+
                                 // Guardar para rollback potencial
                                 const stockInfo = productosConStockCalculado.find(p => p.id === actualizacion.producto_id);
                                 stocksActualizadosParaRollback.push({
@@ -464,15 +464,15 @@ class movimientosAlmacen {
                                     stockAnterior: stockInfo?.stockAnterior || 0,
                                     stockNuevo: actualizacion.stock
                                 });
-                                
+
                                 logService.addLog('success', `✅ "${actualizacion.nombreProducto}" actualizado`);
                                 return { data, error: null };
                             })
                         );
-                        
+
                         // Procesar en lotes usando CONFIG.batchSize
                         const { results, errors, summary } = await processBatch(updateOperations, CONFIG.batchSize);
-                        
+
                         // Validar que todas las operaciones fueron exitosas
                         try {
                             validateBatchResults(results);
@@ -481,21 +481,21 @@ class movimientosAlmacen {
                             logService.addLog('error', 'Error en validación de stocks', { error: validationError.message });
                             // Limpieza con rollback
                             await this.cleanupMovimiento(movimiento.id, stocksActualizadosParaRollback, logService);
-                            return { 
-                                success: false, 
-                                message: 'Error al actualizar stocks: ' + validationError.message, 
-                                error: validationError 
+                            return {
+                                success: false,
+                                message: 'Error al actualizar stocks: ' + validationError.message,
+                                error: validationError
                             };
                         }
-                        
+
                         // Si hay errores en el procesamiento por lotes, fallar completamente
                         if (errors.length > 0) {
                             logService.addLog('error', `Errores en procesamiento: ${errors.length} fallidos`);
                             await this.cleanupMovimiento(movimiento.id, stocksActualizadosParaRollback, logService);
-                            return { 
-                                success: false, 
-                                message: 'Error al procesar actualizaciones de stock', 
-                                error: errors 
+                            return {
+                                success: false,
+                                message: 'Error al procesar actualizaciones de stock',
+                                error: errors
                             };
                         }
                     }
@@ -504,42 +504,42 @@ class movimientosAlmacen {
                 // 5. Ejecutar inserciones en lote con control robusto de errores
                 if (nuevasInserciones.length > 0) {
                     logService.addLog('info', `🆕 Insertando ${nuevasInserciones.length} nuevos stocks...`);
-                    
+
                     try {
                         const insertResult = await retryOperation(async () => {
                             const { data, error } = await supabase
                                 .from('productos_sucursal')
                                 .insert(nuevasInserciones)
                                 .select('id');
-                            
+
                             if (error) {
                                 logService.addLog('error', 'Error insertando stocks', { error: error.message });
                                 throw error;
                             }
-                            
+
                             logService.addLog('success', '✅ Nuevos stocks creados exitosamente');
                             return { data, error: null };
                         });
-                        
+
                     } catch (insertError) {
                         logService.addLog('error', 'Error al crear stocks', { error: insertError.message });
                         // Limpieza con rollback
                         await this.cleanupMovimiento(movimiento.id, stocksActualizadosParaRollback, logService);
-                        return { 
-                            success: false, 
-                            message: 'Error al crear stocks: ' + insertError.message, 
-                            error: insertError 
+                        return {
+                            success: false,
+                            message: 'Error al crear stocks: ' + insertError.message,
+                            error: insertError
                         };
                     }
                 }
-                
+
             }
 
             let numeroOrdenAsignado = insertData.numero_orden ?? null;
 
             // Usar datos del movimiento ya creado y stock calculado (SIN CONSULTAS ADICIONALES)
             const tPrepareResponseStart = Date.now();
-            
+
             // Preparar respuesta con datos ya disponibles
             const movimientoBasico = {
                 id: movimiento.id,
@@ -579,7 +579,7 @@ class movimientosAlmacen {
                 // Si no hay productos, array vacío
                 productosConStock = [];
             }
-            
+
 
             // Eliminar lógica redundante de incremento de total_orders, ya se hizo al principio
             movimientoBasico.numero_orden = numeroOrdenAsignado;
@@ -589,35 +589,8 @@ class movimientosAlmacen {
             logService.addLog('success', '🎉 MOVIMIENTO CREADO EXITOSAMENTE');
             logService.addLog('info', '═══════════════════════════════════════════════════════');
 
-            // Preparar datos para email (capturar productosConStockCalculado en el scope)
-            const movimientoDataParaEmail = {
-                id: movimiento.id,
-                type: type,
-                fecha: fechaMovimientoISO,
-                estado: 'finalizado',
-                sucursal_name: sucursalNombre,
-                empresa_name: empresaNombre,
-                observaciones: observaciones,
-                metodo_pago: metodo_pago,
-                numero_orden: numeroOrdenAsignado
-            };
-
-            // Capturar productos con stock calculado para el email
-            const productosParaEmail = typeof productosConStockCalculado !== 'undefined' && productosConStockCalculado 
-                ? productosConStockCalculado 
-                : [];
-
-            // Enviar email de forma asíncrona (no bloquear respuesta)
-            setTimeout(async () => {
-                try {
-                    await logService.sendLogEmail(movimientoDataParaEmail, productosParaEmail, empresaNombre);
-                } catch (emailError) {
-                    console.error('Error enviando email de log:', emailError);
-                }
-            }, 100);
-
-            return { 
-                success: true, 
+            return {
+                success: true,
                 data: {
                     ...movimientoBasico,
                     productos: productosConStock,
@@ -637,7 +610,7 @@ class movimientosAlmacen {
     static async createFast(movimientoData) {
         try {
             const { user_id, personal_id, sucu_id, type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado, restar_ingredientes } = movimientoData;
-            
+
             let numeroOrdenFinal = null;
             let nombreEntidad = '';
 
@@ -744,7 +717,7 @@ class movimientosAlmacen {
             for (const producto of productos) {
                 const stockActual = stocksMap.get(producto.id);
                 const stockActualValue = stockActual ? Number(stockActual.stock) : 0;
-                
+
                 let nuevaCantidad;
                 if (type === 'entrada') {
                     nuevaCantidad = stockActualValue + Number(producto.cantidad);
@@ -857,7 +830,7 @@ class movimientosAlmacen {
                 }
             }
 
-            return { success: true, data: { id: movimiento.id, codigo: codigoMovimiento, numero_orden: numeroOrdenFinal } };
+            return await movimientosAlmacen.getById(movimiento.id);
         } catch (error) {
             console.error('Error en MovimientosAlmacen.createFast:', error);
             return { success: false, message: 'Error interno del servidor', error };
@@ -874,7 +847,9 @@ class movimientosAlmacen {
                     cliente:clients(id, name, total_orders),
                     proveedor:proveedores(id, name, total_orders),
                     precio:prices_types(id, name),
-                    sucursal:sucu_id(id, name)
+                    sucursal:sucu_id(id, name),
+                    user:user_id(id, first_name, last_name),
+                    personal:personal_id(id, first_name, last_name)
                 `)
                 .eq('id', id)
                 .single();
@@ -883,88 +858,78 @@ class movimientosAlmacen {
                 return { success: false, message: 'Movimiento no encontrado', error: movimientoError };
             }
 
-            // Obtener productos del movimiento
-            const { data: productos, error: productosError } = await supabase
-                .from('movimiento_almacen_producto')
-                .select(`
-                    *,
-                    producto:producto_almacen_id(
-                        id, 
-                        name, 
-                        description,
-                        grup
-                    )
-                `)
-                .eq('movimiento_almacen_id', id);
+            // Hacer llamadas paralelas para los productos y relaciones
+            const [
+                { data: productos, error: productosError },
+                { data: gastosAsociados },
+                { data: pedidosAsociados },
+                { data: deudasAsociadas }
+            ] = await Promise.all([
+                supabase
+                    .from('movimiento_almacen_producto')
+                    .select(`
+                        *,
+                        producto:producto_almacen_id(
+                            id, 
+                            name, 
+                            description,
+                            grup
+                        )
+                    `)
+                    .eq('movimiento_almacen_id', id),
+                supabase.from('gastos').select('id, movimiento_entrada_id').eq('movimiento_entrada_id', id),
+                supabase.from('pedidos_almacen').select('id, codigo, numero_pedido, movimiento_entrada_id, movimiento_salida_id').or(`movimiento_entrada_id.eq.${id},movimiento_salida_id.eq.${id}`),
+                supabase.from('deudas').select('id, movimiento_salida_id').eq('movimiento_salida_id', id)
+            ]);
 
             if (productosError) {
                 console.error('Error obteniendo productos del movimiento:', productosError);
             }
 
-            // Obtener el stock actualizado de cada producto en la sucursal del movimiento
-            const productosConStock = await Promise.all(
-                (productos || []).map(async (productoMovimiento) => {
-                    const { data: stockActual } = await supabase
-                        .from('productos_sucursal')
-                        .select('stock')
-                        .eq('producto_id', productoMovimiento.producto.id)
-                        .eq('sucursal_id', movimiento.sucu_id)
-                        .single();
+            // Obtener stock en lote (batch) para eliminar consulta N+1
+            const productIds = (productos || []).map(p => p.producto?.id).filter(Boolean);
+            let stocksMap = new Map();
+            
+            if (productIds.length > 0) {
+                const { data: stocksActuales } = await supabase
+                    .from('productos_sucursal')
+                    .select('producto_id, stock')
+                    .eq('sucursal_id', movimiento.sucu_id)
+                    .in('producto_id', productIds);
                     
-                    return {
-                        ...productoMovimiento,
-                        producto: {
-                            ...productoMovimiento.producto,
-                            stock: stockActual ? stockActual.stock : 0
-                        }
-                    };
-                })
-            );
-
-            // Obtener información del usuario o personal
-            let user = null;
-            let personal = null;
-
-            // Si tiene user_id, obtener el usuario
-            if (movimiento.user_id) {
-                const { data: userData, error: userError } = await supabase
-                    .from('users')
-                    .select('id, first_name, last_name')
-                    .eq('id', movimiento.user_id)
-                    .single();
-                
-                if (!userError && userData) {
-                    user = {
-                        id: userData.id,
-                        name: `${userData.first_name} ${userData.last_name}`.trim()
-                    };
+                if (stocksActuales) {
+                    stocksActuales.forEach(s => stocksMap.set(s.producto_id, s.stock));
                 }
             }
 
-            // Si tiene personal_id, obtener el personal
-            if (movimiento.personal_id) {
-                const { data: personalData, error: personalError } = await supabase
-                    .from('personal')
-                    .select('id, first_name, last_name')
-                    .eq('id', movimiento.personal_id)
-                    .single();
-                
-                if (!personalError && personalData) {
-                    personal = {
-                        id: personalData.id,
-                        name: `${personalData.first_name} ${personalData.last_name}`.trim()
-                    };
+            const productosConStock = (productos || []).map(productoMovimiento => ({
+                ...productoMovimiento,
+                producto: {
+                    ...productoMovimiento.producto,
+                    stock: stocksMap.get(productoMovimiento.producto.id) || 0
                 }
+            }));
+
+            // Formatear nombres de usuario y personal
+            const user = movimiento.user ? {
+                id: movimiento.user.id,
+                name: `${movimiento.user.first_name || ''} ${movimiento.user.last_name || ''}`.trim()
+            } : null;
+
+            const personal = movimiento.personal ? {
+                id: movimiento.personal.id,
+                name: `${movimiento.personal.first_name || ''} ${movimiento.personal.last_name || ''}`.trim()
+            } : null;
+
+            // Procesar pedidos
+            const tienePedidoRelacionado = !!(pedidosAsociados && pedidosAsociados.length > 0);
+            let pedidosEntrada = [];
+            let pedidosSalida = [];
+
+            if (pedidosAsociados) {
+                pedidosEntrada = pedidosAsociados.filter(p => p.movimiento_entrada_id === id);
+                pedidosSalida = pedidosAsociados.filter(p => p.movimiento_salida_id === id);
             }
-
-            // Verificar si el movimiento está relacionado con algún pedido (como salida o entrada)
-            const { data: pedidosRelacionados } = await supabase
-                .from('pedidos_almacen')
-                .select('id')
-                .or(`movimiento_salida_id.eq.${id},movimiento_entrada_id.eq.${id}`)
-                .limit(1);
-
-            const tienePedidoRelacionado = !!(pedidosRelacionados && pedidosRelacionados.length > 0);
 
             return {
                 success: true,
@@ -973,6 +938,10 @@ class movimientosAlmacen {
                     productos: productosConStock,
                     user,
                     personal,
+                    gastos: gastosAsociados && gastosAsociados.length > 0 ? gastosAsociados : null,
+                    pedidos_entrada: pedidosEntrada.length > 0 ? pedidosEntrada : null,
+                    pedidos_salida: pedidosSalida.length > 0 ? pedidosSalida : null,
+                    deudas: deudasAsociadas && deudasAsociadas.length > 0 ? deudasAsociadas : null,
                     tiene_pedido_relacionado: tienePedidoRelacionado
                 }
             };
@@ -999,7 +968,7 @@ class movimientosAlmacen {
                     sucursal:sucu_id(id, name),
                     user:user_id(id, first_name, last_name),
                     personal:personal_id(id, first_name, last_name)
-                `, { count: 'exact' })
+                `, { count: 'estimated' })
                 .eq('sucu_id', sucuId);
 
             // Si hay búsqueda por nombre de producto, prefiltrar por IDs de movimientos que tengan ese producto en el detalle
@@ -1061,13 +1030,13 @@ class movimientosAlmacen {
                 query = query.eq('cliente_id', clienteId);
             }
 
-            // Aplicar filtro de fecha si se proporciona
+            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en UTC)
             if (filtroFecha) {
                 if (filtroFecha.inicio) {
-                    query = query.gte('fecha', filtroFecha.inicio);
+                    query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
                 }
                 if (filtroFecha.fin) {
-                    query = query.lte('fecha', filtroFecha.fin);
+                    query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
                 }
             }
 
@@ -1095,114 +1064,42 @@ class movimientosAlmacen {
                 };
             }
 
-            // Obtener productos y información de usuario para cada movimiento
-			// Hidratación OPTIMIZADA: cargar en lotes separados para evitar límite de 1000 líneas
             const movimientoIds = movimientos.map(m => m.id);
 
-			const tHydrateStart = Date.now();
-
-			// 1) Primero obtener productos del movimiento SIN relaciones anidadas (para evitar límite de 1000)
-			const productosByMovimiento = new Map();
-            (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
-            
-            // Dividir movimientoIds en lotes más pequeños para evitar límite de Supabase
-            const batchSize = 50; // Reducir tamaño de lote para evitar límite
-            const productosMovimientoAll = [];
-            
-            for (let i = 0; i < movimientoIds.length; i += batchSize) {
-                const batchIds = movimientoIds.slice(i, i + batchSize);
-                
-                // Obtener productos SIN relaciones anidadas primero
-                const { data: productosBatch, error: productosError } = await supabase
-                    .from('movimiento_almacen_producto')
-                    .select(`
-                        movimiento_almacen_id,
-                        producto_almacen_id,
-                        cantidad,
-                        precio_unitario,
-                        subtotal
-                    `)
-                    .in('movimiento_almacen_id', batchIds);
-                
-                if (productosError) {
-                    console.error(`[MovAlmacenModel.getAll] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
-                    console.error(`[MovAlmacenModel.getAll] Movimiento IDs del lote:`, batchIds);
-                } else if (productosBatch && Array.isArray(productosBatch)) {
-                    productosMovimientoAll.push(...productosBatch);
+            let todosLosProductos = [];
+            if (movimientoIds.length > 0) {
+                // Hacer peticiones paralelas para no tardar 20 segundos y evitar el error de Supabase
+                const chunkSize = 15;
+                const promesas = [];
+                for (let i = 0; i < movimientoIds.length; i += chunkSize) {
+                    const chunkIds = movimientoIds.slice(i, i + chunkSize);
+                    promesas.push(
+                        supabase
+                            .from('movimiento_almacen_producto')
+                            .select('movimiento_almacen_id, subtotal, cantidad, producto:producto_almacen_id(name, costo_produccion)')
+                            .in('movimiento_almacen_id', chunkIds)
+                    );
+                }
+                const resultados = await Promise.all(promesas);
+                for (const { data } of resultados) {
+                    if (data) todosLosProductos.push(...data);
                 }
             }
-            
-            // 2) Obtener IDs únicos de productos para cargar sus datos
-            const productoIds = [...new Set(productosMovimientoAll.map(p => p.producto_almacen_id))];
-            
-            // 3) Cargar productos de almacén en lotes pequeños para evitar límite de 1000
-            const productosAlmacenMap = new Map();
-            const productoBatchSize = 100; // Lotes de productos más pequeños
-            
-            for (let i = 0; i < productoIds.length; i += productoBatchSize) {
-                const batchProductIds = productoIds.slice(i, i + productoBatchSize);
-                
-                const { data: productosAlmacenBatch, error: productosAlmacenError } = await supabase
-                    .from('products_almacen')
-                    .select(`
-                        id,
-                        name,
-                        description,
-                        grup
-                    `)
-                    .in('id', batchProductIds);
-                
-                if (productosAlmacenError) {
-                    console.error(`[MovAlmacenModel.getAll] Error obteniendo productos almacén (lote ${Math.floor(i/productoBatchSize) + 1}):`, productosAlmacenError);
-                } else if (productosAlmacenBatch && Array.isArray(productosAlmacenBatch)) {
-                    productosAlmacenBatch.forEach(prod => {
-                        productosAlmacenMap.set(prod.id, prod);
-                    });
-                }
-            }
-            
-            // 4) Combinar productos del movimiento con sus datos de almacén
-            productosMovimientoAll.forEach(p => {
-                if (p && p.movimiento_almacen_id) {
-                    const productoAlmacen = productosAlmacenMap.get(p.producto_almacen_id);
-                    const productoCompleto = {
-                        ...p,
-                        producto: productoAlmacen || null
-                    };
-                    
-                    const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
-                    arr.push(productoCompleto);
-                    productosByMovimiento.set(p.movimiento_almacen_id, arr);
-                }
-            });
 
-            // Usuarios y personal vienen embebidos en la query principal (sin llamadas extra)
-
-			// Armar respuesta final (sin relación con pedidos para acelerar listado)
             let movimientosConProductos = movimientos.map(mov => {
                 const user = mov.user ? { id: mov.user.id, name: `${mov.user.first_name || ''} ${mov.user.last_name || ''}`.trim() } : null;
                 const personal = mov.personal ? { id: mov.personal.id, name: `${mov.personal.first_name || ''} ${mov.personal.last_name || ''}`.trim() } : null;
-				return {
-					...mov,
-					productos: productosByMovimiento.get(mov.id) || [],
+                const movProductos = todosLosProductos.filter(p => p.movimiento_almacen_id === mov.id);
+                const subtotal = movProductos.reduce((sum, p) => sum + (parseFloat(p.subtotal) || 0), 0);
+                return {
+                    ...mov,
                     user,
-                    personal
-				};
-			});
+                    personal,
+                    subtotal,
+                    productos: movProductos
+                };
+            });
 
-            // Filtrar adicionalmente en memoria para manejar acentos
-            if (search && search.trim() !== '') {
-                const normalizedSearchTerm = normalizeText(search);
-                movimientosConProductos = movimientosConProductos.filter(movimiento => {
-                    // Buscar en los nombres de productos del movimiento
-                    return movimiento.productos.some(producto => {
-                        const productName = normalizeText(producto.producto?.name || '');
-                        return productName.includes(normalizedSearchTerm);
-                    });
-                });
-            }
-
-            const tHydrateMs = Date.now() - tHydrateStart;
 
             const tTotalMs = Date.now() - tStart;
             const result = {
@@ -1219,6 +1116,71 @@ class movimientosAlmacen {
 
         } catch (error) {
             console.error('Error en MovimientosAlmacen.getAll:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
+    // Obtener todos los movimientos sin límite (Optimizado para reportes/balance)
+    static async getAllSinLimite(sucuId, tipo = null, estado = null, ordenamiento = 'fecha_desc', filtroFecha = null) {
+        try {
+            let query = supabase
+                .from('movimientos_almacen')
+                .select('id, fecha, metodo_pago, type, estado')
+                .eq('sucu_id', sucuId);
+
+            if (tipo) query = query.eq('type', tipo);
+            if (estado) query = query.eq('estado', estado);
+            
+            if (filtroFecha) {
+                if (filtroFecha.inicio) query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
+                if (filtroFecha.fin) query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
+            }
+
+            const ascending = ordenamiento === 'fecha_asc';
+            query = query.order('fecha', { ascending });
+
+            const { data: movimientos, error } = await query;
+            if (error) return { success: false, message: 'Error al obtener movimientos sin limite', error };
+            if (!movimientos || movimientos.length === 0) return { success: true, data: [] };
+
+            const movimientoIds = movimientos.map(m => m.id);
+
+            let todosLosProductos = [];
+            const chunkSize = 50;
+            const promesas = [];
+            for (let i = 0; i < movimientoIds.length; i += chunkSize) {
+                const chunkIds = movimientoIds.slice(i, i + chunkSize);
+                promesas.push(
+                    supabase
+                        .from('movimiento_almacen_producto')
+                        .select('movimiento_almacen_id, subtotal, cantidad, producto:producto_almacen_id(costo_produccion)')
+                        .in('movimiento_almacen_id', chunkIds)
+                );
+            }
+            const resultados = await Promise.all(promesas);
+            for (const { data } of resultados) {
+                if (data) todosLosProductos.push(...data);
+            }
+
+            const resultadoOptimizado = movimientos.map(mov => {
+                const movProductos = todosLosProductos.filter(p => p.movimiento_almacen_id === mov.id);
+                const total = movProductos.reduce((sum, p) => sum + (parseFloat(p.subtotal) || 0), 0);
+                const costo_produccion_total = movProductos.reduce((sum, p) => sum + ((parseFloat(p.producto?.costo_produccion) || 0) * (parseFloat(p.cantidad) || 0)), 0);
+
+                return {
+                    id: mov.id,
+                    fecha: mov.fecha,
+                    metodo_pago: mov.metodo_pago,
+                    type: mov.type,
+                    estado: mov.estado,
+                    total: total,
+                    costo_produccion: costo_produccion_total
+                };
+            });
+
+            return { success: true, data: resultadoOptimizado };
+        } catch (error) {
+            console.error('Error en MovimientosAlmacen.getAllSinLimite:', error);
             return { success: false, message: 'Error interno del servidor', error };
         }
     }
@@ -1313,6 +1275,89 @@ class movimientosAlmacen {
         }
     }
 
+    static async getCategoriasMasVendidas(sucuId) {
+        try {
+            const ahora = new Date();
+            const y = ahora.getFullYear();
+            const m = ahora.getMonth();
+            const inicioMes = new Date(y, m, 1).toISOString();
+            const finMes = new Date(y, m + 1, 0, 23, 59, 59).toISOString();
+
+            const { data: movimientos, error: movsError } = await supabase
+                .from('movimientos_almacen')
+                .select('id')
+                .eq('sucu_id', sucuId)
+                .eq('type', 'salida')
+                .neq('estado', 'anulado')
+                .gte('fecha', inicioMes)
+                .lte('fecha', finMes);
+
+            if (movsError) throw movsError;
+            if (!movimientos || movimientos.length === 0) {
+                return { success: true, data: { categorias: [], totalProductos: 0 } };
+            }
+
+            const movIds = movimientos.map(m => m.id);
+
+            const { data: productosVendidos, error: prodError } = await supabase
+                .from('movimiento_almacen_producto')
+                .select(`
+                    cantidad,
+                    producto_almacen:producto_almacen_id (
+                        id,
+                        name,
+                        producto_categoria (
+                            category_almacen:categoria_id (
+                                id,
+                                name
+                            )
+                        )
+                    )
+                `)
+                .in('movimiento_almacen_id', movIds);
+
+            if (prodError) throw prodError;
+
+            const conteoCategorias = {};
+            let totalProductos = 0;
+
+            (productosVendidos || []).forEach(item => {
+                const cantidad = parseFloat(item.cantidad) || 0;
+                const prod = item.producto_almacen;
+                if (!prod) return;
+
+                totalProductos += cantidad;
+                
+                const cats = prod.producto_categoria || [];
+                const categoryName = cats.length > 0 && cats[0].category_almacen?.name
+                    ? cats[0].category_almacen.name
+                    : 'Sin categoría';
+                
+                conteoCategorias[categoryName] = (conteoCategorias[categoryName] || 0) + cantidad;
+            });
+
+            const colores = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#ef4444'];
+            const datosCategorias = Object.keys(conteoCategorias).map((nombre, index) => ({
+                nombre,
+                valor: Math.round(conteoCategorias[nombre]),
+                color: colores[index % colores.length]
+            })).sort((a, b) => b.valor - a.valor);
+
+            const top6Categorias = datosCategorias.slice(0, 6);
+
+            return {
+                success: true,
+                data: {
+                    categorias: top6Categorias,
+                    totalProductos: Math.round(totalProductos)
+                }
+            };
+        } catch (error) {
+            console.error('Error en getCategoriasMasVendidas:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
     // Obtener movimientos por tipo (entrada/salida)
     static async getByType(sucuId, type, page = 1, limit = 30) {
         try {
@@ -1325,7 +1370,7 @@ class movimientosAlmacen {
                     cliente:clients(id, name),
                     proveedor:proveedores(id, name),
                     precio:prices_types(id, name)
-                `, { count: 'exact' })
+                `, { count: 'estimated' })
                 .eq('sucu_id', sucuId)
                 .eq('type', tipo)
                 .order('fecha', { ascending: false })
@@ -1414,8 +1459,8 @@ class movimientosAlmacen {
             }
 
             if (ingredientesConStockInsuficiente.length > 0) {
-                return { 
-                    success: false, 
+                return {
+                    success: false,
                     message: 'No se puede completar la entrada. Algunos ingredientes de la receta no cuentan con stock suficiente en materia prima.'
                 };
             }
@@ -1438,8 +1483,8 @@ class movimientosAlmacen {
                 }
             }
 
-            return { 
-                success: true, 
+            return {
+                success: true,
                 message: 'Ingredientes restados correctamente',
                 actualizados: actualizaciones.length
             };
@@ -1460,7 +1505,7 @@ class movimientosAlmacen {
                 for (const ingrediente of item.ingredientes) {
                     if (ingrediente.products_acopio && ingrediente.products_acopio.id) {
                         const key = ingrediente.products_acopio.id;
-                        
+
                         if (ingredientesMap.has(key)) {
                             // Si ya existe, sumar las cantidades
                             ingredientesMap.get(key).cantidad += ingrediente.cantidad * item.cantidad;
@@ -1497,7 +1542,7 @@ class movimientosAlmacen {
 
     // Anular un movimiento
     static async anular(movimientoId, desdePedido = false) {
-        
+
         try {
             // Obtener el movimiento con datos mínimos (ULTRA OPTIMIZADO)
             const { data: movimiento, error: movimientoError } = await supabase
@@ -1537,7 +1582,7 @@ class movimientosAlmacen {
 
             // Si el movimiento tiene produccion_damabrava_id, manejar la anulación especial
             if (movimiento.produccion_damabrava_id) {
-                
+
                 // Obtener el registro de producción de Damabrava
                 const { data: registroProduccion, error: registroError } = await supabase
                     .from('registros_produccion_damabrava')
@@ -1558,7 +1603,7 @@ class movimientosAlmacen {
 
                     // Calcular la nueva cantidad ingresada
                     const nuevaCantidadIngresada = Math.max(0, (registroProduccion.cantidad_ingresada || 0) - cantidadTotalMovimiento);
-                    
+
                     // Determinar el nuevo estado del registro
                     let nuevoEstado = registroProduccion.estado;
                     if (registroProduccion.estado === 'Ingresado' && nuevaCantidadIngresada < registroProduccion.cantidad_verificada) {
@@ -1581,7 +1626,7 @@ class movimientosAlmacen {
 
                     console.log(`Registro de producción ${movimiento.produccion_damabrava_id} actualizado: cantidad_ingresada=${nuevaCantidadIngresada}, estado=${nuevoEstado}`);
                 }
-                
+
             }
 
             // Si tiene gasto_id: PRIMERO limpiar gasto_id en el movimiento, LUEGO eliminar el gasto
@@ -1644,9 +1689,9 @@ class movimientosAlmacen {
             // Preparar actualizaciones de stock antes de cambiar estado (OPTIMIZADO)
             const productIds = movimiento.productos.map(p => p.producto_almacen_id);
             const { data: stocksActuales, error: errorStocks } = await supabase
-                    .from('productos_sucursal')
+                .from('productos_sucursal')
                 .select('id, producto_id, stock')
-                    .eq('sucursal_id', movimiento.sucu_id)
+                .eq('sucursal_id', movimiento.sucu_id)
                 .in('producto_id', productIds)
                 .limit(100); // Limitar resultados para evitar escaneos grandes
 
@@ -1665,7 +1710,7 @@ class movimientosAlmacen {
             const actualizacionesReversion = [];
             const productosConStockInsuficiente = [];
             console.log(`🔄 [ANULAR] Preparando reversión de ${movimiento.productos.length} productos (${movimiento.type})`);
-            
+
             for (const productoMovimiento of movimiento.productos) {
                 const cantidadMovimiento = parseFloat(productoMovimiento.cantidad);
                 const stockActual = stocksMap.get(productoMovimiento.producto_almacen_id);
@@ -1674,11 +1719,11 @@ class movimientosAlmacen {
 
                 let nuevaCantidad;
                 let operacionReversion = '';
-                
+
                 if (movimiento.type === 'entrada') {
                     nuevaCantidad = stockActualValue - cantidadMovimiento;
                     operacionReversion = `${stockActualValue} - ${cantidadMovimiento} = ${nuevaCantidad}`;
-                    
+
                     // Validar stock suficiente para restar (anular entrada)
                     if (nuevaCantidad < 0) {
                         // Obtener nombre del producto para el error
@@ -1687,7 +1732,7 @@ class movimientosAlmacen {
                             .select('name')
                             .eq('id', productoMovimiento.producto_almacen_id)
                             .single();
-                        
+
                         productosConStockInsuficiente.push({
                             nombre: productoInfo?.name || 'Producto desconocido',
                             stockActual: stockActualValue,
@@ -1717,16 +1762,16 @@ class movimientosAlmacen {
             // Si hay productos con stock insuficiente, retornar error
             if (productosConStockInsuficiente.length > 0) {
                 console.log('❌ [ANULAR] No se puede anular: stock insuficiente en algunos productos');
-                return { 
-                    success: false, 
-                    message: 'No es posible anular esta entrada por que algunos productos ya no existen en stock o se vendieron', 
-                    productosConStockInsuficiente 
+                return {
+                    success: false,
+                    message: 'No es posible anular esta entrada por que algunos productos ya no existen en stock o se vendieron',
+                    productosConStockInsuficiente
                 };
             }
 
             // Usar función RPC específica para anular (ATÓMICA) - UNA SOLA OPERACIÓN
             let rpcSuccess = false;
-            
+
             try {
                 const rpcResult = await retryOperation(async () => {
                     const { error: rpcError } = await supabase.rpc('anular_movimiento_batch', {
@@ -1737,16 +1782,16 @@ class movimientosAlmacen {
                     if (rpcError) {
                         throw rpcError;
                     }
-                    
+
                     return { success: true };
                 });
-                
+
                 rpcSuccess = true;
                 console.log(`✅ [MODEL ANULAR] RPC completado exitosamente - NO se necesita reversión manual`);
-                
+
             } catch (rpcError) {
                 console.warn('⚠️ [MODEL ANULAR] RPC anular_movimiento_batch no disponible, usando método tradicional:', rpcError.message);
-                
+
                 // Fallback: método tradicional (solo actualizar estado)
                 try {
                     const updateResult = await retryOperation(async () => {
@@ -1760,22 +1805,22 @@ class movimientosAlmacen {
                         if (updateError) {
                             throw updateError;
                         }
-                        
+
                         return { success: true };
                     });
-                    
+
                 } catch (updateError) {
                     console.error('❌ [MODEL ANULAR] Error actualizando estado:', updateError);
                     return { success: false, message: 'Error al anular el movimiento: ' + updateError.message };
                 }
-                
+
                 rpcSuccess = false;
             }
 
             // Solo hacer reversión manual si el RPC falló
             if (!rpcSuccess && actualizacionesReversion.length > 0) {
                 console.log(`🔄 [MODEL ANULAR] Realizando reversión manual de ${actualizacionesReversion.length} stocks`);
-                
+
                 try {
                     // Usar función RPC para actualizaciones en lote
                     const rpcResult = await retryOperation(async () => {
@@ -1786,31 +1831,31 @@ class movimientosAlmacen {
                         if (rpcError) {
                             throw rpcError;
                         }
-                        
+
                         return { success: true };
                     });
-                    
+
                     console.log('✅ [MODEL ANULAR] Reversión RPC completada exitosamente');
 
                 } catch (rpcError) {
                     console.warn('⚠️ [MODEL ANULAR] RPC no disponible para reversión manual, usando método por lotes:', rpcError.message);
-                    
+
                     // Fallback: usar método por lotes con control de concurrencia
-                    const updateOperations = actualizacionesReversion.map(actualizacion => 
+                    const updateOperations = actualizacionesReversion.map(actualizacion =>
                         retryOperation(async () => {
                             console.log(`🔄 [REVIRTIENDO] Producto ${actualizacion.producto_id} | ${actualizacion.operacion}`);
-                            
+
                             const { data, error } = await supabase
                                 .from('productos_sucursal')
                                 .update({ stock: actualizacion.stock })
                                 .eq('id', actualizacion.id)
                                 .select('id');
-                            
+
                             if (error) {
                                 console.error(`❌ [ERROR REVERSIÓN] Producto ${actualizacion.producto_id} | ${actualizacion.operacion} | Error: ${error.message}`);
                                 throw error;
                             }
-                            
+
                             console.log(`✅ [REVERTIDO] Producto ${actualizacion.producto_id} | ${actualizacion.operacion}`);
                             return { data, error: null };
                         })
@@ -1818,7 +1863,7 @@ class movimientosAlmacen {
 
                     // Procesar en lotes de máximo 50 operaciones
                     const { results, errors } = await processBatch(updateOperations, 50);
-                    
+
                     // Validar que todas las operaciones fueron exitosas
                     try {
                         validateBatchResults(results);
@@ -1830,13 +1875,13 @@ class movimientosAlmacen {
                             .from('movimientos_almacen')
                             .update({ estado: 'finalizado' })
                             .eq('id', movimientoId);
-                        return { 
-                            success: false, 
-                            message: 'Error al revertir stocks manualmente: ' + validationError.message, 
-                            error: validationError 
+                        return {
+                            success: false,
+                            message: 'Error al revertir stocks manualmente: ' + validationError.message,
+                            error: validationError
                         };
                     }
-                    
+
                     // Si hay errores en el procesamiento por lotes, fallar completamente
                     if (errors.length > 0) {
                         console.error('❌ [MODEL ANULAR] Errores en procesamiento por lotes:', errors);
@@ -1845,10 +1890,10 @@ class movimientosAlmacen {
                             .from('movimientos_almacen')
                             .update({ estado: 'finalizado' })
                             .eq('id', movimientoId);
-                        return { 
-                            success: false, 
-                            message: 'Error al procesar reversión de stocks', 
-                            error: errors 
+                        return {
+                            success: false,
+                            message: 'Error al procesar reversión de stocks',
+                            error: errors
                         };
                     }
                 }
@@ -1883,11 +1928,11 @@ class movimientosAlmacen {
             // Si es entrada, tiene receta Y restar_ingredientes es true, devolver ingredientes consumidos
             if (movimiento.type === 'entrada' && movimiento.restar_ingredientes) {
                 console.log('🔄 [MODEL ANULAR] Devolviendo ingredientes para movimiento de entrada con restar_ingredientes=true');
-                
+
                 // Obtener recetas de cada producto del movimiento
                 for (const productoMovimiento of movimiento.productos) {
                     const cantidadMovimiento = parseFloat(productoMovimiento.cantidad);
-                    
+
                     // Obtener recetas del producto de almacén
                     const { data: recetas, error: recetasError } = await supabase
                         .from('recetas')
@@ -1905,10 +1950,10 @@ class movimientosAlmacen {
                         `)
                         .eq('producto_almacen_id', productoMovimiento.producto_almacen_id)
                         .limit(1);
-                    
+
                     if (!recetasError && recetas && recetas.length > 0) {
                         const receta = recetas[0];
-                        
+
                         if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
                             // Devolver ingredientes (sumar al stock)
                             for (const ingrediente of receta.recetas_detalle) {
@@ -1951,7 +1996,7 @@ class movimientosAlmacen {
                 console.log(`🔄 [ANULAR] Actualizando pedido relacionado: ${pedidosRelacionados.id}`);
                 const { error: updatePedidoError } = await supabase
                     .from('pedidos_almacen')
-                    .update({ 
+                    .update({
                         estado: 'Entregado',
                         movimiento_entrada_id: null
                     })
@@ -1966,8 +2011,22 @@ class movimientosAlmacen {
                 }
             }
 
-            return { 
-                success: true, 
+            // Limpiar la referencia al registro de producción para que pueda ser eliminado
+            if (movimiento.produccion_damabrava_id) {
+                const { error: limpiarDamabravaError } = await supabase
+                    .from('movimientos_almacen')
+                    .update({ produccion_damabrava_id: null })
+                    .eq('id', movimientoId);
+                
+                if (limpiarDamabravaError) {
+                    console.error('Error limpiando produccion_damabrava_id:', limpiarDamabravaError);
+                } else {
+                    console.log(`✅ [ANULAR] Limpiada la referencia a producción damabrava: ${movimiento.produccion_damabrava_id}`);
+                }
+            }
+
+            return {
+                success: true,
                 message: 'Movimiento anulado correctamente',
                 data: { ...movimiento, estado: 'anulado' }
             };
@@ -2038,31 +2097,31 @@ class movimientosAlmacen {
                 }
             } catch (rpcError) {
                 console.warn('RPC eliminar_movimiento_atomico no disponible, usando método tradicional:', rpcError.message);
-                
+
                 // Fallback: método tradicional
-            const { error: productosError } = await supabase
-                .from('movimiento_almacen_producto')
-                .delete()
-                .eq('movimiento_almacen_id', movimientoId);
+                const { error: productosError } = await supabase
+                    .from('movimiento_almacen_producto')
+                    .delete()
+                    .eq('movimiento_almacen_id', movimientoId);
 
-            if (productosError) {
-                console.error('Error eliminando productos del movimiento:', productosError);
-                return { success: false, message: 'Error al eliminar los productos del movimiento' };
-            }
+                if (productosError) {
+                    console.error('Error eliminando productos del movimiento:', productosError);
+                    return { success: false, message: 'Error al eliminar los productos del movimiento' };
+                }
 
-            const { error: deleteError } = await supabase
-                .from('movimientos_almacen')
-                .delete()
-                .eq('id', movimientoId);
+                const { error: deleteError } = await supabase
+                    .from('movimientos_almacen')
+                    .delete()
+                    .eq('id', movimientoId);
 
-            if (deleteError) {
-                console.error('Error eliminando movimiento:', deleteError);
-                return { success: false, message: 'Error al eliminar el movimiento' };
+                if (deleteError) {
+                    console.error('Error eliminando movimiento:', deleteError);
+                    return { success: false, message: 'Error al eliminar el movimiento' };
                 }
             }
 
-            return { 
-                success: true, 
+            return {
+                success: true,
                 message: 'Movimiento eliminado correctamente'
             };
 
@@ -2285,14 +2344,14 @@ class movimientosAlmacen {
             // 1) Primero obtener productos del movimiento SIN relaciones anidadas
             const productosByMovimiento = new Map();
             (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
-            
+
             // Dividir movimientoIds en lotes para evitar límite de Supabase
             const batchSize = 50;
             const productosMovimientoAll = [];
-            
+
             for (let i = 0; i < movimientoIds.length; i += batchSize) {
                 const batchIds = movimientoIds.slice(i, i + batchSize);
-                
+
                 const { data: productosBatch, error: productosError } = await supabase
                     .from('movimiento_almacen_producto')
                     .select(`
@@ -2303,24 +2362,24 @@ class movimientosAlmacen {
                         subtotal
                     `)
                     .in('movimiento_almacen_id', batchIds);
-                
+
                 if (productosError) {
-                    console.error(`[MovAlmacenModel.getByCliente] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
+                    console.error(`[MovAlmacenModel.getByCliente] Error obteniendo productos (lote ${Math.floor(i / batchSize) + 1}):`, productosError);
                 } else if (productosBatch && Array.isArray(productosBatch)) {
                     productosMovimientoAll.push(...productosBatch);
                 }
             }
-            
+
             // 2) Obtener IDs únicos de productos para cargar sus datos
             const productoIds = [...new Set(productosMovimientoAll.map(p => p.producto_almacen_id))];
-            
+
             // 3) Cargar productos de almacén en lotes pequeños
             const productosAlmacenMap = new Map();
             const productoBatchSize = 100;
-            
+
             for (let i = 0; i < productoIds.length; i += productoBatchSize) {
                 const batchProductIds = productoIds.slice(i, i + productoBatchSize);
-                
+
                 const { data: productosAlmacenBatch, error: productosAlmacenError } = await supabase
                     .from('products_almacen')
                     .select(`
@@ -2330,16 +2389,16 @@ class movimientosAlmacen {
                         grup
                     `)
                     .in('id', batchProductIds);
-                
+
                 if (productosAlmacenError) {
-                    console.error(`[MovAlmacenModel.getByCliente] Error obteniendo productos almacén (lote ${Math.floor(i/productoBatchSize) + 1}):`, productosAlmacenError);
+                    console.error(`[MovAlmacenModel.getByCliente] Error obteniendo productos almacén (lote ${Math.floor(i / productoBatchSize) + 1}):`, productosAlmacenError);
                 } else if (productosAlmacenBatch && Array.isArray(productosAlmacenBatch)) {
                     productosAlmacenBatch.forEach(prod => {
                         productosAlmacenMap.set(prod.id, prod);
                     });
                 }
             }
-            
+
             // 4) Combinar productos del movimiento con sus datos de almacén
             productosMovimientoAll.forEach(p => {
                 if (p && p.movimiento_almacen_id) {
@@ -2348,7 +2407,7 @@ class movimientosAlmacen {
                         ...p,
                         producto: productoAlmacen || null
                     };
-                    
+
                     const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
                     arr.push(productoCompleto);
                     productosByMovimiento.set(p.movimiento_almacen_id, arr);
@@ -2359,7 +2418,7 @@ class movimientosAlmacen {
             const movimientosConProductos = movimientos.map(mov => {
                 const user = mov.user ? { id: mov.user.id, name: `${mov.user.first_name || ''} ${mov.user.last_name || ''}`.trim() } : null;
                 const personal = mov.personal ? { id: mov.personal.id, name: `${mov.personal.first_name || ''} ${mov.personal.last_name || ''}`.trim() } : null;
-                
+
                 return {
                     ...mov,
                     productos: productosByMovimiento.get(mov.id) || [],
@@ -2425,14 +2484,14 @@ class movimientosAlmacen {
             // 1) Primero obtener productos del movimiento SIN relaciones anidadas
             const productosByMovimiento = new Map();
             (movimientoIds || []).forEach(id => productosByMovimiento.set(id, []));
-            
+
             // Dividir movimientoIds en lotes para evitar límite de Supabase
             const batchSize = 50;
             const productosMovimientoAll = [];
-            
+
             for (let i = 0; i < movimientoIds.length; i += batchSize) {
                 const batchIds = movimientoIds.slice(i, i + batchSize);
-                
+
                 const { data: productosBatch, error: productosError } = await supabase
                     .from('movimiento_almacen_producto')
                     .select(`
@@ -2443,24 +2502,24 @@ class movimientosAlmacen {
                         subtotal
                     `)
                     .in('movimiento_almacen_id', batchIds);
-                
+
                 if (productosError) {
-                    console.error(`[MovAlmacenModel.getByProduccionDamabrava] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
+                    console.error(`[MovAlmacenModel.getByProduccionDamabrava] Error obteniendo productos (lote ${Math.floor(i / batchSize) + 1}):`, productosError);
                 } else if (productosBatch && Array.isArray(productosBatch)) {
                     productosMovimientoAll.push(...productosBatch);
                 }
             }
-            
+
             // 2) Obtener IDs únicos de productos para cargar sus datos
             const productoIds = [...new Set(productosMovimientoAll.map(p => p.producto_almacen_id))];
-            
+
             // 3) Cargar productos de almacén en lotes pequeños
             const productosAlmacenMap = new Map();
             const productoBatchSize = 100;
-            
+
             for (let i = 0; i < productoIds.length; i += productoBatchSize) {
                 const batchProductIds = productoIds.slice(i, i + productoBatchSize);
-                
+
                 const { data: productosAlmacenBatch, error: productosAlmacenError } = await supabase
                     .from('products_almacen')
                     .select(`
@@ -2470,16 +2529,16 @@ class movimientosAlmacen {
                         grup
                     `)
                     .in('id', batchProductIds);
-                
+
                 if (productosAlmacenError) {
-                    console.error(`[MovAlmacenModel.getByProduccionDamabrava] Error obteniendo productos almacén (lote ${Math.floor(i/productoBatchSize) + 1}):`, productosAlmacenError);
+                    console.error(`[MovAlmacenModel.getByProduccionDamabrava] Error obteniendo productos almacén (lote ${Math.floor(i / productoBatchSize) + 1}):`, productosAlmacenError);
                 } else if (productosAlmacenBatch && Array.isArray(productosAlmacenBatch)) {
                     productosAlmacenBatch.forEach(prod => {
                         productosAlmacenMap.set(prod.id, prod);
                     });
                 }
             }
-            
+
             // 4) Combinar productos del movimiento con sus datos de almacén
             productosMovimientoAll.forEach(p => {
                 if (p && p.movimiento_almacen_id) {
@@ -2488,7 +2547,7 @@ class movimientosAlmacen {
                         ...p,
                         producto: productoAlmacen || null
                     };
-                    
+
                     const arr = productosByMovimiento.get(p.movimiento_almacen_id) || [];
                     arr.push(productoCompleto);
                     productosByMovimiento.set(p.movimiento_almacen_id, arr);
@@ -2499,7 +2558,7 @@ class movimientosAlmacen {
             const movimientosConProductos = movimientos.map(mov => {
                 const user = mov.user ? { id: mov.user.id, name: `${mov.user.first_name || ''} ${mov.user.last_name || ''}`.trim() } : null;
                 const personal = mov.personal ? { id: mov.personal.id, name: `${mov.personal.first_name || ''} ${mov.personal.last_name || ''}`.trim() } : null;
-                
+
                 return {
                     ...mov,
                     productos: productosByMovimiento.get(mov.id) || [],
@@ -2631,49 +2690,49 @@ class movimientosAlmacen {
     static async cleanupMovimiento(movimientoId, stocksActualizados = [], logService = null) {
         try {
             const log = logService || { addLog: (level, msg) => console.log(`[${level}] ${msg}`) };
-            
+
             log.addLog('warning', `🧹 Iniciando limpieza de movimiento ${movimientoId}`);
-            
+
             // 1. REVERTIR stocks si hay registros
             if (stocksActualizados && stocksActualizados.length > 0) {
                 log.addLog('info', `🔄 Revirtiendo ${stocksActualizados.length} stocks...`);
-                
-                const revertOperations = stocksActualizados.map(stock => 
+
+                const revertOperations = stocksActualizados.map(stock =>
                     retryOperation(async () => {
                         const { error } = await supabase
                             .from('productos_sucursal')
                             .update({ stock: stock.stockAnterior })
                             .eq('id', stock.stockId);
-                        
+
                         if (error) {
                             throw error;
                         }
-                        
+
                         log.addLog('success', `Revertido stock de producto ${stock.productoId}: ${stock.stockNuevo} → ${stock.stockAnterior}`);
-                        
+
                         return { success: true };
                     })
                 );
-                
+
                 const { summary } = await processBatch(revertOperations, 10); // Lotes pequeños para rollback
-                
+
                 log.addLog('success', `✅ Stocks revertidos: ${summary.successful}/${summary.total}`);
             }
-            
+
             // 2. Eliminar productos del movimiento
             log.addLog('info', 'Eliminando productos del movimiento...');
             await supabase
                 .from('movimiento_almacen_producto')
                 .delete()
                 .eq('movimiento_almacen_id', movimientoId);
-            
+
             // 3. Eliminar movimiento
             log.addLog('info', 'Eliminando movimiento...');
             await supabase
                 .from('movimientos_almacen')
                 .delete()
                 .eq('id', movimientoId);
-                
+
             log.addLog('success', `✅ Movimiento ${movimientoId} eliminado correctamente`);
             return { success: true };
         } catch (error) {
@@ -2764,7 +2823,7 @@ class movimientosAlmacen {
             }
 
             const ingredientesDevueltos = [];
-            
+
             // Devolver ingredientes (sumar al stock)
             for (const ingrediente of ingredientes) {
                 if (!ingrediente.products_acopio || !ingrediente.products_acopio.id) {
@@ -2811,7 +2870,7 @@ class movimientosAlmacen {
             // Obtener el movimiento
             const { data: movimiento, error: movimientoError } = await supabase
                 .from('movimientos_almacen')
-                .select('id, sucu_id, type, estado, cliente_id, proveedor_id, restar_ingredientes')
+                .select('id, sucu_id, type, estado, cliente_id, proveedor_id, restar_ingredientes, produccion_damabrava_id')
                 .eq('id', movimientoId)
                 .maybeSingle();
 
@@ -2827,10 +2886,10 @@ class movimientosAlmacen {
                 return { success: false, message: 'El movimiento ya está anulado' };
             }
 
-            // Actualizar a estado anulado
+            // Actualizar a estado anulado y limpiar la referencia
             const { error: updateError } = await supabase
                 .from('movimientos_almacen')
-                .update({ estado: 'anulado' })
+                .update({ estado: 'anulado', produccion_damabrava_id: null })
                 .eq('id', movimientoId);
 
             if (updateError) {
@@ -2845,6 +2904,47 @@ class movimientosAlmacen {
 
             if (productosError || !productos || productos.length === 0) {
                 return { success: true, message: 'Movimiento anulado correctamente (sin productos)' };
+            }
+
+            // Si el movimiento tiene produccion_damabrava_id, manejar la anulación especial
+            if (movimiento.produccion_damabrava_id) {
+                const { data: registroProduccion, error: registroError } = await supabase
+                    .from('registros_produccion_damabrava')
+                    .select('id, estado, cantidad_ingresada, cantidad_verificada')
+                    .eq('id', movimiento.produccion_damabrava_id)
+                    .single();
+
+                if (registroError) {
+                    console.error('Error obteniendo registro de producción en anularFast:', registroError);
+                    return { success: false, message: 'Error al obtener el registro de producción relacionado' };
+                }
+
+                if (registroProduccion) {
+                    const cantidadTotalMovimiento = productos.reduce((total, producto) => {
+                        return total + parseFloat(producto.cantidad);
+                    }, 0);
+
+                    const nuevaCantidadIngresada = Math.max(0, (registroProduccion.cantidad_ingresada || 0) - cantidadTotalMovimiento);
+
+                    let nuevoEstado = registroProduccion.estado;
+                    if (registroProduccion.estado === 'Ingresado' && nuevaCantidadIngresada < registroProduccion.cantidad_verificada) {
+                        nuevoEstado = 'verificado';
+                    }
+
+                    const { error: updateRegistroError } = await supabase
+                        .from('registros_produccion_damabrava')
+                        .update({
+                            cantidad_ingresada: nuevaCantidadIngresada,
+                            estado: nuevoEstado
+                        })
+                        .eq('id', movimiento.produccion_damabrava_id);
+
+                    if (updateRegistroError) {
+                        console.error('Error actualizando registro de producción en anularFast:', updateRegistroError);
+                        return { success: false, message: 'Error al actualizar el registro de producción' };
+                    }
+                    console.log(`Registro de producción ${movimiento.produccion_damabrava_id} actualizado (anularFast): cantidad_ingresada=${nuevaCantidadIngresada}, estado=${nuevoEstado}`);
+                }
             }
 
             // Revertir el stock en la sucursal de donde se hizo el movimiento
@@ -2866,7 +2966,7 @@ class movimientosAlmacen {
             for (const producto of productos) {
                 const stockActual = stocksMap.get(producto.producto_almacen_id);
                 const stockActualValue = stockActual ? Number(stockActual.stock) : 0;
-                
+
                 let nuevaCantidad;
                 if (movimiento.type === 'entrada') {
                     // Si era entrada y anulamos, restamos
@@ -2909,9 +3009,9 @@ class movimientosAlmacen {
                             const receta = prodData.recetas[0];
                             if (receta.recetas_detalle && receta.recetas_detalle.length > 0) {
                                 await movimientosAlmacen.devolverIngredientes(
-                                    prodData, 
-                                    producto.cantidad, 
-                                    receta.recetas_detalle, 
+                                    prodData,
+                                    producto.cantidad,
+                                    receta.recetas_detalle,
                                     null
                                 );
                             }
@@ -2950,6 +3050,102 @@ class movimientosAlmacen {
         } catch (error) {
             console.error('Error en anularFast:', error);
             return { success: false, message: 'Error interno en anularFast', error };
+        }
+    }
+
+    static async getRelations(id, sucu_id) {
+        try {
+            const [
+                { data: productos, error: productosError },
+                gastosRes, 
+                pedidosEntradaRes, 
+                pedidosSalidaRes, 
+                deudasRes
+            ] = await Promise.all([
+                supabase
+                    .from('movimiento_almacen_producto')
+                    .select(`
+                        *,
+                        producto:producto_almacen_id(
+                            id, 
+                            name, 
+                            description,
+                            grup,
+                            costo_produccion
+                        )
+                    `)
+                    .eq('movimiento_almacen_id', id),
+                supabase
+                    .from('gastos')
+                    .select('id, movimiento_entrada_id')
+                    .eq('movimiento_entrada_id', id)
+                    .limit(1),
+                supabase
+                    .from('pedidos_almacen')
+                    .select('id, codigo, numero_pedido, movimiento_entrada_id, movimiento_salida_id')
+                    .eq('movimiento_entrada_id', id)
+                    .limit(1),
+                supabase
+                    .from('pedidos_almacen')
+                    .select('id, codigo, numero_pedido, movimiento_entrada_id, movimiento_salida_id')
+                    .eq('movimiento_salida_id', id)
+                    .limit(1),
+                supabase
+                    .from('deudas')
+                    .select('id, movimiento_salida_id')
+                    .eq('movimiento_salida_id', id)
+                    .limit(1)
+            ]);
+
+            let productosConStock = productos || [];
+            
+            // Si hay sucu_id, cargar el stock optimizadamente
+            if (sucu_id && productosConStock.length > 0) {
+                const productIds = productosConStock.map(p => p.producto?.id).filter(Boolean);
+                let stocksMap = new Map();
+                
+                if (productIds.length > 0) {
+                    const { data: stocksActuales } = await supabase
+                        .from('productos_sucursal')
+                        .select('producto_id, stock')
+                        .eq('sucursal_id', sucu_id)
+                        .in('producto_id', productIds);
+                        
+                    if (stocksActuales) {
+                        stocksActuales.forEach(s => stocksMap.set(s.producto_id, s.stock));
+                    }
+                }
+
+                productosConStock = productosConStock.map(productoMovimiento => ({
+                    ...productoMovimiento,
+                    producto: {
+                        ...productoMovimiento.producto,
+                        stock: stocksMap.get(productoMovimiento.producto.id) || 0
+                    }
+                }));
+            }
+
+            const gastos = gastosRes.data || [];
+            const pEntrada = pedidosEntradaRes.data || [];
+            const pSalida = pedidosSalidaRes.data || [];
+            const deudas = deudasRes.data || [];
+
+            return {
+                success: true,
+                data: {
+                    productos: productosConStock,
+                    gastos: gastos.length > 0 ? gastos : null,
+                    pedidos_entrada: pEntrada.length > 0 ? pEntrada : null,
+                    pedidos_salida: pSalida.length > 0 ? pSalida : null,
+                    deudas: deudas.length > 0 ? deudas : null
+                }
+            };
+        } catch (error) {
+            console.error('Error in getRelations:', error);
+            return {
+                success: false,
+                message: error.message || 'Error fetching relations'
+            };
         }
     }
 }

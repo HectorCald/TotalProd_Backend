@@ -12,6 +12,9 @@ router.get('/', productsAlmacenController.getAll);
 // GET /api/products-almacen/for-production - Obtener productos ligeros (solo id y name) para formularios de producción
 router.get('/for-production', productsAlmacenController.getAllForProduction);
 
+// GET /api/products-almacen/conteo-data - Obtener productos para conteo
+router.get('/conteo-data', productsAlmacenController.getProductsForConteo);
+
 // GET /api/products-almacen/by-ids - Obtener múltiples productos por IDs con recetas
 router.get('/by-ids', productsAlmacenController.getByIds);
 

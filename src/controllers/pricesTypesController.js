@@ -18,7 +18,7 @@ class pricesTypesController {
         if (!empresaId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la empresa es requerido'
+            message: 'El ID de la empresa es requerido'
           });
         }
       }
@@ -28,7 +28,7 @@ class pricesTypesController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del tipo de precio es requerido'
+            message: 'El ID del tipo de precio es requerido'
           });
         }
       }
@@ -70,7 +70,7 @@ class pricesTypesController {
       console.error(`Error en ${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }
@@ -79,7 +79,33 @@ class pricesTypesController {
   static async getAll(req, res) {
     return pricesTypesController._handleRequest(res, 'getAll', req, async () => {
       const empresaId = req.query.empresa_id;
-      return await pricesTypes.getAll(empresaId);
+      
+      let empresasAsociadasIds = [];
+      if (req.query.empresas_asociadas) {
+        const asociadas = Array.isArray(req.query.empresas_asociadas) 
+          ? req.query.empresas_asociadas 
+          : [req.query.empresas_asociadas];
+        empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
+      }
+
+      if (req.user?.type === 'employee') {
+        const sucursalId = req.query.sucursal_id;
+        if (sucursalId) {
+          try {
+            const Sucursal = require('../models/sucursales');
+            const sucursal = await Sucursal.getById(sucursalId);
+            if (sucursal && sucursal.name && !sucursal.name.includes('Casa Matriz')) {
+              return await pricesTypes.getBySucursalId(sucursalId);
+            }
+            // Si es Casa Matriz, pasa al getAll normal
+          } catch (error) {
+            console.error('Error al verificar sucursal Casa Matriz', error);
+            return await pricesTypes.getBySucursalId(sucursalId);
+          }
+        }
+      }
+      
+      return await pricesTypes.getAll(empresaId, empresasAsociadasIds);
     }, {
       validateEmpresaId: true,
       successMessage: 'Tipos de precios obtenidos exitosamente'

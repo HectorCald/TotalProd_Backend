@@ -135,7 +135,7 @@ class Historial {
                         first_name,
                         last_name
                     )
-                `, { count: 'exact' })
+                `, { count: 'estimated' })
                 .eq('empresa_id', empresa_id)
                 .order('fecha', { ascending: false })
                 .range(offset, offset + limit - 1);

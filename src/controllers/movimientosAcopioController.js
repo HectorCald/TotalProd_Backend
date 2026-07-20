@@ -7,7 +7,7 @@ class movimientosAcopioController {
   // Crear un movimiento
   static async create(req, res) {
     try {
-      const { product_id, type, observations, proveedor_id, cliente_id, quantity, costo, metodo_pago, gasto_id, restar_materia_prima, restar_ingredientes, sucu_id, personal_id, ingredientes_cantidades_personalizadas } = req.body;
+      const { product_id, type, observations, cliente_id, quantity, restar_materia_prima, restar_ingredientes, sucu_id, personal_id, ingredientes_cantidades_personalizadas, registrar_gasto, costo, metodo_pago, proveedor_id } = req.body;
       const userId = req.user?.id;
       const userType = req.user?.type;
 
@@ -25,7 +25,7 @@ class movimientosAcopioController {
       if (!sucu_id) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la sucursal es requerido'
+          message: 'El ID de la sucursal es requerido'
         });
       }
 
@@ -74,13 +74,9 @@ class movimientosAcopioController {
         product_id,
         type,
         observations,
-        proveedor_id,
         cliente_id,
         quantity,
-        costo,
-        metodo_pago,
-        gasto_id,
-        restar_ingredientes: restar_ingredientes || false,
+        restar_ingredientes: restar_ingredientes || restar_materia_prima || false,
         sucu_id
       }, finalUserId, finalPersonalId);
 
@@ -136,9 +132,36 @@ class movimientosAcopioController {
         }
       }
 
+      // Registrar gasto si aplica
+      if (registrar_gasto && type === 'entrada') {
+        try {
+          const d = new Date();
+          const getDateStr = () => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+          
+          const gastoData = {
+            fecha_gasto: getDateStr(),
+            valor: parseFloat(costo) || 0,
+            concepto: observations?.trim() || 'Pago de Entrada de Materia Prima',
+            metodo_pago: metodo_pago || 'efectivo',
+            proveedor_id: proveedor_id || null,
+            movimiento_acopio_entrada_id: newMovimiento.id,
+            sucu_id: sucu_id,
+            user_id: finalUserId,
+            personal_id: finalPersonalId
+          };
+          
+          const gastosModel = require('../models/gastos');
+          await gastosModel.create(gastoData, finalUserId, req.user?.empresa_id, finalPersonalId, sucu_id);
+        } catch (gastoError) {
+          console.error('Error al registrar gasto asociado al movimiento de acopio:', gastoError);
+          // Opcionalmente se podría revertir, pero mantenemos el comportamiento anterior (warning)
+          // por simplicidad si la lógica principal ya funcionó.
+        }
+      }
+
       res.status(201).json({
         success: true,
-        message: 'Movimiento creado exitosamente',
+        message: 'Movimiento creado correctamente',
         data: newMovimiento
       });
     } catch (error) {
@@ -159,7 +182,7 @@ class movimientosAcopioController {
       if (!sucu_id) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la sucursal es requerido'
+          message: 'El ID de la sucursal es requerido'
         });
       }
 
@@ -187,7 +210,7 @@ class movimientosAcopioController {
       if (!sucu_id) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la sucursal es requerido'
+          message: 'El ID de la sucursal es requerido'
         });
       }
 
@@ -215,7 +238,7 @@ class movimientosAcopioController {
       if (!sucu_id) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la sucursal es requerido'
+          message: 'El ID de la sucursal es requerido'
         });
       }
 
@@ -253,7 +276,7 @@ class movimientosAcopioController {
       if (!sucu_id) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la sucursal es requerido'
+          message: 'El ID de la sucursal es requerido'
         });
       }
 
@@ -294,6 +317,19 @@ class movimientosAcopioController {
             success: false,
             message: 'No tienes permisos para anular movimientos'
           });
+        }
+      }
+
+      // Eliminar gastos asociados automáticamente
+      const { data: gastosRelacionados } = await require('../config/supabase').supabase
+        .from('gastos')
+        .select('id')
+        .eq('movimiento_acopio_entrada_id', id);
+
+      if (gastosRelacionados && gastosRelacionados.length > 0) {
+        const gastosModel = require('../models/gastos');
+        for (const gasto of gastosRelacionados) {
+          await gastosModel.delete(gasto.id);
         }
       }
 
@@ -371,7 +407,7 @@ class movimientosAcopioController {
       if (!id) {
         return res.status(400).json({
           success: false,
-          message: 'ID del movimiento es requerido'
+          message: 'El ID del movimiento es requerido'
         });
       }
 

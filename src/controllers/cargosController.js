@@ -18,7 +18,7 @@ class cargosController {
         if (!empresaId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la empresa es requerido'
+            message: 'El ID de la empresa es requerido'
           });
         }
       }
@@ -27,7 +27,7 @@ class cargosController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del cargo es requerido'
+            message: 'El ID del cargo es requerido'
           });
         }
       }
@@ -69,7 +69,7 @@ class cargosController {
       console.error(`Error en ${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }

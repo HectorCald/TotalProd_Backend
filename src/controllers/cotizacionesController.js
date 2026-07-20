@@ -27,7 +27,7 @@ class cotizacionesController {
                 if (!sucuId) {
                     return res.status(400).json({
                         success: false,
-                        message: 'ID de la sucursal es requerido'
+                        message: 'El ID de la sucursal es requerido'
                     });
                 }
                 if (req.query) req.query.sucu_id = sucuId;
@@ -39,7 +39,7 @@ class cotizacionesController {
                 if (!id) {
                     return res.status(400).json({
                         success: false,
-                        message: 'ID de cotización requerido'
+                        message: 'El ID de la cotización es requerido'
                     });
                 }
             }
@@ -55,7 +55,7 @@ class cotizacionesController {
             console.error(`Error en cotizacionesController.${actionName}:`, error);
             return res.status(500).json({
                 success: false,
-                message: 'Error interno del servidor',
+                message: 'Ocurrió un error inesperado',
                 error: error.message
             });
         }
@@ -244,7 +244,7 @@ class cotizacionesController {
         if (!id || !estado) {
             return res.status(400).json({
                 success: false,
-                message: 'ID de cotización y estado son requeridos'
+                message: 'El ID de cotización y estado son requeridos'
             });
         }
 

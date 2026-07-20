@@ -9,6 +9,12 @@ router.use(requireAuth);
 // Buscar empresa por código
 router.get('/search/codigo', EmpresaController.searchByCodigo);
 
+// Obtener empresas disponibles
+router.get('/disponibles', EmpresaController.getDisponibles);
+
+// Verificar código
+router.post('/:id/verificar-codigo', EmpresaController.verificarCodigo);
+
 // Actualizar tipo de empresa
 router.put('/tipo', EmpresaController.updateTipo);
 

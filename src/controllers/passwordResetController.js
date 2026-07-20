@@ -19,6 +19,30 @@ class PasswordResetController {
       // Verificar si el usuario existe
       const user = await User.getByEmail(email);
       if (!user) {
+        // Verificar si es un empleado basándonos en el nombre de la empresa
+        const domainMatch = email.match(/@([^.]+)\./);
+        if (domainMatch) {
+          const domain = domainMatch[1].toLowerCase();
+          
+          const { supabase } = require('../config/supabase');
+          const { data: empresas } = await supabase.from('empresas').select('name');
+          
+          if (empresas && empresas.length > 0) {
+            const isEmployeeDomain = empresas.some(emp => {
+              // Quitar espacios y convertir a minúscula, tal como se genera en AgregarEditarPersonal
+              const normalizedName = (emp.name || '').toLowerCase().replace(/\s+/g, '');
+              return normalizedName === domain;
+            });
+            
+            if (isEmployeeDomain) {
+              return res.status(400).json({
+                success: false,
+                message: 'No es posible restablecer la contraseña de un empleado. Por favor, contacta con el administrador del sistema.'
+              });
+            }
+          }
+        }
+
         return res.status(404).json({
           success: false,
           message: 'Usuario no encontrado con ese email'

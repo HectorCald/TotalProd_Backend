@@ -16,7 +16,7 @@ class sucursalesController {
                 if (!empresaId) {
                     return res.status(400).json({
                         success: false,
-                        message: 'ID de la empresa es requerido'
+                        message: 'El ID de la empresa es requerido'
                     });
                 }
             }
@@ -26,7 +26,7 @@ class sucursalesController {
                 if (!id) {
                     return res.status(400).json({
                         success: false,
-                        message: 'ID de sucursal es requerido'
+                        message: 'El ID de la sucursal es requerido'
                     });
                 }
             }
@@ -52,7 +52,7 @@ class sucursalesController {
 
             return res.status(statusCode).json({
                 success: false,
-                message: error.message || 'Error interno del servidor'
+                message: 'Ocurrió un error inesperado'
             });
         }
     }
@@ -62,7 +62,8 @@ class sucursalesController {
         return sucursalesController._handleRequest(res, 'getAll', req, async () => {
             const empresaId = req.query.empresa_id;
             let empresasAsociadasIds = [];
-            if (req.query.empresas_asociadas) {
+            
+            if (empresaId === '259a05d2-2417-47b0-8bbd-50cd5723aae1' && req.query.empresas_asociadas) {
                 const asocString = Array.isArray(req.query.empresas_asociadas) 
                     ? req.query.empresas_asociadas.join(',') 
                     : String(req.query.empresas_asociadas);

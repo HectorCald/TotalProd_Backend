@@ -12,11 +12,17 @@ router.post('/', (req, res) => movimientosAlmacenController.create(req, res));
 // Crear un nuevo movimiento rápido
 router.post('/fast', (req, res) => movimientosAlmacenController.createFast(req, res));
 
+// Obtener todos los movimientos sin límite optimizado
+router.get('/sin-limite', (req, res) => movimientosAlmacenController.getAllSinLimite(req, res));
+
 // Obtener todos los movimientos del usuario
 router.get('/', (req, res) => movimientosAlmacenController.getAll(req, res));
 
 // Obtener estadísticas optimizadas para gráficos
 router.get('/stats/charts', (req, res) => movimientosAlmacenController.getStatsForCharts(req, res));
+
+// Obtener categorías más vendidas del mes
+router.get('/stats/categorias-mas-vendidas', (req, res) => movimientosAlmacenController.getCategoriasMasVendidas(req, res));
 
 // Obtener movimientos por tipo (entrada/salida)
 router.get('/tipo/:tipo', (req, res) => movimientosAlmacenController.getByType(req, res));
@@ -32,6 +38,9 @@ router.get('/cliente/:clienteId', (req, res) => movimientosAlmacenController.get
 
 // Obtener movimientos por producción Damabrava
 router.get('/produccion-damabrava/:produccionId', (req, res) => movimientosAlmacenController.getByProduccionDamabrava(req, res));
+
+// Obtener relaciones de un movimiento específico
+router.get('/:id/relations', (req, res) => movimientosAlmacenController.getRelations(req, res));
 
 // Obtener un movimiento específico por ID
 router.get('/:id', (req, res) => movimientosAlmacenController.getById(req, res));

@@ -59,7 +59,7 @@ class registrosProduccionDamabravaController {
             console.error(`Error en registrosProduccionDamabravaController.${actionName}:`, error);
             return res.status(500).json({
                 success: false,
-                message: 'Error interno del servidor',
+                message: 'Ocurrió un error inesperado',
                 error: error.message
             });
         }
@@ -155,9 +155,8 @@ class registrosProduccionDamabravaController {
             if (!empresaId && finalSucuId) {
                 try {
                     const sucursales = require('../models/sucursales');
-                    const sucursalResponse = await sucursales.getById(finalSucuId);
-                    if (sucursalResponse && sucursalResponse.success && sucursalResponse.data) {
-                        const sucursal = sucursalResponse.data;
+                    const sucursal = await sucursales.getById(finalSucuId);
+                    if (sucursal) {
                         if (sucursal.empresa_id) {
                             empresaId = sucursal.empresa_id;
                         } else if (sucursal.empresas && sucursal.empresas.id) {
@@ -182,6 +181,8 @@ class registrosProduccionDamabravaController {
                 observaciones: observaciones || null,
                 empresa_id: empresaId
             };
+
+            console.log("==> Controller: enviando a model.create: ", JSON.stringify(registroData));
 
             const result = await registrosProduccionDamabrava.create(registroData);
             if (!result.success) {

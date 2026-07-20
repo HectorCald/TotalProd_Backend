@@ -30,6 +30,12 @@ class pagosDamabrava {
             return { map: new Map(), error: null };
         }
 
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const validIds = registroIds.filter(id => id && typeof id === 'string' && uuidRegex.test(id));
+        if (validIds.length === 0) {
+            return { map: new Map(), error: null };
+        }
+
         try {
             const { data, error } = await supabase
                 .from('registros_produccion_damabrava')
@@ -39,7 +45,6 @@ class pagosDamabrava {
                     estado,
                     terminados,
                     cantidad_verificada,
-                    responsable_id,
                     user_id,
                     personal_id,
                     producto_almacen_id,
@@ -48,10 +53,10 @@ class pagosDamabrava {
                         name
                     )
                 `)
-                .in('id', registroIds);
+                .in('id', validIds);
 
             if (error) {
-                console.error('[pagosDamabravaModel.fetchRegistrosDetalles] Error obteniendo registros de producción:', error);
+                console.error('[pagosDamabravaModel.fetchRegistrosDetalles] Error obteniendo registros de producción:', JSON.stringify(error, null, 2));
                 return { map: new Map(), error };
             }
 
@@ -80,7 +85,6 @@ class pagosDamabrava {
                     estado: registro.estado,
                     terminados: Number(registro.terminados) || 0,
                     cantidad_verificada: Number(registro.cantidad_verificada) || 0,
-                    responsable_id: registro.responsable_id || null,
                     user_id: registro.user_id || null,
                     personal_id: registro.personal_id || null,
                     producto_almacen: producto,
@@ -349,7 +353,7 @@ class pagosDamabrava {
                         first_name,
                         last_name
                     )
-                `, { count: 'exact' })
+                `, { count: 'estimated' })
                 .eq('empresa_id', empresaId)
                 .order('fecha', { ascending: false });
 
@@ -381,41 +385,11 @@ class pagosDamabrava {
                 };
             }
 
-            const pagoIds = pagos.map((pago) => pago.id);
-
-            const { data: registrosRelacionados, error: registrosError } = await supabase
-                .from('registro_pago_damabrava')
-                .select('registro_pago_damabrava_id, registro_produccion_damabrava_id')
-                .in('registro_pago_damabrava_id', pagoIds);
-
-            if (registrosError) {
-                console.error('[pagosDamabravaModel.getAll] Error obteniendo registros asociados:', registrosError);
-                return { success: false, message: 'Error al obtener los registros asociados.', error: registrosError };
-            }
-
-            const registrosMap = new Map();
-            (registrosRelacionados || []).forEach((relacion) => {
-                const lista = registrosMap.get(relacion.registro_pago_damabrava_id) || [];
-                lista.push(relacion.registro_produccion_damabrava_id);
-                registrosMap.set(relacion.registro_pago_damabrava_id, lista);
-            });
-
-            const todosLosRegistrosIds = Array.from(
-                new Set(
-                    (registrosRelacionados || []).map((relacion) => relacion.registro_produccion_damabrava_id)
-                )
-            );
-
-            const { map: registrosDetallesMap } = await this.fetchRegistrosDetalles(todosLosRegistrosIds);
-
             const dataFormateada = pagos.map((pago) => {
                 const responsable = pagosDamabrava.formatPersona(pago.responsable);
                 const personal = pagosDamabrava.formatPersona(pago.personal);
                 const user = pagosDamabrava.formatPersona(pago.user);
-                const registrosIds = registrosMap.get(pago.id) || [];
-                const registros = registrosIds
-                    .map((registroId) => registrosDetallesMap.get(registroId))
-                    .filter(Boolean);
+                
                 const cernido = Number(pago.cernido) || 0;
                 const sellado = Number(pago.sellado) || 0;
                 const envasado = Number(pago.envasado) || 0;
@@ -450,8 +424,8 @@ class pagosDamabrava {
                     personal,
                     user,
                     registrado_por: personal || user,
-                    registros,
-                    registros_count: registrosIds.length
+                    registros: [],
+                    registros_count: 0
                 };
             });
 
@@ -551,9 +525,9 @@ class pagosDamabrava {
                 return { success: false, message: 'Error al obtener los registros asociados.', error: registrosError };
             }
 
-            const registroIds = (registrosRelacionados || []).map(
-                (relacion) => relacion.registro_produccion_damabrava_id
-            );
+            const registroIds = (registrosRelacionados || [])
+                .map((relacion) => relacion.registro_produccion_damabrava_id)
+                .filter(Boolean);
 
             const { map: registrosDetallesMap, error: registrosDetallesError } =
                 await this.fetchRegistrosDetalles(registroIds);
@@ -624,6 +598,7 @@ class pagosDamabrava {
                         id,
                         fecha,
                         estado,
+                        proceso,
                         terminados,
                     cantidad_verificada,
                     producto_almacen_id,
@@ -658,9 +633,9 @@ class pagosDamabrava {
                         id: registro.id,
                         fecha: registro.fecha,
                         estado: registro.estado,
+                        proceso: registro.proceso || 'ninguno',
                     terminados,
                     cantidad_verificada: cantidadVerificada,
-                        responsable_id: registro.responsable_id || null,
                         user_id: registro.user_id || null,
                     personal_id: registro.personal_id || null,
                     producto_almacen_id: productoAlmacenId,

@@ -123,7 +123,7 @@ class productsAcopio {
               )
             )
           )
-        `, { count: 'exact' })
+        `, { count: 'estimated' })
         .in('empresa_id', empresaIds);
 
       // Search filter
@@ -151,6 +151,10 @@ class productsAcopio {
       // Sorting
       if (sortOrder === 'name_desc') {
         query = query.order('name', { ascending: false });
+      } else if (sortOrder === 'stock_desc') {
+        query = query.order('quantity', { ascending: false });
+      } else if (sortOrder === 'stock_asc') {
+        query = query.order('quantity', { ascending: true });
       } else {
         query = query.order('name', { ascending: true }); // Default
       }
@@ -184,6 +188,48 @@ class productsAcopio {
       };
     } catch (error) {
       console.error('Error al obtener los productos:', error);
+      throw new Error('No se pudo obtener los productos');
+    }
+  }
+
+  // Método para obtener productos específicos para conteo
+  static async getProductsForConteo(empresaId) {
+    try {
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('products_acopio')
+        .select(`
+          id,
+          name,
+          category_id,
+          quantity,
+          type_measure:type_measure_id (
+            name,
+            code
+          )
+        `)
+        .eq('empresa_id', empresaId)
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Error de Supabase:', error);
+        throw new Error('No se pudo obtener los productos para conteo');
+      }
+
+      const formattedData = data ? data.map(item => ({
+        id: item.id,
+        name: item.name,
+        category_id: item.category_id,
+        stock: item.quantity || 0,
+        medida: item.type_measure ? (item.type_measure.code || item.type_measure.name) : ''
+      })) : [];
+
+      return formattedData;
+    } catch (error) {
+      console.error('Error al obtener los productos para conteo:', error);
       throw new Error('No se pudo obtener los productos');
     }
   }

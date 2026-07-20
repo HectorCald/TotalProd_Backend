@@ -20,14 +20,14 @@ class productsAlmacenController {
       if (validateEmpresaId && !empresaId) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la empresa es requerido'
+          message: 'El ID de la empresa es requerido'
         });
       }
 
       if (validateSucuId && !sucuId) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la sucursal es requerido'
+          message: 'El ID de la sucursal es requerido'
         });
       }
 
@@ -36,7 +36,7 @@ class productsAlmacenController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del producto es requerido'
+            message: 'El ID del producto es requerido'
           });
         }
       }
@@ -56,7 +56,7 @@ class productsAlmacenController {
           if (!hasPermission) {
             return res.status(403).json({
               success: false,
-              message: `No tienes permisos para ${checkPermission === 'delete' ? 'eliminar' : checkPermission === 'update' ? 'editar' : 'crear'} productos`
+              message: 'No tienes permisos para esta acción'
             });
           }
         }
@@ -85,7 +85,7 @@ class productsAlmacenController {
       console.error(`Error en ${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }
@@ -124,7 +124,7 @@ class productsAlmacenController {
     }, {
       validateEmpresaId: true,
       validateSucuId: true,
-      successMessage: 'Productos obtenidos exitosamente'
+      successMessage: 'Productos obtenidos correctamente'
     });
   }
 
@@ -135,7 +135,20 @@ class productsAlmacenController {
       return await productsAlmacen.getAllForProduction(empresaId);
     }, {
       validateEmpresaId: true,
-      successMessage: 'Productos obtenidos exitosamente'
+      successMessage: 'Productos obtenidos correctamente'
+    });
+  }
+
+  // Obtener productos para conteo
+  static async getProductsForConteo(req, res) {
+    return productsAlmacenController._handleRequest(res, 'getProductsForConteo', req, async () => {
+      const empresaId = req.query.empresa_id;
+      const sucuId = req.query.sucu_id;
+      return await productsAlmacen.getProductsForConteo(empresaId, sucuId);
+    }, {
+      validateEmpresaId: true,
+      validateSucuId: true,
+      successMessage: 'Productos obtenidos correctamente'
     });
   }
 
@@ -145,12 +158,12 @@ class productsAlmacenController {
       const { id } = req.params;
       const sucuId = req.query.sucu_id;
       const product = await productsAlmacen.getById(id, sucuId);
-      if (!product) throw new Error('Producto no encontrado');
+      if (!product) throw new Error('El producto no fue encontrado');
       return product;
     }, {
       validateSucuId: true,
       validateProductId: true,
-      successMessage: 'Producto obtenido exitosamente'
+      successMessage: 'Producto obtenido correctamente'
     });
   }
 
@@ -160,7 +173,7 @@ class productsAlmacenController {
       const empresaId = req.query.empresa_id;
       let ids = req.query.ids || req.query['ids[]'];
       
-      if (!ids) throw new Error('IDs de productos son requeridos');
+      if (!ids) throw new Error('Los IDs de productos son requeridos');
       
       if (typeof ids === 'string') {
         if (ids.includes(',')) ids = ids.split(',').map(id => id.trim());
@@ -170,12 +183,12 @@ class productsAlmacenController {
       if (!Array.isArray(ids)) ids = [ids];
       ids = ids.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
       
-      if (ids.length === 0) throw new Error('IDs de productos son requeridos');
+      if (ids.length === 0) throw new Error('Los IDs de productos son requeridos');
 
       return await productsAlmacen.getByIds(ids, empresaId);
     }, {
       validateEmpresaId: true,
-      successMessage: 'Productos obtenidos exitosamente'
+      successMessage: 'Productos obtenidos correctamente'
     });
   }
 
@@ -186,7 +199,7 @@ class productsAlmacenController {
       const sucuId = req.query.sucu_id;
       let ids = req.query.ids || req.query['ids[]'];
       
-      if (!ids) throw new Error('IDs de productos son requeridos');
+      if (!ids) throw new Error('Los IDs de productos son requeridos');
       
       if (typeof ids === 'string') {
         if (ids.includes(',')) ids = ids.split(',').map(id => id.trim());
@@ -196,12 +209,12 @@ class productsAlmacenController {
       if (!Array.isArray(ids)) ids = [ids];
       ids = ids.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
       
-      if (ids.length === 0) throw new Error('IDs de productos son requeridos');
+      if (ids.length === 0) throw new Error('Los IDs de productos son requeridos');
 
       return await productsAlmacen.getByIdsFast(ids, empresaId, sucuId);
     }, {
       validateEmpresaId: true,
-      successMessage: 'Productos obtenidos exitosamente'
+      successMessage: 'Productos obtenidos correctamente'
     });
   }
 
@@ -211,7 +224,7 @@ class productsAlmacenController {
 
     if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'El nombre es obligatorio' });
     if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
-      return res.status(400).json({ success: false, message: 'El stock es obligatorio y debe ser un número válido mayor o igual a 0' });
+      return res.status(400).json({ success: false, message: 'El stock debe ser un valor válido' });
     }
 
     return productsAlmacenController._handleRequest(res, 'create', req, async () => {
@@ -234,7 +247,7 @@ class productsAlmacenController {
       validateSucuId: true,
       checkPermission: 'create',
       successStatus: 201,
-      successMessage: 'Producto creado exitosamente'
+      successMessage: 'Producto creado correctamente'
     });
   }
 
@@ -244,7 +257,7 @@ class productsAlmacenController {
 
     if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'El nombre es obligatorio' });
     if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
-      return res.status(400).json({ success: false, message: 'El stock es obligatorio y debe ser un número válido mayor o igual a 0' });
+      return res.status(400).json({ success: false, message: 'El stock debe ser un valor válido' });
     }
 
     return productsAlmacenController._handleRequest(res, 'update', req, async () => {
@@ -267,7 +280,7 @@ class productsAlmacenController {
       validateSucuId: true,
       validateProductId: true,
       checkPermission: 'update',
-      successMessage: 'Producto actualizado exitosamente'
+      successMessage: 'Producto actualizado correctamente'
     });
   }
 
@@ -279,7 +292,7 @@ class productsAlmacenController {
     }, {
       validateProductId: true,
       checkPermission: 'delete',
-      successMessage: 'Producto eliminado exitosamente'
+      successMessage: 'Producto eliminado correctamente'
     });
   }
 
@@ -290,12 +303,12 @@ class productsAlmacenController {
       const empresaId = req.user?.empresa_id || empresa_id;
       const sucuId = req.user?.sucu_id || sucu_id;
 
-      if (!productosData || !Array.isArray(productosData)) throw new Error('Array de productos es requerido');
+      if (!productosData || !Array.isArray(productosData)) throw new Error('Se requieren los datos de los productos');
       const resultado = await productsAlmacen.bulkUpdate(productosData, empresaId, sucuId);
       return resultado.data; // El middleware de handleRequest pondrá successMessage, pero si quieres usar el que retorna `resultado.message` tendrás que ajustarlo
     }, {
       validateEmpresaId: true,
-      successMessage: 'Productos actualizados en lote exitosamente'
+      successMessage: 'Productos actualizados correctamente'
     });
   }
 
@@ -306,13 +319,13 @@ class productsAlmacenController {
       const empresaId = req.user?.empresa_id || empresa_id;
       const sucuId = req.user?.sucu_id || sucu_id;
 
-      if (!productosData || !Array.isArray(productosData)) throw new Error('Array de productos es requerido');
+      if (!productosData || !Array.isArray(productosData)) throw new Error('Se requieren los datos de los productos');
       const resultado = await productsAlmacen.bulkCreate(productosData, empresaId, sucuId);
       return resultado.data;
     }, {
       validateEmpresaId: true,
       successStatus: 201,
-      successMessage: 'Productos creados en lote exitosamente'
+      successMessage: 'Productos creados correctamente'
     });
   }
 }

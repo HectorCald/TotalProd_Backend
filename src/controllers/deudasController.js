@@ -19,7 +19,7 @@ class deudasController {
         if (!sucuId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la sucursal es requerido'
+            message: 'El ID de la sucursal es requerido'
           });
         }
         if (req.query) req.query.sucu_id = sucuId;
@@ -31,7 +31,7 @@ class deudasController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la deuda es requerido'
+            message: 'El ID de la deuda es requerido'
           });
         }
       }
@@ -81,14 +81,7 @@ class deudasController {
       console.error(`Error en ${actionName} deudas:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || `Error al ${
-          actionName === 'getAll' || actionName === 'getByDateRange' || actionName === 'getDeudasVencidas' || actionName === 'getPagosParciales' ? 'obtener las' :
-          actionName === 'getById' ? 'obtener la' :
-          actionName === 'create' ? 'crear la' :
-          actionName === 'update' || actionName === 'updateEstado' ? 'actualizar la' :
-          actionName === 'createPagoParcial' ? 'registrar el pago parcial' :
-          actionName === 'deletePagoParcial' ? 'eliminar el pago parcial' : 'eliminar la'
-        } deuda`
+        message: 'Ocurrió un error inesperado'
       });
     }
   }
@@ -250,6 +243,21 @@ class deudasController {
   static async delete(req, res) {
     const { id } = req.params;
     return deudasController._handleRequest(res, 'delete', req, async () => {
+      // Protección: no se puede eliminar si está vinculada a un movimiento
+      const { createClient } = require('../config/supabase');
+      const { supabase } = require('../config/supabase');
+      const { data: deudaActual } = await supabase
+        .from('deudas')
+        .select('movimiento_salida_id')
+        .eq('id', id)
+        .single();
+      if (deudaActual?.movimiento_salida_id) {
+        return {
+          success: false,
+          message: 'Esta deuda se generó automáticamente a partir de un movimiento de almacén. Para mantener la integridad financiera, debe anular el movimiento correspondiente en lugar de eliminar la deuda de forma manual.',
+          status: 400
+        };
+      }
       return await deudas.delete(id);
     }, {
       validateDeudaId: true,
@@ -263,7 +271,7 @@ class deudasController {
     if (!movimiento_salida_id) {
       return res.status(400).json({
         success: false,
-        message: 'ID del movimiento de salida es requerido'
+        message: 'El ID del movimiento de salida es requerido'
       });
     }
 

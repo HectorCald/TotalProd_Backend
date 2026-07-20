@@ -6,12 +6,12 @@ CREATE TABLE movimientos_acopio (
     sucu_id UUID NOT NULL,
     type VARCHAR NOT NULL,
     observations VARCHAR,
-    proveedor_id UUID,
+    proveedor_id UUID, -- delete
     quantity VARCHAR NOT NULL,
     estado VARCHAR,
-    costo NUMERIC,
-    metodo_pago TEXT,
-    gasto_id UUID,
+    costo NUMERIC, --delete
+    metodo_pago TEXT, -- delete
+    gasto_id UUID, -- delete
     restar_ingredientes BOOLEAN NOT NULL DEFAULT FALSE,
     movimiento_entrada_id UUID,
     codigo TEXT NULL,

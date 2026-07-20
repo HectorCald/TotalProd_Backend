@@ -14,7 +14,7 @@ class clients {
     this.sucu_id = data.sucu_id;
   }
 
-  // Método para obtener todos los clientes de una sucursal (solo datos de la tabla clients).
+  // Método para obtener todos los clientes de una sucursal
   static async getAll(sucuId) {
     try {
       if (!sucuId) {
@@ -33,47 +33,6 @@ class clients {
       return data || [];
     } catch (error) {
       throw new Error('No se pudo obtener los clientes');
-    }
-  }
-
-  // Obtener la ubicación de un cliente: la de la tabla clients si existe;
-  // si no, la del último movimiento (movimientos_almacen.ubicacion) donde cliente_id = id y ubicacion no es null.
-  static async getLocation(clientId) {
-    try {
-      if (!clientId) {
-        return { location: null };
-      }
-
-      const { data: client, error: errClient } = await supabase
-        .from('clients')
-        .select('location')
-        .eq('id', clientId)
-        .single();
-
-      if (errClient || !client) {
-        return { location: null };
-      }
-
-      if (client.location != null) {
-        return { location: client.location };
-      }
-
-      const { data: mov, error: errMov } = await supabase
-        .from('movimientos_almacen')
-        .select('ubicacion')
-        .eq('cliente_id', clientId)
-        .not('ubicacion', 'is', null)
-        .order('fecha', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (errMov || !mov || mov.ubicacion == null) {
-        return { location: null };
-      }
-
-      return { location: mov.ubicacion };
-    } catch (error) {
-      return { location: null };
     }
   }
 
@@ -126,6 +85,9 @@ class clients {
         .eq('id', id)
 
       if (error) {
+        if (error.code === '23503' || (error.message && error.message.includes('foreign key'))) {
+          throw new Error('No es posible eliminar el cliente porque está asociado a registros de movimientos o deudas existentes.');
+        }
         throw new Error('No se pudo eliminar el cliente');
       }
 
@@ -172,6 +134,47 @@ class clients {
       }
     } catch (error) {
       throw error;
+    }
+  }
+
+    // Obtener la ubicación de un cliente: la de la tabla clients si existe;
+  // si no, la del último movimiento (movimientos_almacen.ubicacion) donde cliente_id = id y ubicacion no es null.
+  static async getLocation(clientId) {
+    try {
+      if (!clientId) {
+        return { location: null };
+      }
+
+      const { data: client, error: errClient } = await supabase
+        .from('clients')
+        .select('location')
+        .eq('id', clientId)
+        .single();
+
+      if (errClient || !client) {
+        return { location: null };
+      }
+
+      if (client.location != null) {
+        return { location: client.location };
+      }
+
+      const { data: mov, error: errMov } = await supabase
+        .from('movimientos_almacen')
+        .select('ubicacion')
+        .eq('cliente_id', clientId)
+        .not('ubicacion', 'is', null)
+        .order('fecha', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (errMov || !mov || mov.ubicacion == null) {
+        return { location: null };
+      }
+
+      return { location: mov.ubicacion };
+    } catch (error) {
+      return { location: null };
     }
   }
 

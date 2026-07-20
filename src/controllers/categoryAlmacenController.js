@@ -1,4 +1,5 @@
 const categoryAlmacen = require('../models/categoryAlmacen');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
 
 class categoryAlmacenController {
 
@@ -6,6 +7,7 @@ class categoryAlmacenController {
     const {
       validateEmpresaId = false,
       validateCategoryId = false,
+      checkPermission = null,
       successStatus = 200,
       successMessage = 'Operación exitosa'
     } = options;
@@ -16,7 +18,7 @@ class categoryAlmacenController {
       if (validateEmpresaId && !empresaId) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la empresa es requerido'
+          message: 'El ID de la empresa es requerido'
         });
       }
 
@@ -25,8 +27,30 @@ class categoryAlmacenController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la categoría es requerido'
+            message: 'El ID de la categoría es requerido'
           });
+        }
+      }
+
+      if (checkPermission) {
+        const userType = req.user?.type;
+        if (userType === 'employee') {
+          const personal_id = req.user.id;
+          let hasPermission = false;
+          if (checkPermission === 'create') {
+            hasPermission = await checkCreatePermission(personal_id);
+          } else if (checkPermission === 'update') {
+            hasPermission = await checkUpdatePermission(personal_id);
+          } else if (checkPermission === 'delete') {
+            hasPermission = await checkDeletePermission(personal_id);
+          }
+          if (!hasPermission) {
+            const actionTranslate = { create: 'crear', update: 'editar', delete: 'eliminar' };
+            return res.status(403).json({
+              success: false,
+              message: `No tienes permisos para ${actionTranslate[checkPermission]} categorías`
+            });
+          }
         }
       }
 
@@ -55,7 +79,7 @@ class categoryAlmacenController {
 
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }
@@ -98,6 +122,7 @@ class categoryAlmacenController {
       }, empresa_id);
     }, {
       validateEmpresaId: true,
+      checkPermission: 'create',
       successStatus: 201,
       successMessage: 'Categoría creada exitosamente'
     });
@@ -121,6 +146,7 @@ class categoryAlmacenController {
       });
     }, {
       validateCategoryId: true,
+      checkPermission: 'update',
       successMessage: 'Categoría actualizada exitosamente'
     });
   }
@@ -132,6 +158,7 @@ class categoryAlmacenController {
       await categoryAlmacen.delete(id);
     }, {
       validateCategoryId: true,
+      checkPermission: 'delete',
       successMessage: 'Categoría eliminada exitosamente'
     });
   }

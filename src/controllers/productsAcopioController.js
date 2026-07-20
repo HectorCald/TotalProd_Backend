@@ -29,7 +29,7 @@ class productsAcopioController {
         if (!empresaId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la empresa es requerido'
+            message: 'El ID de la empresa es requerido'
           });
         }
         if (req.query) req.query.empresa_id = empresaId;
@@ -41,7 +41,7 @@ class productsAcopioController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del producto es requerido'
+            message: 'El ID del producto es requerido'
           });
         }
       }
@@ -83,7 +83,7 @@ class productsAcopioController {
       console.error(`Error en productsAcopioController.${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }
@@ -128,6 +128,22 @@ class productsAcopioController {
     });
   }
 
+  // Obtener productos para conteo
+  static async getProductsForConteo(req, res) {
+    return productsAcopioController._handleRequest(res, 'getProductsForConteo', req, async () => {
+      const empresaId = req.query.empresa_id;
+      const products = await productsAcopio.getProductsForConteo(empresaId);
+
+      return {
+        success: true,
+        message: 'Productos para conteo obtenidos correctamente',
+        data: products
+      };
+    }, {
+      validateEmpresaId: true
+    });
+  }
+
   // Crear un producto
   static async create(req, res) {
     const { name, description, quantity, type_measure_id, category_id, stock_minimo, receta } = req.body;
@@ -162,7 +178,7 @@ class productsAcopioController {
 
       return {
         success: true,
-        message: 'Producto creado exitosamente',
+        message: 'Producto creado correctamente',
         data: productWithRelations
       };
     }, {
@@ -180,7 +196,7 @@ class productsAcopioController {
 
       return {
         success: true,
-        message: 'Producto eliminado exitosamente'
+        message: 'Producto eliminado correctamente'
       };
     }, {
       validateProductId: true,
@@ -196,7 +212,7 @@ class productsAcopioController {
     if (!id) {
       return res.status(400).json({
         success: false,
-        message: 'ID del producto es requerido'
+        message: 'El ID del producto es requerido'
       });
     }
 
@@ -215,7 +231,7 @@ class productsAcopioController {
 
       return {
         success: true,
-        message: 'Producto actualizado exitosamente',
+        message: 'Producto actualizado correctamente',
         data: updatedProduct
       };
     }, {
@@ -239,7 +255,7 @@ class productsAcopioController {
 
       return {
         success: true,
-        message: 'Producto obtenido exitosamente',
+        message: 'Producto obtenido correctamente',
         data: product
       };
     }, {
@@ -276,7 +292,7 @@ class productsAcopioController {
     if (!id) {
       return res.status(400).json({
         success: false,
-        message: 'ID del producto es requerido'
+        message: 'El ID del producto es requerido'
       });
     }
 

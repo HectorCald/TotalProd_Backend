@@ -1,12 +1,14 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const { generateToken } = require('../config/jwt');
+const CloudinaryService = require('../services/cloudinaryService');
 
 // Clase para errores controlados dentro del controlador
 class ControllerError extends Error {
-  constructor(message, status = 400) {
+  constructor(message, status = 400, data = null) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -44,10 +46,14 @@ class UserController {
       return res.status(status).json(responseBody);
     } catch (error) {
       if (error instanceof ControllerError) {
-        return res.status(error.status).json({
+        const responseBody = {
           success: false,
           message: error.message
-        });
+        };
+        if (error.data) {
+          responseBody.data = error.data;
+        }
+        return res.status(error.status).json(responseBody);
       }
       console.error(`❌ Error en ${actionName}:`, error);
       return res.status(500).json({
@@ -139,9 +145,37 @@ class UserController {
     }
 
     return UserController._handleRequest(res, 'loginUser', async () => {
-      const user = await User.login(email, password);
+      let user;
+      try {
+        user = await User.login(email, password);
+      } catch (err) {
+        if (err.message === 'INACTIVE_ACCOUNT') {
+          throw new ControllerError('Su cuenta está inactiva. Contacte al administrador para reactivar su acceso.', 401);
+        }
+        throw err;
+      }
 
       if (!user) {
+        // Intentar como empleado si falla como usuario normal
+        const Personal = require('../models/Personal');
+        const employeeResult = await Personal.loginEmployee(email, password);
+
+        if (employeeResult.success) {
+          return {
+            _customResponse: true,
+            success: true,
+            message: 'Login exitoso',
+            data: employeeResult.data
+          };
+        } else if (employeeResult.message === 'No tiene contraseña establecida') {
+          // Obtener los datos del empleado para poder mandarlos al frontend
+          const personal = await Personal.getByEmail(email);
+          throw new ControllerError(employeeResult.message, 401, { personal });
+        } else if (employeeResult.message && employeeResult.message.includes('inactiva')) {
+          throw new ControllerError(employeeResult.message, 401);
+        }
+
+        // Si falla ambos, enviamos error genérico de usuario
         throw new ControllerError('Contraseña o correo electrónico incorrecto. Verifica los datos e intenta nuevamente.', 401);
       }
 
@@ -270,6 +304,61 @@ class UserController {
       };
     }, {
       successMessage: 'Contraseña cambiada exitosamente'
+    });
+  }
+
+  // Método para actualizar la configuración (usuario y empresa)
+  static async updateConfig(req, res) {
+    const { userId, empresaId, userData, empresaData, logoBase64, removeLogo } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'El ID de usuario es requerido'
+      });
+    }
+
+    return UserController._handleRequest(res, 'updateConfig', async () => {
+      let finalEmpresaData = { ...empresaData };
+
+      // Si se envía una nueva imagen en base64
+      if (logoBase64) {
+        const uploadResult = await CloudinaryService.uploadImage(logoBase64, 'TotalProd');
+        if (uploadResult.success) {
+          finalEmpresaData.logo_tipo = uploadResult.data.secure_url;
+        } else {
+          throw new ControllerError('Error al subir el logo a Cloudinary', 500);
+        }
+      } else if (removeLogo === true || removeLogo === 'true') {
+        finalEmpresaData.logo_tipo = null;
+      }
+
+      const result = await User.updateConfig(userId, empresaId, userData, finalEmpresaData);
+
+      // Refresh full user to return complete updated state
+      const fullUser = await User.getById(userId);
+
+      return {
+        _customResponse: true,
+        message: 'Configuración actualizada exitosamente',
+        data: {
+          user: {
+            id: fullUser.id,
+            firstName: fullUser.firstName,
+            lastName: fullUser.lastName,
+            phone: fullUser.phone,
+            email: fullUser.email,
+            is_active: fullUser.is_active,
+            plan_id: fullUser.plan_id,
+            plan: fullUser.plan,
+            modules: fullUser.modules,
+            empresa_id: fullUser.empresa_id,
+            empresa: fullUser.empresa,
+            logo_tipo: fullUser.logo_tipo,
+            empresa_tipo: fullUser.empresa?.tipo || null
+          }
+        }
+      };
     });
   }
 }

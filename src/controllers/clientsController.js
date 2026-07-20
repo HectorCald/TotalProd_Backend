@@ -18,7 +18,7 @@ class clientsController {
         if (!sucuId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la sucursal es requerido'
+            message: 'El ID de la sucursal es requerido'
           });
         }
       }
@@ -28,7 +28,7 @@ class clientsController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del cliente es requerido'
+            message: 'El ID del cliente es requerido'
           });
         }
       }
@@ -67,7 +67,7 @@ class clientsController {
       console.error(`Error en ${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }
@@ -150,6 +150,17 @@ class clientsController {
     });
   }
 
+    // Obtener ubicación del cliente (tabla clients o último movimiento con ubicación)
+  static async getLocation(req, res) {
+    return clientsController._handleRequest(res, 'getLocation', req, async () => {
+      const { id } = req.params;
+      return await client.getLocation(id);
+    }, {
+      validateClientId: true,
+      successMessage: 'Ubicación obtenida'
+    });
+  }
+
   // Obtener un cliente por ID
   static async getById(req, res) {
     return clientsController._handleRequest(res, 'getById', req, async () => {
@@ -158,17 +169,6 @@ class clientsController {
     }, {
       validateClientId: true,
       successMessage: 'Cliente obtenido exitosamente'
-    });
-  }
-
-  // Obtener ubicación del cliente (tabla clients o último movimiento con ubicación)
-  static async getLocation(req, res) {
-    return clientsController._handleRequest(res, 'getLocation', req, async () => {
-      const { id } = req.params;
-      return await client.getLocation(id);
-    }, {
-      validateClientId: true,
-      successMessage: 'Ubicación obtenida'
     });
   }
 }

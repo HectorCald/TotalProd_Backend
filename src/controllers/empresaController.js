@@ -126,6 +126,79 @@ class EmpresaController {
       });
     }
   }
+
+  // Método para obtener empresas disponibles
+  static async getDisponibles(req, res) {
+    try {
+      const { currentEmpresaId } = req.query;
+
+      const empresas = await Empresa.getAllDisponibles(currentEmpresaId);
+
+      res.status(200).json({
+        success: true,
+        message: empresas.length > 0 ? 'Empresas encontradas' : 'No se encontraron empresas',
+        data: {
+          empresas: empresas.map(empresa => ({
+            id: empresa.id,
+            name: empresa.name,
+            description: empresa.description,
+            logo_tipo: empresa.logo_tipo,
+            tipo: empresa.tipo,
+            propietario_id: empresa.propietario_id,
+            created_at: empresa.created_at
+          }))
+        }
+      });
+    } catch (error) {
+      console.error('Error en getDisponibles:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Método para verificar código
+  static async verificarCodigo(req, res) {
+    try {
+      const { id } = req.params;
+      const { codigo } = req.body;
+
+      if (!id || !codigo) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de empresa y código son requeridos'
+        });
+      }
+
+      const empresa = await Empresa.getById(id);
+
+      if (!empresa) {
+        return res.status(404).json({
+          success: false,
+          message: 'Empresa no encontrada'
+        });
+      }
+
+      if (empresa.codigo !== codigo) {
+        return res.status(400).json({
+          success: false,
+          message: 'Código incorrecto'
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Código verificado exitosamente'
+      });
+    } catch (error) {
+      console.error('Error en verificarCodigo:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
 }
 
 module.exports = EmpresaController;

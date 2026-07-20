@@ -1,4 +1,5 @@
 const Personal = require('../models/Personal');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
 
 class PersonalController {
 
@@ -6,6 +7,7 @@ class PersonalController {
     const {
       validateEmpresaId = false,
       validatePersonalId = false,
+      checkPermission = null,
       successStatus = 200,
       successMessage = 'Operación exitosa'
     } = options;
@@ -16,7 +18,7 @@ class PersonalController {
         if (!empresaId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la empresa es requerido'
+            message: 'El ID de la empresa es requerido'
           });
         }
       }
@@ -26,8 +28,30 @@ class PersonalController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del personal es requerido'
+            message: 'El ID del personal es requerido'
           });
+        }
+      }
+
+      if (checkPermission) {
+        const userType = req.user?.type;
+        if (userType === 'employee') {
+          const personal_id = req.user.id;
+          let hasPermission = false;
+          if (checkPermission === 'create') {
+            hasPermission = await checkCreatePermission(personal_id);
+          } else if (checkPermission === 'update') {
+            hasPermission = await checkUpdatePermission(personal_id);
+          } else if (checkPermission === 'delete') {
+            hasPermission = await checkDeletePermission(personal_id);
+          }
+          if (!hasPermission) {
+            const actionTranslate = { create: 'crear', update: 'editar', delete: 'eliminar' };
+            return res.status(403).json({
+              success: false,
+              message: `No tienes permisos para ${actionTranslate[checkPermission]} personal`
+            });
+          }
         }
       }
 
@@ -60,7 +84,7 @@ class PersonalController {
       console.error(`Error en ${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }
@@ -94,19 +118,17 @@ class PersonalController {
   // Crear personal
   static async create(req, res) {
     return PersonalController._handleRequest(res, 'create', req, async () => {
-      const { first_name, last_name, codigo, cargo, cargo_id, sucursal_id, permisos = {}, ubicacion = null, rastrear = false } = req.body;
+      const { first_name, last_name, email, cargo, cargo_id, sucursal_id, permisos = {}, ubicacion = null, rastrear = false } = req.body;
       const empresaId = req.body.empresa_id;
 
-      if (!first_name || !last_name || !codigo || (!cargo && !cargo_id)) {
-        return { success: false, message: 'Nombre, apellido, código y cargo son requeridos' };
+      if (!first_name || !last_name || !email || (!cargo && !cargo_id)) {
+        return { success: false, message: 'Nombre, apellido, correo y cargo son requeridos' };
       }
-
-
 
       const personalData = {
         first_name: first_name.trim(),
         last_name: last_name.trim(),
-        codigo,
+        email,
         cargo,
         cargo_id,
         empresa_id: empresaId,
@@ -119,6 +141,7 @@ class PersonalController {
       return await Personal.create(personalData);
     }, {
       validateEmpresaId: true,
+      checkPermission: 'create',
       successStatus: 201,
       successMessage: 'Personal creado exitosamente'
     });
@@ -128,14 +151,12 @@ class PersonalController {
   static async update(req, res) {
     return PersonalController._handleRequest(res, 'update', req, async () => {
       const { id } = req.params;
-      const { first_name, last_name, codigo, cargo, cargo_id, is_active, sucursal_id, permisos, ubicacion, rastrear } = req.body;
-
-
+      const { first_name, last_name, email, cargo, cargo_id, is_active, sucursal_id, permisos, ubicacion, rastrear } = req.body;
 
       const personalData = {};
       if (first_name) personalData.first_name = first_name.trim();
       if (last_name) personalData.last_name = last_name.trim();
-      if (codigo) personalData.codigo = codigo;
+      if (email) personalData.email = email;
       if (cargo !== undefined) personalData.cargo = cargo;
       if (cargo_id !== undefined) personalData.cargo_id = cargo_id;
       if (is_active !== undefined) personalData.is_active = is_active;
@@ -147,6 +168,7 @@ class PersonalController {
       return await Personal.update(id, personalData);
     }, {
       validatePersonalId: true,
+      checkPermission: 'update',
       successMessage: 'Personal actualizado exitosamente'
     });
   }
@@ -158,37 +180,40 @@ class PersonalController {
       await Personal.delete(id);
     }, {
       validatePersonalId: true,
+      checkPermission: 'delete',
       successMessage: 'Personal eliminado exitosamente'
     });
   }
 
-  // Validar código de empleado
-  static async validateEmployeeCode(req, res) {
-    return PersonalController._handleRequest(res, 'validateEmployeeCode', req, async () => {
-      const { codigo } = req.params;
+  // Validar correo de empleado
+  static async validateEmployeeEmail(req, res) {
+    return PersonalController._handleRequest(res, 'validateEmployeeEmail', req, async () => {
+      const { email } = req.params;
 
-      if (!codigo) {
-        return { success: false, message: 'Código es requerido' };
+      if (!email) {
+        return { success: false, message: 'Correo es requerido' };
       }
 
-      const personal = await Personal.getByCodigo(codigo);
+      const personal = await Personal.getByEmail(email);
 
       if (!personal) {
-        return { success: false, status: 404, message: 'Código de empleado no válido' };
+        return { success: false, status: 404, message: 'Correo de empleado no válido' };
       }
 
       if (personal.password && !personal.is_active) {
-        return { success: false, status: 403, message: 'Su cuenta está inactiva. Contacte al administrador.' };
+        return { success: false, status: 403, message: 'Cuenta inactiva' };
       }
 
       return {
         success: true,
-        message: 'Código válido',
+        message: 'Correo válido',
         data: {
           personal: personal,
           hasPassword: !!personal.password
         }
       };
+    }, {
+      validateEmpresaId: false
     });
   }
 
@@ -216,13 +241,13 @@ class PersonalController {
   // Login de empleado
   static async loginEmployee(req, res) {
     return PersonalController._handleRequest(res, 'loginEmployee', req, async () => {
-      const { codigo, password } = req.body;
+      const { email, password } = req.body;
 
-      if (!codigo || !password) {
-        return { success: false, message: 'Código y contraseña son requeridos' };
+      if (!email || !password) {
+        return { success: false, message: 'Correo y contraseña son requeridos' };
       }
 
-      const result = await Personal.loginEmployee(codigo, password);
+      const result = await Personal.loginEmployee(email, password);
 
       if (!result.success) {
         return { success: false, status: 401, message: result.message };

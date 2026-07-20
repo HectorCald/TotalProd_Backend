@@ -10,21 +10,28 @@ const normalizeText = (text) => {
         .trim();
 };
 
-// Función para generar código aleatorio de 8 caracteres alfanuméricos
-const generarCodigoAleatorio = () => {
-    const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+// Función para generar código aleatorio estructurado (3 letras y 3 números)
+const generarCodigoAleatorioEstructurado = () => {
+    const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const numeros = '0123456789';
     let codigo = '';
-    for (let i = 0; i < 8; i++) {
-        codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+    for (let i = 0; i < 3; i++) {
+        codigo += letras.charAt(Math.floor(Math.random() * letras.length));
+    }
+    for (let i = 0; i < 3; i++) {
+        codigo += numeros.charAt(Math.floor(Math.random() * numeros.length));
     }
     return codigo;
 };
 
 // Función para generar código de movimiento
 const generarCodigoMovimiento = (type) => {
-    const prefijo = type === 'salida' ? 'SAL' : 'ENT';
-    const codigoAleatorio = generarCodigoAleatorio();
-    return `#${prefijo}-${codigoAleatorio}`;
+    let prefijo = 'MAE';
+    if (type === 'salida' || type === 'consumo_receta') {
+        prefijo = 'MAS';
+    }
+    const codigoAleatorio = generarCodigoAleatorioEstructurado();
+    return `${prefijo}-${codigoAleatorio}`;
 };
 
 class movimientosAcopio {
@@ -64,15 +71,16 @@ class movimientosAcopio {
         sucu_id: movimientoData.sucu_id,
         type: movimientoData.type,
         observations: movimientoData.observations || null,
-        proveedor_id: movimientoData.proveedor_id || null,
         cliente_id: movimientoData.cliente_id || null,
+        proveedor_id: null, // Forzado a null según indicación
+        costo: null,        // Forzado a null según indicación
+        metodo_pago: null,  // Forzado a null según indicación
+        gasto_id: null,     // Forzado a null según indicación
         quantity: movimientoData.quantity,
-        costo: movimientoData.costo || null,
-        metodo_pago: movimientoData.metodo_pago || null,
-        gasto_id: movimientoData.gasto_id || null,
         restar_ingredientes: movimientoData.restar_ingredientes || false,
         date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
-        codigo: codigoMovimiento
+        codigo: codigoMovimiento,
+        movimiento_entrada_id: movimientoData.movimiento_entrada_id || null
       };
 
       // Solo incluir user_id o personal_id si no son null
@@ -338,6 +346,12 @@ class movimientosAcopio {
           sucursal:sucu_id (
             id,
             name
+          ),
+          gastos:gastos!gastos_movimiento_acopio_entrada_id_fkey (
+            id
+          ),
+          pedidos_entrada:pedidos_acopio (
+            id
           )
         `)
         .eq('id', movimientoId)
@@ -441,8 +455,14 @@ class movimientosAcopio {
           sucursal:sucu_id (
             id,
             name
+          ),
+          gastos:gastos!gastos_movimiento_acopio_entrada_id_fkey (
+            id
+          ),
+          pedidos_entrada:pedidos_acopio (
+            id
           )
-        `, { count: 'exact' })
+        `, { count: 'estimated' })
         .eq('sucu_id', sucuId);
 
       // Aplicar filtro de tipo si se especifica
@@ -460,13 +480,13 @@ class movimientosAcopio {
         query = query.eq('cliente_id', clienteFilter);
       }
 
-      // Aplicar filtro de fecha si se proporciona
+      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en UTC)
       if (filtroFecha) {
         if (filtroFecha.inicio) {
-          query = query.gte('date', filtroFecha.inicio);
+          query = query.gte('date', `${filtroFecha.inicio}T00:00:00.000Z`);
         }
         if (filtroFecha.fin) {
-          query = query.lte('date', filtroFecha.fin);
+          query = query.lte('date', `${filtroFecha.fin}T23:59:59.999Z`);
         }
       }
 
@@ -503,6 +523,7 @@ class movimientosAcopio {
       const { data, error, count } = await query;
 
       if (error) {
+        console.error('SUPABASE ERROR in movimientosAcopio.getAll:', error);
         throw new Error('No se pudo obtener los movimientos');
       }
 
@@ -606,7 +627,7 @@ class movimientosAcopio {
             id,
             name
           )
-        `, { count: 'exact' })
+        `, { count: 'estimated' })
         .eq('cliente_id', normalizedClienteId)
         .eq('sucu_id', sucuId)
         .order('date', { ascending: false })
@@ -618,7 +639,7 @@ class movimientosAcopio {
 
       const { count, error: countError } = await supabase
         .from('movimientos_acopio')
-        .select('*', { count: 'exact', head: true })
+        .select('*', { count: 'estimated', head: true })
         .eq('cliente_id', normalizedClienteId)
         .eq('sucu_id', sucuId);
 
@@ -669,7 +690,7 @@ class movimientosAcopio {
             id,
             name
           )
-        `, { count: 'exact' })
+        `, { count: 'estimated' })
         .eq('proveedor_id', normalizedProveedorId)
         .eq('sucu_id', sucuId)
         .order('date', { ascending: false })
@@ -681,7 +702,7 @@ class movimientosAcopio {
 
       const { count, error: countError } = await supabase
         .from('movimientos_acopio')
-        .select('*', { count: 'exact', head: true })
+        .select('*', { count: 'estimated', head: true })
         .eq('proveedor_id', normalizedProveedorId)
         .eq('sucu_id', sucuId);
 
@@ -861,112 +882,41 @@ class movimientosAcopio {
         };
       }
 
-      // Ejecutar actualizaciones batch si hay ingredientes válidos
-      if (actualizaciones.length > 0) {
-        // Usar Promise.all para actualizaciones paralelas (más rápido que secuencial)
-        const updatePromises = actualizaciones.map(actualizacion =>
-          supabase
-            .from('products_acopio')
-            .update({ quantity: actualizacion.quantity })
-            .eq('id', actualizacion.id)
-        );
-
-        const updateResults = await Promise.all(updatePromises);
-
-        // Verificar errores en las actualizaciones
-        const errores = updateResults
-          .map((result, index) => ({ result, index }))
-          .filter(({ result }) => result.error);
-
-        if (errores.length > 0) {
-          console.error('Errores en actualizaciones de ingredientes:', errores);
-          
-          // Intentar rollback de las actualizaciones exitosas
-          const exitosas = updateResults
-            .map((result, index) => ({ result, index }))
-            .filter(({ result }) => !result.error);
-
-          if (exitosas.length > 0) {
-            console.log('Intentando rollback de actualizaciones exitosas...');
-            const rollbackPromises = exitosas.map(({ index }) =>
-              supabase
-                .from('products_acopio')
-                .update({ quantity: stocksActuales[actualizaciones[index].id] })
-                .eq('id', actualizaciones[index].id)
-            );
-
-            await Promise.all(rollbackPromises);
-            console.log('Rollback completado');
-          }
-
-          throw new Error('Error al actualizar algunos ingredientes');
+      // Crear movimientos de salida para cada ingrediente
+      let actualizadosCount = 0;
+      for (let i = 0; i < ingredientesValidos.length; i++) {
+        const ingrediente = ingredientesValidos[i];
+        
+        // Usar cantidad personalizada si existe, sino usar la calculada
+        let cantidadARestar;
+        if (cantidadesPersonalizadas && cantidadesPersonalizadas[i] !== undefined) {
+          cantidadARestar = parseFloat(cantidadesPersonalizadas[i]);
+        } else {
+          cantidadARestar = ingrediente.cantidad * cantidadEntrada;
         }
 
-        // Crear movimientos de salida para cada ingrediente actualizado
-        const movimientosSalida = [];
-        for (let i = 0; i < ingredientesValidos.length; i++) {
-          const ingrediente = ingredientesValidos[i];
-          
-          // Usar cantidad personalizada si existe, sino usar la calculada
-          let cantidadARestar;
-          if (cantidadesPersonalizadas && cantidadesPersonalizadas[i] !== undefined) {
-            cantidadARestar = parseFloat(cantidadesPersonalizadas[i]);
-          } else {
-            cantidadARestar = ingrediente.cantidad * cantidadEntrada;
-          }
+        // Solo crear movimiento si la cantidad es mayor a 0
+        if (cantidadARestar > 0) {
+          const movimientoSalida = {
+            product_id: ingrediente.products_acopio.id,
+            sucu_id: sucuId,
+            type: 'salida',
+            observations: `Consumo por receta de ${productoPrincipal.name}`,
+            quantity: cantidadARestar,
+            movimiento_entrada_id: movimientoEntradaId || null
+          };
 
-          // Solo crear movimiento si la cantidad es mayor a 0
-          if (cantidadARestar > 0) {
-            // Crear timestamp en zona horaria de Bolivia (GMT-4)
-            const ahora = new Date();
-            const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
-
-            const movimientoSalida = {
-              product_id: ingrediente.products_acopio.id,
-              sucu_id: sucuId,
-              type: 'salida',
-              observations: `Consumo por receta de ${productoPrincipal.name}`,
-              quantity: cantidadARestar.toString(),
-              date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
-              // No incluir proveedor_id ni cliente_id para movimientos de salida por receta
-              proveedor_id: null,
-              cliente_id: null,
-              // Asociar con el movimiento de entrada si se proporciona
-              movimiento_entrada_id: movimientoEntradaId || null
-            };
-
-            // Agregar user_id o personal_id según corresponda
-            if (userId) {
-              movimientoSalida.user_id = userId;
-            }
-            if (personalId) {
-              movimientoSalida.personal_id = personalId;
-            }
-
-            movimientosSalida.push(movimientoSalida);
-          }
-        }
-
-        // Insertar movimientos de salida si hay alguno
-        if (movimientosSalida.length > 0) {
-          const { error: movimientosError } = await supabase
-            .from('movimientos_acopio')
-            .insert(movimientosSalida);
-
-          if (movimientosError) {
-            console.error('Error creando movimientos de salida para ingredientes:', movimientosError);
-            // No lanzar error aquí para no afectar la actualización del stock
-            // Los movimientos de salida son informativos, el stock ya se actualizó correctamente
-          } else {
-            console.log(`Movimientos de salida creados para ${movimientosSalida.length} ingredientes`);
-          }
+          // Pasar por el flujo normal de salida usando create()
+          // create() se encarga de restar el stock de products_acopio y crear el movimiento
+          await this.create(movimientoSalida, userId, personalId);
+          actualizadosCount++;
         }
       }
 
       return { 
         success: true, 
         message: 'Ingredientes restados correctamente',
-        actualizados: actualizaciones.length,
+        actualizados: actualizadosCount,
         conStockInsuficiente: ingredientesConStockInsuficiente.length
       };
     } catch (error) {
@@ -997,6 +947,43 @@ class movimientosAcopio {
       // Verificar que no esté ya anulado
       if (movimiento.estado === 'anulado') {
         return { success: false, message: 'El movimiento ya está anulado' };
+      }
+
+      // Si restar_ingredientes es true, anular y eliminar los movimientos hijos primero
+      if (movimiento.restar_ingredientes) {
+        // Buscar movimientos hijos
+        const { data: movimientosHijos, error: errorHijos } = await supabase
+          .from('movimientos_acopio')
+          .select('id')
+          .eq('movimiento_entrada_id', movimientoId);
+          
+        if (errorHijos) {
+          console.error('Error buscando movimientos hijos:', errorHijos);
+          return { success: false, message: 'Error al buscar los consumos de receta asociados' };
+        }
+
+        if (movimientosHijos && movimientosHijos.length > 0) {
+          for (const hijo of movimientosHijos) {
+            // Anular el hijo usando el mismo método (para reponer stock)
+            const anularHijoResult = await this.anular(hijo.id);
+            if (!anularHijoResult.success) {
+              console.error(`Error anulando movimiento hijo ${hijo.id}:`, anularHijoResult.message);
+              return { success: false, message: `Error al anular un consumo de receta: ${anularHijoResult.message}` };
+            }
+            
+            // Eliminar el movimiento hijo de la base de datos
+            const { error: deleteHijoError } = await supabase
+              .from('movimientos_acopio')
+              .delete()
+              .eq('id', hijo.id);
+              
+            if (deleteHijoError) {
+              console.error(`Error eliminando movimiento hijo ${hijo.id}:`, deleteHijoError);
+              return { success: false, message: 'Error al eliminar un consumo de receta asociado' };
+            }
+          }
+          console.log(`Anulados y eliminados ${movimientosHijos.length} consumos de receta asociados.`);
+        }
       }
 
       // Verificar relación con pedidos de acopio: si está relacionado, actualizar el pedido

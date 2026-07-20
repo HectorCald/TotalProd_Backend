@@ -31,7 +31,7 @@ class pedidosAlmacenController {
         if (!sucuId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la sucursal es requerido'
+            message: 'El ID de la sucursal es requerido'
           });
         }
         if (req.query) req.query.sucu_id = sucuId;
@@ -43,7 +43,7 @@ class pedidosAlmacenController {
         if (!empresaId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la empresa es requerido'
+            message: 'El ID de la empresa es requerido'
           });
         }
         if (req.query) req.query.empresa_id = empresaId;
@@ -55,7 +55,7 @@ class pedidosAlmacenController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del pedido es requerido'
+            message: 'El ID del pedido es requerido'
           });
         }
       }
@@ -84,7 +84,7 @@ class pedidosAlmacenController {
       console.error(`Error en pedidosAlmacenController.${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }
@@ -342,6 +342,61 @@ class pedidosAlmacenController {
       return await pedidosAlmacen.eliminar(id);
     }, {
       validatePedidoId: true
+    });
+  }
+
+  // Crear pedido de golpe (fast)
+  static async createFast(req, res) {
+    const { sucursal_destino_id, observaciones, precio_id, agrupado, productos } = req.body;
+    const sucu_id = req.headers['x-sucu-id'] || req.body.sucu_id;
+    const user_id = req.user?.id || null;
+
+    if (!sucu_id) return res.status(400).json({ success: false, message: 'Sucursal no especificada' });
+    if (!sucursal_destino_id) return res.status(400).json({ success: false, message: 'Sucursal destino requerida' });
+    if (!precio_id) return res.status(400).json({ success: false, message: 'Precio requerido' });
+    if (!productos || productos.length === 0) return res.status(400).json({ success: false, message: 'Debe incluir al menos un producto' });
+
+    return pedidosAlmacenController._handleRequest(res, 'createFast', req, async () => {
+      return await pedidosAlmacen.createFast({
+        user_id,
+        sucu_id,
+        sucursal_destino_id,
+        observaciones: observaciones || null,
+        precio_id,
+        agrupado: !!agrupado,
+        productos
+      });
+    }, { successStatus: 201 });
+  }
+
+  // Actualizar pedido de golpe (fast)
+  static async updateFast(req, res) {
+    const { observaciones, precio_id, agrupado, productos, sucursal_destino_id } = req.body;
+    const { id } = req.params;
+
+    if (!id) return res.status(400).json({ success: false, message: 'ID del pedido es requerido' });
+    if (!precio_id) return res.status(400).json({ success: false, message: 'Precio requerido' });
+    if (!productos || productos.length === 0) return res.status(400).json({ success: false, message: 'Debe incluir al menos un producto' });
+    if (!sucursal_destino_id) return res.status(400).json({ success: false, message: 'Sucursal destino requerida' });
+
+    return pedidosAlmacenController._handleRequest(res, 'updateFast', req, async () => {
+      return await pedidosAlmacen.updateFast(id, {
+        observaciones: observaciones || null,
+        precio_id,
+        sucursal_destino_id,
+        agrupado: !!agrupado,
+        productos
+      });
+    });
+  }
+
+  // Obtener resumen mensual (mes actual y anterior)
+  static async getResumenMensual(req, res) {
+    return pedidosAlmacenController._handleRequest(res, 'getResumenMensual', req, async () => {
+      const sucuId = req.query.sucu_id;
+      return await pedidosAlmacen.getResumenMensual(sucuId);
+    }, {
+      validateSucuId: true
     });
   }
 }

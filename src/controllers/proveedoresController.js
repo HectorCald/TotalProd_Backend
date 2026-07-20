@@ -18,7 +18,7 @@ class proveedoresController {
         if (!sucuId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la sucursal es requerido'
+            message: 'El ID de la sucursal es requerido'
           });
         }
       }
@@ -28,7 +28,7 @@ class proveedoresController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del proveedor es requerido'
+            message: 'El ID del proveedor es requerido'
           });
         }
       }
@@ -67,7 +67,7 @@ class proveedoresController {
       console.error(`Error en ${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }

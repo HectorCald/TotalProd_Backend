@@ -19,7 +19,7 @@ class gastosController {
         if (!sucuId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la sucursal es requerido'
+            message: 'El ID de la sucursal es requerido'
           });
         }
         if (req.query) req.query.sucu_id = sucuId;
@@ -31,7 +31,7 @@ class gastosController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del gasto es requerido'
+            message: 'El ID del gasto es requerido'
           });
         }
       }
@@ -122,6 +122,29 @@ class gastosController {
     });
   }
 
+  // Obtener todos los gastos sin límite
+  static async getAllSinLimite(req, res) {
+    return gastosController._handleRequest(res, 'getAllSinLimite', req, async () => {
+      const { metodo_pago = null, sucu_id } = req.query;
+      
+      let filtroFecha = null;
+      if (req.query.fecha_inicio || req.query.fecha_fin) {
+        filtroFecha = {
+          inicio: req.query.fecha_inicio || null,
+          fin: req.query.fecha_fin || null
+        };
+      }
+      
+      return await gastos.getAllSinLimite(
+        sucu_id,
+        metodo_pago,
+        filtroFecha
+      );
+    }, {
+      validateSucuId: true
+    });
+  }
+
   // Obtener un gasto por ID
   static async getById(req, res) {
     return gastosController._handleRequest(res, 'getById', req, async () => {
@@ -184,7 +207,8 @@ class gastosController {
         concepto: concepto.trim(),
         metodo_pago: metodo_pago.trim(),
         proveedor_id: proveedor_id || null,
-        movimiento_entrada_id: req.body.movimiento_entrada_id || null
+        movimiento_entrada_id: req.body.movimiento_entrada_id || null,
+        movimiento_acopio_entrada_id: req.body.movimiento_acopio_entrada_id || null
       };
 
       return await gastos.create(gastoData);
@@ -250,17 +274,19 @@ class gastosController {
   static async delete(req, res) {
     const { id } = req.params;
     return gastosController._handleRequest(res, 'delete', req, async () => {
+      // Protección: no se puede eliminar si está asociado a un movimiento o pedido
+      const asociado = await gastos.isAssociatedWithMovement(id);
+      if (asociado) {
+        return {
+          success: false,
+          message: 'Este pago se generó automáticamente a partir de un registro de inventario o pedido de acopio. Para mantener la integridad financiera, debe anular el movimiento o pedido correspondiente en lugar de eliminar el pago de forma manual.',
+          status: 400
+        };
+      }
       return await gastos.delete(id);
     }, {
       validateGastoId: true,
-      checkPermission: 'delete',
-      customValidation: async () => {
-        const gastoAsociado = await gastos.isAssociatedWithMovement(id);
-        if (gastoAsociado) {
-          return 'No se puede eliminar este gasto porque está asociado a un movimiento. Anule/elimine el movimiento primero.';
-        }
-        return null;
-      }
+      checkPermission: 'delete'
     });
   }
 

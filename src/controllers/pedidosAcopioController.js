@@ -1,4 +1,5 @@
 const pedidosAcopio = require('../models/pedidosAcopio');
+const gastosModel = require('../models/gastos');
 const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
 
 class pedidosAcopioController {
@@ -31,7 +32,7 @@ class pedidosAcopioController {
         if (!sucuId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la sucursal es requerido'
+            message: 'El ID de la sucursal es requerido'
           });
         }
         if (req.query) req.query.sucu_id = sucuId;
@@ -43,7 +44,7 @@ class pedidosAcopioController {
         if (!empresaId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la empresa es requerido'
+            message: 'El ID de la empresa es requerido'
           });
         }
         if (req.query) req.query.empresa_id = empresaId;
@@ -55,7 +56,7 @@ class pedidosAcopioController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del pedido es requerido'
+            message: 'El ID del pedido es requerido'
           });
         }
       }
@@ -105,7 +106,7 @@ class pedidosAcopioController {
       console.error(`Error en pedidosAcopioController.${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Error interno del servidor'
+        message: 'Ocurrió un error inesperado'
       });
     }
   }
@@ -281,40 +282,107 @@ class pedidosAcopioController {
     return pedidosAcopioController._handleRequest(res, 'entregar', req, async () => {
       const userId = req.user.id;
       const userType = req.user.type;
-      const userName = req.user.name || 
-                      (req.user.first_name && req.user.last_name ? 
-                        `${req.user.first_name} ${req.user.last_name}` : 
-                        req.user.first_name || 
-                        req.user.email || 
+      const userName = req.user.name ||
+                      (req.user.first_name && req.user.last_name ?
+                        `${req.user.first_name} ${req.user.last_name}` :
+                        req.user.first_name ||
+                        req.user.email ||
                         'Usuario');
 
       const finalUserId = userType === 'employee' ? null : userId;
       const finalPersonalId = userType === 'employee' ? userId : null;
 
       if (!finalUserId && !finalPersonalId) {
-        return {
-          success: false,
-          message: 'Usuario no autenticado',
-          status: 401
-        };
+        return { success: false, message: 'Usuario no autenticado', status: 401 };
       }
 
+      // ── Obtener info del pedido para el concepto del gasto ───────────────
+      const { supabase } = require('../config/supabase');
+      const { data: pedidoInfo } = await supabase
+        .from('pedidos_acopio')
+        .select('sucu_id, producto_acopio:producto_acopio_id(name)')
+        .eq('id', id)
+        .single();
+
+      const sucu_id = pedidoInfo?.sucu_id;
+      const nombreProducto = pedidoInfo?.producto_acopio?.name || 'Producto';
+      const concepto = `${nombreProducto} - ${cantidadEntregada} ${unidadEntregada}`;
+
+      // ── Fecha en zona horaria de Bolivia ────────────────────────────
+      const ahora = new Date();
+      const partes = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/La_Paz', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(ahora);
+      const fechaBolivia = `${partes.find(p => p.type === 'year').value}-${partes.find(p => p.type === 'month').value}-${partes.find(p => p.type === 'day').value}`;
+
+      // ── Crear gasto principal (costo) ──────────────────────────────
+      const gastoBase = {
+        concepto,
+        valor: parseFloat(costo),
+        metodo_pago,
+        proveedor_id,
+        observaciones: observaciones || null,
+        fecha_gasto: fechaBolivia,
+        sucu_id
+      };
+      if (finalPersonalId) gastoBase.personal_id = finalPersonalId;
+      else if (finalUserId) gastoBase.user_id = finalUserId;
+
+      const gastoResult = await gastosModel.create(gastoBase);
+      if (!gastoResult.success) {
+        return { success: false, message: `Error al crear el gasto: ${gastoResult.message}` };
+      }
+      const gastoIdCreado = gastoResult.data.id;
+
+      // ── Crear gasto transporte/otros (si aplica) ───────────────────
+      let gastoOtrosIdCreado = null;
+      const transporteNum = transporte_otros !== undefined && transporte_otros !== null && transporte_otros !== ''
+        ? parseFloat(transporte_otros) : 0;
+
+      if (transporteNum > 0) {
+        const gastoOtros = {
+          concepto: `Transporte y/o otros (Compra '${nombreProducto}')`,
+          valor: transporteNum,
+          metodo_pago,
+          proveedor_id,
+          observaciones: observaciones || null,
+          fecha_gasto: fechaBolivia,
+          sucu_id
+        };
+        if (finalPersonalId) gastoOtros.personal_id = finalPersonalId;
+        else if (finalUserId) gastoOtros.user_id = finalUserId;
+
+        const gastoOtrosResult = await gastosModel.create(gastoOtros);
+        if (!gastoOtrosResult.success) {
+          // Rollback gasto principal
+          await gastosModel.delete(gastoIdCreado);
+          return { success: false, message: `Error al crear gasto de transporte: ${gastoOtrosResult.message}` };
+        }
+        gastoOtrosIdCreado = gastoOtrosResult.data.id;
+      }
+
+      // ── Llamar al modelo con los IDs de gastos ya creados ──────────────
       const entregaData = {
         cantidadEntregada: parseFloat(cantidadEntregada),
         unidadEntregada,
         cantidadUD: parseInt(cantidadUD),
         unidadUD,
-        proveedor_id,
-        costo: parseFloat(costo),
-        transporte_otros: transporte_otros !== undefined && transporte_otros !== null && transporte_otros !== '' ? parseFloat(transporte_otros) : null,
-        metodo_pago,
         estado_entrega,
         observaciones: observaciones || null,
         entregado_por: entregado_por || userName,
-        fecha_entregado: new Date().toISOString().split('T')[0]
+        fecha_entregado: fechaBolivia,
+        gasto_id: gastoIdCreado,
+        gasto_otros_id: gastoOtrosIdCreado
       };
 
-      return await pedidosAcopio.entregar(id, entregaData, finalUserId, finalPersonalId);
+      const result = await pedidosAcopio.entregar(id, entregaData);
+      if (!result.success) {
+        // Rollback gastos
+        if (gastoOtrosIdCreado) await gastosModel.delete(gastoOtrosIdCreado);
+        await gastosModel.delete(gastoIdCreado);
+        return result;
+      }
+      return result;
     }, {
       validatePedidoId: true
     });
@@ -334,8 +402,17 @@ class pedidosAcopioController {
   static async anularEntrega(req, res) {
     return pedidosAcopioController._handleRequest(res, 'anularEntrega', req, async () => {
       const { id } = req.params;
-      const userId = req.user.id;
-      return await pedidosAcopio.anularEntrega(id, userId);
+
+      // Modelo limpia el pedido y devuelve los IDs de gastos a eliminar
+      const result = await pedidosAcopio.anularEntrega(id);
+      if (!result.success) return result;
+
+      // Controlador elimina los gastos
+      const { gasto_id, gasto_otros_id } = result.gastosPendientesEliminar || {};
+      if (gasto_otros_id) await gastosModel.delete(gasto_otros_id);
+      if (gasto_id) await gastosModel.delete(gasto_id);
+
+      return { success: true, message: result.message, data: result.data };
     }, {
       validatePedidoId: true,
       checkPermission: 'anular'

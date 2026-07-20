@@ -107,6 +107,37 @@ class Empresa {
       throw new Error('No se pudo buscar la empresa');
     }
   }
+
+  // Método estático para obtener empresas disponibles
+  static async getAllDisponibles(currentEmpresaId) {
+    try {
+      const query = supabase
+        .from('empresas')
+        .select('id, name, description, propietario_id, logo_tipo, tipo, created_at')
+        .not('codigo', 'is', null)
+        .neq('codigo', '');
+        
+      if (currentEmpresaId) {
+        query.neq('id', currentEmpresaId);
+      }
+
+      const { data: empresas, error } = await query;
+
+      if (error) {
+        console.error('Error al obtener empresas disponibles:', error);
+        throw new Error('No se pudo obtener las empresas disponibles');
+      }
+
+      if (!empresas || empresas.length === 0) {
+        return [];
+      }
+
+      return empresas.map(empresa => new Empresa(empresa));
+    } catch (error) {
+      console.error('Error en getAllDisponibles:', error);
+      throw new Error('No se pudo obtener las empresas disponibles');
+    }
+  }
 }
 
 module.exports = Empresa;

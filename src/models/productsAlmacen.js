@@ -43,8 +43,7 @@ class productsAlmacen {
             valor,
             prices_types:price_id (
               id,
-              name,
-              description
+              name
             )
           ),
           recetas (
@@ -126,8 +125,7 @@ class productsAlmacen {
             price_id,
             prices_types:price_id (
               id,
-              name,
-              description
+              name
             )
           ),
           productos_sucursal (
@@ -193,8 +191,7 @@ class productsAlmacen {
             valor,
             prices_types:price_id (
               id,
-              name,
-              description
+              name
             )
           ),
           recetas (
@@ -294,8 +291,7 @@ class productsAlmacen {
             valor,
             prices_types:price_id (
               id,
-              name,
-              description
+              name
             )
           ),
           recetas (
@@ -323,7 +319,7 @@ class productsAlmacen {
             stock,
             sucursal_id
           )
-        `, { count: 'exact' })
+        `, { count: 'estimated' })
         .in('empresa_id', empresaIds);
 
       // Search filter
@@ -360,15 +356,21 @@ class productsAlmacen {
         }
       }
 
+      const isMemoryRequired = ocultarStockCero || sortOrder === 'stock_desc' || sortOrder === 'stock_asc';
+
       // Sorting
       if (sortOrder === 'name_desc') {
         query = query.order('name', { ascending: false });
-      } else {
+      } else if (!isMemoryRequired) {
         query = query.order('name', { ascending: true }); // Default
       }
 
       // Pagination
-      query = query.range(offset, offset + limit - 1);
+      if (!isMemoryRequired) {
+        query = query.range(offset, offset + limit - 1);
+      } else {
+        query = query.limit(5000); // Traer todo lo necesario para ordenar/filtrar en memoria
+      }
 
       const { data, error, count } = await query;
 
@@ -426,10 +428,26 @@ class productsAlmacen {
         });
       }
       
+      let allData = data || [];
+      
       // Si ocultarStockCero es true y hay sucuId, filtrar productos con stock <= 0
-      let productosFinales = data || [];
-      if (sucuId && ocultarStockCero && data) {
-        productosFinales = data.filter(producto => (Number(producto.stock) || 0) > 0);
+      if (sucuId && ocultarStockCero) {
+        allData = allData.filter(producto => (Number(producto.stock) || 0) > 0);
+      }
+
+      // Ordenar en memoria si es requerido
+      if (sortOrder === 'stock_desc') {
+        allData.sort((a, b) => (Number(b.stock) || 0) - (Number(a.stock) || 0));
+      } else if (sortOrder === 'stock_asc') {
+        allData.sort((a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0));
+      }
+
+      let productosFinales = allData;
+      let finalCount = count;
+
+      if (isMemoryRequired) {
+        finalCount = allData.length;
+        productosFinales = allData.slice(offset, offset + limit);
       }
 
       let sizeInfo = null;
@@ -443,7 +461,7 @@ class productsAlmacen {
       return {
         data: productosFinales,
         pagination: {
-          hasNextPage: (offset + limit) < count
+          hasNextPage: (offset + limit) < finalCount
         },
         sizeInfo
       };
@@ -474,6 +492,65 @@ class productsAlmacen {
       return data || [];
     } catch (error) {
       console.error('Error al obtener los productos para producción:', error);
+      throw new Error('No se pudo obtener los productos');
+    }
+  }
+
+  // Método para obtener productos específicos para conteo
+  static async getProductsForConteo(empresaId, sucuId) {
+    try {
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('products_almacen')
+        .select(`
+          id,
+          name,
+          category_id,
+          grup,
+          productos_sucursal (
+            stock,
+            sucursal_id
+          ),
+          producto_categoria (
+            categoria_id
+          )
+        `)
+        .eq('empresa_id', empresaId)
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Error de Supabase:', error);
+        throw new Error('No se pudo obtener los productos para conteo');
+      }
+
+      if (data) {
+        data.forEach(producto => {
+          if (sucuId) {
+            const stockSucursal = producto.productos_sucursal?.find(ps => ps.sucursal_id === sucuId);
+            producto.stock = stockSucursal ? stockSucursal.stock : 0;
+          } else {
+            producto.stock = 0;
+          }
+          
+          // Flatten categories for easy frontend filtering
+          let cats = [];
+          if (producto.category_id) cats.push(producto.category_id);
+          if (producto.producto_categoria && producto.producto_categoria.length > 0) {
+            cats.push(...producto.producto_categoria.map(pc => pc.categoria_id));
+          }
+          producto.category_ids = [...new Set(cats)];
+          
+          delete producto.productos_sucursal;
+          delete producto.producto_categoria;
+        });
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error al obtener los productos para conteo:', error);
       throw new Error('No se pudo obtener los productos');
     }
   }
@@ -673,12 +750,22 @@ class productsAlmacen {
         category_names: categoryNames,
         category_almacen: null,
         producto_categoria: productoCategoriaData,
-        price_product: productData.prices ? Object.entries(productData.prices).map(([price_id, valor]) => ({
-          producto_almacen_id: productId,
-          price_id: price_id,
-          valor: parseFloat(valor) || 0,
-          prices_types: { id: price_id, name: 'Precio', description: '' }
-        })) : [],
+        price_product: productData.prices ? await Promise.all(
+          Object.entries(productData.prices).map(async ([price_id, valor]) => {
+            const { data: priceType } = await supabase
+              .from('prices_types')
+              .select('id, name')
+              .eq('id', price_id)
+              .single();
+
+            return {
+              producto_almacen_id: productId,
+              price_id: price_id,
+              valor: parseFloat(valor) || 0,
+              prices_types: priceType || { id: price_id, name: 'Precio' }
+            };
+          })
+        ) : [],
         recetas: productData.receta ? [{
           id: 'temp_id',
           descripcion: productData.receta.descripcion || '',
@@ -953,7 +1040,7 @@ class productsAlmacen {
           Object.entries(productData.prices).map(async ([price_id, valor]) => {
             const { data: priceType } = await supabase
               .from('prices_types')
-              .select('id, name, description')
+              .select('id, name')
               .eq('id', price_id)
               .single();
 
@@ -961,7 +1048,7 @@ class productsAlmacen {
               producto_almacen_id: productId,
               price_id: price_id,
               valor: parseFloat(valor) || 0,
-              prices_types: priceType || { id: price_id, name: 'Precio no encontrado', description: '' }
+              prices_types: priceType || { id: price_id, name: 'Precio no encontrado' }
             };
           })
         ) : [],

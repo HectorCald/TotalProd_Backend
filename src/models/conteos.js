@@ -133,7 +133,7 @@ class ConteosModel {
 				const countPromises = conteoIds.map(conteoId =>
 					supabase
 						.from('conteo_detalle')
-						.select('id', { count: 'exact', head: true })
+						.select('id', { count: 'estimated', head: true })
 						.eq('conteo_id', conteoId)
 				);
 

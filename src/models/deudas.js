@@ -171,7 +171,7 @@ class deudas {
                             name
                         )
                     )
-                `, { count: 'exact' })
+                `, { count: 'estimated' })
                 .eq('sucu_id', sucuId);
 
             // Aplicar búsqueda si se proporciona
@@ -195,13 +195,13 @@ class deudas {
                 }
             }
 
-            // Aplicar filtro de fecha si se proporciona
+            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en UTC)
             if (filtroFecha) {
                 if (filtroFecha.inicio) {
-                    query = query.gte('fecha_deuda', filtroFecha.inicio);
+                    query = query.gte('fecha_deuda', `${filtroFecha.inicio}T00:00:00.000Z`);
                 }
                 if (filtroFecha.fin) {
-                    query = query.lte('fecha_deuda', filtroFecha.fin);
+                    query = query.lte('fecha_deuda', `${filtroFecha.fin}T23:59:59.999Z`);
                 }
             }
 
@@ -712,7 +712,10 @@ class deudas {
 
             const saldoAnterior = parseFloat(deudaActual.saldo_pendiente || 0);
             const montoPago = parseFloat(monto);
-            const nuevoSaldo = Math.max(0, saldoAnterior - montoPago);
+            // Redondear a 2 decimales para evitar problemas de coma flotante
+            let nuevoSaldo = Math.max(0, parseFloat((saldoAnterior - montoPago).toFixed(2)));
+            // Prevenir errores minúsculos por debajo de un centavo
+            if (nuevoSaldo < 0.01) nuevoSaldo = 0;
 
             // Insertar pago parcial
             const pagoData = {
@@ -741,9 +744,24 @@ class deudas {
             }
 
             // Actualizar deuda con nuevo saldo y estado si corresponde
+            let finalEstado = deudaActual.estado;
+            if (nuevoSaldo === 0) {
+                finalEstado = 'pagada';
+            } else {
+                const ahora = new Date();
+                const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+                const hoy = ahoraBolivia.toISOString().split('T')[0];
+
+                if (deudaActual.fecha_vencimiento && deudaActual.fecha_vencimiento < hoy) {
+                    finalEstado = 'vencida';
+                } else if (finalEstado === 'vencida') {
+                    finalEstado = 'pendiente';
+                }
+            }
+
             const updateData = {
                 saldo_pendiente: nuevoSaldo,
-                estado: nuevoSaldo === 0 ? 'pagada' : deudaActual.estado
+                estado: finalEstado
             };
 
             const { data: deudaActualizada, error: deudaUpdateError } = await supabase
@@ -847,7 +865,8 @@ class deudas {
 
             const saldoAnterior = parseFloat(deudaActual.saldo_pendiente || 0);
             const montoPago = parseFloat(pago.monto || 0);
-            const nuevoSaldo = saldoAnterior + montoPago;
+            // Redondear a 2 decimales para evitar problemas de coma flotante
+            const nuevoSaldo = parseFloat((saldoAnterior + montoPago).toFixed(2));
 
             // Eliminar pago
             const { error: deleteError } = await supabase
@@ -861,9 +880,22 @@ class deudas {
             }
 
             // Actualizar deuda con nuevo saldo y estado según regla
+            let finalEstado = 'pendiente';
+            if (nuevoSaldo === 0) {
+                finalEstado = 'pagada';
+            } else {
+                const ahora = new Date();
+                const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+                const hoy = ahoraBolivia.toISOString().split('T')[0];
+
+                if (deudaActual.fecha_vencimiento && deudaActual.fecha_vencimiento < hoy) {
+                    finalEstado = 'vencida';
+                }
+            }
+
             const updateData = {
                 saldo_pendiente: nuevoSaldo,
-                estado: nuevoSaldo > 0 ? 'pendiente' : 'pagada'
+                estado: finalEstado
             };
 
             const { data: deudaActualizada, error: deudaUpdateError } = await supabase

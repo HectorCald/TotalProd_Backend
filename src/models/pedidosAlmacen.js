@@ -329,13 +329,13 @@ class pedidosAlmacen {
         query = query.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
       }
 
-      // Aplicar filtro de fecha si se proporciona
+      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en UTC)
       if (filtroFecha) {
         if (filtroFecha.inicio) {
-          query = query.gte('fecha', filtroFecha.inicio);
+          query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
         }
         if (filtroFecha.fin) {
-          query = query.lte('fecha', filtroFecha.fin);
+          query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
         }
       }
 
@@ -498,7 +498,7 @@ class pedidosAlmacen {
       // Obtener el total de pedidos para la paginación
       let countQuery = supabase
         .from('pedidos_almacen')
-        .select('*', { count: 'exact', head: true })
+        .select('*', { count: 'estimated', head: true })
         .or(`sucursal_id.eq.${sucuId},sucursal_destino_id.eq.${sucuId}`);
 
       if (estado && estado.trim() !== '') {
@@ -510,13 +510,13 @@ class pedidosAlmacen {
         countQuery = countQuery.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
       }
 
-      // Aplicar filtro de fecha en el conteo también
+      // Aplicar filtro de fecha en el conteo también (incluyendo el día completo en UTC)
       if (filtroFecha) {
         if (filtroFecha.inicio) {
-          countQuery = countQuery.gte('fecha', filtroFecha.inicio);
+          countQuery = countQuery.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
         }
         if (filtroFecha.fin) {
-          countQuery = countQuery.lte('fecha', filtroFecha.fin);
+          countQuery = countQuery.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
         }
       }
 
@@ -1557,6 +1557,209 @@ class pedidosAlmacen {
         success: false,
         message: error.message
       };
+    }
+  }
+
+  // Crear pedido de golpe (fast) - inserción en lote
+  static async createFast(pedidoData) {
+    try {
+      const { user_id, sucu_id, sucursal_destino_id, observaciones, precio_id, agrupado, productos } = pedidoData;
+
+      if (!sucu_id) throw new Error('ID de la sucursal es requerido');
+      if (!sucursal_destino_id) throw new Error('ID de la sucursal destino es requerido');
+      if (!precio_id) throw new Error('ID del precio es requerido');
+      if (!productos || !Array.isArray(productos) || productos.length === 0) throw new Error('Debe incluir al menos un producto');
+
+      // 1. Incrementar total_pedidos de la sucursal (sucursal_id, la que crea el pedido)
+      const incrementResult = await this.incrementarTotalPedidosSucursal(sucu_id);
+      if (!incrementResult.success) throw new Error(`Error al incrementar contador de pedidos: ${incrementResult.message}`);
+
+      // 2. Obtener el numero_pedido actualizado
+      const { data: sucursalActualizada, error: sucursalError } = await supabase
+        .from('sucursales')
+        .select('total_pedidos')
+        .eq('id', sucu_id)
+        .single();
+
+      if (sucursalError) throw new Error(`Error obteniendo total_pedidos: ${sucursalError.message}`);
+      const numeroPedido = sucursalActualizada?.total_pedidos || 0;
+
+      // 3. Generar código PA-XXNNNNN
+      const genAlfanumerico = () => {
+        const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+        const nums = '0123456789';
+        const l = () => letras[Math.floor(Math.random() * letras.length)];
+        const n = () => nums[Math.floor(Math.random() * nums.length)];
+        return `${l()}${l()}${n()}${n()}${n()}`;
+      };
+      const codigoPedido = `PA-${genAlfanumerico()}`;
+
+      const fechaISO = new Date().toISOString();
+
+      // 4. Insertar pedido principal
+      const insertData = {
+        sucursal_id: sucu_id,
+        sucursal_destino_id,
+        precio_id,
+        observaciones: observaciones || null,
+        fecha: fechaISO,
+        estado: 'Pendiente',
+        agrupado: !!agrupado,
+        numero_pedido: numeroPedido,
+        codigo: codigoPedido
+      };
+
+      if (user_id) insertData.user_id = user_id;
+
+      const { data: pedido, error: pedidoError } = await supabase
+        .from('pedidos_almacen')
+        .insert(insertData)
+        .select('id')
+        .single();
+
+      if (pedidoError) throw new Error(`Error al crear el pedido: ${pedidoError.message}`);
+
+      // 5. Insertar detalles en lote
+      const detalles = productos.map(producto => ({
+        pedido_almacen_id: pedido.id,
+        producto_almacen_id: producto.id,
+        cantidad: Number(producto.cantidad),
+        precio: Number(producto.precio) || 0
+      }));
+
+      const { error: detallesError } = await supabase
+        .from('pedido_almacen_detalle')
+        .insert(detalles);
+
+      if (detallesError) {
+        await supabase.from('pedidos_almacen').delete().eq('id', pedido.id);
+        throw new Error(`Error al crear los detalles del pedido: ${detallesError.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Pedido creado exitosamente',
+        data: {
+          id: pedido.id,
+          codigo: codigoPedido,
+          numero_pedido: numeroPedido,
+          estado: 'Pendiente',
+          fecha: fechaISO
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacen.createFast:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Actualizar pedido de golpe (fast) - inserción en lote de detalles
+  static async updateFast(pedidoId, { observaciones, precio_id, sucursal_destino_id, agrupado, productos }) {
+    try {
+      if (!pedidoId) throw new Error('ID del pedido es requerido');
+      if (!precio_id) throw new Error('ID del precio es requerido');
+      if (!sucursal_destino_id) throw new Error('ID de la sucursal destino es requerido');
+      if (!productos || !Array.isArray(productos) || productos.length === 0) throw new Error('Debe incluir al menos un producto');
+
+      // 1. Actualizar el pedido principal
+      const { error: pedidoError } = await supabase
+        .from('pedidos_almacen')
+        .update({
+          observaciones: observaciones || null,
+          precio_id,
+          sucursal_destino_id,
+          agrupado: !!agrupado
+        })
+        .eq('id', pedidoId);
+
+      if (pedidoError) throw new Error(`Error al actualizar el pedido: ${pedidoError.message}`);
+
+      // 2. Eliminar detalles anteriores
+      const { error: deleteDetallesError } = await supabase
+        .from('pedido_almacen_detalle')
+        .delete()
+        .eq('pedido_almacen_id', pedidoId);
+
+      if (deleteDetallesError) throw new Error(`Error al eliminar detalles antiguos: ${deleteDetallesError.message}`);
+
+      // 3. Insertar nuevos detalles en lote
+      const detalles = productos.map(producto => ({
+        pedido_almacen_id: pedidoId,
+        producto_almacen_id: producto.id,
+        cantidad: Number(producto.cantidad),
+        precio: Number(producto.precio) || 0
+      }));
+
+      const { error: insertDetallesError } = await supabase
+        .from('pedido_almacen_detalle')
+        .insert(detalles);
+
+      if (insertDetallesError) {
+        throw new Error(`Error al crear los nuevos detalles del pedido: ${insertDetallesError.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Pedido actualizado exitosamente',
+        data: { id: pedidoId }
+      };
+
+    } catch (error) {
+      console.error('Error en pedidosAlmacen.updateFast:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Obtener resumen del mes actual y del anterior para la sucursal
+  static async getResumenMensual(sucuId) {
+    try {
+      if (!sucuId) throw new Error('ID de la sucursal es requerido');
+
+      const ahora = new Date();
+      const y = ahora.getFullYear();
+      const m = ahora.getMonth(); // 0-11
+
+      const startActual = `${y}-${String(m + 1).padStart(2, '0')}-01T00:00:00.000-04:00`;
+      
+      let yPrev = y;
+      let mPrev = m - 1;
+      if (mPrev < 0) {
+        mPrev = 11;
+        yPrev = y - 1;
+      }
+      const startPrev = `${yPrev}-${String(mPrev + 1).padStart(2, '0')}-01T00:00:00.000-04:00`;
+      const endPrev = `${yPrev}-${String(mPrev + 1).padStart(2, '0')}-${String(new Date(yPrev, mPrev + 1, 0).getDate()).padStart(2, '0')}T23:59:59.999-04:00`;
+
+      // Consultar pedidos del mes actual
+      const { count: countActual, error: errorActual } = await supabase
+        .from('pedidos_almacen')
+        .select('*', { count: 'exact', head: true })
+        .or(`sucursal_id.eq.${sucuId},sucursal_destino_id.eq.${sucuId}`)
+        .gte('fecha', startActual);
+
+      if (errorActual) throw errorActual;
+
+      // Consultar pedidos del mes anterior
+      const { count: countPrev, error: errorPrev } = await supabase
+        .from('pedidos_almacen')
+        .select('*', { count: 'exact', head: true })
+        .or(`sucursal_id.eq.${sucuId},sucursal_destino_id.eq.${sucuId}`)
+        .gte('fecha', startPrev)
+        .lte('fecha', endPrev);
+
+      if (errorPrev) throw errorPrev;
+
+      return {
+        success: true,
+        data: {
+          mesActual: countActual || 0,
+          mesAnterior: countPrev || 0
+        }
+      };
+    } catch (error) {
+      console.error('Error en pedidosAlmacen.getResumenMensual:', error);
+      return { success: false, message: error.message };
     }
   }
 }

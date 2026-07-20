@@ -77,10 +77,12 @@ class registrosProduccionDamabrava {
             const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
 
             // VALIDAR Y RESTAR INGREDIENTES ANTES de crear el registro
+            console.log("==> Model.create: ", { producto_almacen_id, terminados, empresa_id });
             if (empresa_id) {
                 try {
                     // Obtener el producto con sus recetas
                     const producto = await productsAlmacen.getById(producto_almacen_id, empresa_id);
+                    console.log("==> Model.create producto obtenido: ", producto ? producto.name : 'null', "recetas:", producto?.recetas?.length);
                     
                     if (producto && producto.recetas && producto.recetas.length > 0) {
                         const receta = producto.recetas[0];
@@ -88,6 +90,7 @@ class registrosProduccionDamabrava {
                         if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
 
                             // Usar la función existente de movimientosAlmacen
+                            console.log("==> Model.create llamando a restarIngredientes...");
                             const resultadoIngredientes = await movimientosAlmacen.restarIngredientes(
                                 producto,
                                 parseFloat(terminados),
@@ -95,6 +98,7 @@ class registrosProduccionDamabrava {
                                 empresa_id
                             );
                             
+                            console.log("==> Model.create resultado restarIngredientes: ", resultadoIngredientes);
                             
                             // Si la validación falla, retornar error sin crear el registro
                             if (!resultadoIngredientes.success) {
@@ -106,16 +110,20 @@ class registrosProduccionDamabrava {
                             }
                             
                         } else {
+                            console.log("==> Model.create: la receta no tiene detalles.");
                         }
                     } else {
+                        console.log("==> Model.create: el producto no tiene recetas.");
                     }
                 } catch (error) {
+                    console.error("==> Model.create error en validacion stock: ", error);
                     return {
                         success: false,
                         message: 'Error al validar el stock de ingredientes: ' + error.message
                     };
                 }
             } else {
+                console.log("==> Model.create: empresa_id es NULL, omitiendo validacion y resta.");
             }
 
             // Preparar datos para insertar
@@ -150,7 +158,8 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
-                        description
+                        description,
+                        grup
                     ),
                     sucursal:sucursal_id(
                         id,
@@ -239,7 +248,6 @@ class registrosProduccionDamabrava {
         try {
             const offset = (page - 1) * limit;
 
-            // Si hay búsqueda, obtener todos los registros primero para filtrar
             let query = supabase
                 .from('registros_produccion_damabrava')
                 .select(`
@@ -247,7 +255,8 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
-                        description
+                        description,
+                        grup
                     ),
                     sucursal:sucursal_id(
                         id,
@@ -263,14 +272,46 @@ class registrosProduccionDamabrava {
                         first_name,
                         last_name
                     )
-                `, { count: 'exact' });
+                `, { count: 'estimated' });
 
-            // Aplicar filtro de estado si se proporciona
+            // Filtro de búsqueda optimizado por Supabase
+            if (search && search.trim() !== '') {
+                const term = `%${search.trim()}%`;
+                
+                // 1. Buscar coincidencias en productos
+                const { data: prodMatches } = await supabase.from('products_almacen').select('id').ilike('name', term);
+                const prodIds = (prodMatches || []).map(p => p.id);
+                
+                // 2. Buscar coincidencias en users
+                const { data: userMatches } = await supabase.from('users').select('id').or(`first_name.ilike.${term},last_name.ilike.${term}`);
+                const userIds = (userMatches || []).map(u => u.id);
+                
+                // 3. Buscar coincidencias en personal
+                const { data: persMatches } = await supabase.from('personal').select('id').or(`first_name.ilike.${term},last_name.ilike.${term}`);
+                const persIds = (persMatches || []).map(p => p.id);
+
+                const orConditions = [];
+                if (prodIds.length > 0) orConditions.push(`producto_almacen_id.in.(${prodIds.join(',')})`);
+                if (userIds.length > 0) orConditions.push(`user_id.in.(${userIds.join(',')})`);
+                if (persIds.length > 0) orConditions.push(`personal_id.in.(${persIds.join(',')})`);
+                
+                // 4. Si el término de búsqueda es número, buscar en lote
+                if (!isNaN(search)) {
+                    orConditions.push(`lote.eq.${search}`);
+                }
+
+                if (orConditions.length > 0) {
+                    query = query.or(orConditions.join(','));
+                } else {
+                    // Si no hay coincidencias directas en tablas relacionadas, devolver array vacío sin consultar
+                    return { success: true, data: [], pagination: { total: 0, page, limit, hasNextPage: false } };
+                }
+            }
+
             if (estado) {
                 query = query.eq('estado', estado);
             }
 
-            // Aplicar filtro de responsable si se proporciona
             if (responsableId && responsableTipo) {
                 if (responsableTipo === 'personal') {
                     query = query.eq('personal_id', responsableId);
@@ -279,130 +320,47 @@ class registrosProduccionDamabrava {
                 }
             }
 
-            if (fechaInicio) {
-                query = query.gte('fecha', fechaInicio);
-            }
+            if (fechaInicio) query = query.gte('fecha', `${fechaInicio}T00:00:00.000Z`);
+            if (fechaFin) query = query.lte('fecha', `${fechaFin}T23:59:59.999Z`);
 
-            if (fechaFin) {
-                query = query.lte('fecha', fechaFin);
-            }
-
-            // Aplicar ordenamiento
             const ascending = ordenamiento === 'fecha_asc';
             query = query.order('fecha', { ascending });
 
-            // Si hay búsqueda, obtener todos los registros para filtrar
-            let allRegistros, totalCount;
-            if (search && search.trim()) {
-                const { data: allData, error: allError, count } = await query;
-                
-                if (allError) {
-                    return { success: false, message: 'Error al obtener registros de producción', error: allError };
-                }
+            // Ejecutar consulta con paginación
+            const { data: registros, error, count } = await query.range(offset, offset + limit - 1);
 
-                allRegistros = allData || [];
-                totalCount = count || 0;
-            } else {
-                // Sin búsqueda, usar paginación normal
-                const { data: registros, error, count } = await query.range(offset, offset + limit - 1);
-                
-                if (error) {
-                    return { success: false, message: 'Error al obtener registros de producción', error };
-                }
-
-                allRegistros = registros || [];
-                totalCount = count || 0;
+            if (error) {
+                return { success: false, message: 'Error al obtener registros de producción', error };
             }
 
-            // Si no hay registros, retornar array vacío
-            if (!allRegistros || allRegistros.length === 0) {
+            if (!registros || registros.length === 0) {
                 return {
                     success: true,
                     data: [],
-                    pagination: {
-                        total: totalCount,
-                        page,
-                        limit,
-                        hasNextPage: false
-                    }
+                    pagination: { total: count || 0, page, limit, hasNextPage: false }
                 };
             }
 
-            // Procesar datos de usuario/personal (ya vienen en la consulta)
-            const registrosConUsuarios = allRegistros.map(registro => {
-                let user = null;
-                let personal = null;
+            // Procesar usuarios y personal
+            const registrosConUsuarios = registros.map(registro => ({
+                ...registro,
+                user: registro.user ? { id: registro.user.id, name: `${registro.user.first_name} ${registro.user.last_name}`.trim() } : null,
+                personal: registro.personal ? { id: registro.personal.id, name: `${registro.personal.first_name} ${registro.personal.last_name}`.trim() } : null
+            }));
 
-                // Procesar usuario si existe
-                if (registro.user) {
-                    user = {
-                        id: registro.user.id,
-                        name: `${registro.user.first_name} ${registro.user.last_name}`.trim()
-                    };
-                }
-
-                // Procesar personal si existe
-                if (registro.personal) {
-                    personal = {
-                        id: registro.personal.id,
-                        name: `${registro.personal.first_name} ${registro.personal.last_name}`.trim()
-                    };
-                }
-
-                return {
-                    ...registro,
-                    user,
-                    personal
-                };
-            });
-
-            const registrosConProducto = await enrichRegistrosConProducto(registrosConUsuarios);
-
-            // Aplicar búsqueda por texto si se proporciona
-            let registrosFiltrados = registrosConProducto;
-            let totalFiltrados = totalCount;
-            let hasNextPage = page < Math.ceil(totalCount / limit);
-
-            if (search && search.trim()) {
-                const normalizedSearchTerm = normalizeText(search);
-                
-                // Filtrar todos los registros
-                registrosFiltrados = registrosConProducto.filter(registro => {
-                    // Buscar en nombre del producto
-                    const nombreProducto = normalizeText(registro.producto_almacen?.name || '');
-                    
-                    // Buscar en nombre del responsable (usuario o personal)
-                    const nombreResponsable = normalizeText(registro.user?.name || registro.personal?.name || '');
-                    
-                    // Buscar en lote (convertir a string)
-                    const lote = normalizeText(String(registro.lote || ''));
-                    
-                    return nombreProducto.includes(normalizedSearchTerm) || 
-                           nombreResponsable.includes(normalizedSearchTerm) || 
-                           lote.includes(normalizedSearchTerm);
-                });
-
-                // Calcular paginación para resultados filtrados
-                totalFiltrados = registrosFiltrados.length;
-                hasNextPage = page < Math.ceil(totalFiltrados / limit);
-
-                // Aplicar paginación a los resultados filtrados
-                const startIndex = offset;
-                const endIndex = offset + limit;
-                registrosFiltrados = registrosFiltrados.slice(startIndex, endIndex);
-            }
+            // Enriquecer registros con recetas del producto para cálculos de pago
+            const registrosEnriquecidos = await enrichRegistrosConProducto(registrosConUsuarios);
 
             return {
                 success: true,
-                data: registrosFiltrados,
+                data: registrosEnriquecidos,
                 pagination: {
-                    total: totalFiltrados,
+                    total: count,
                     page,
                     limit,
-                    hasNextPage: hasNextPage
+                    hasNextPage: count > offset + limit
                 }
             };
-
         } catch (error) {
             return { success: false, message: 'Error interno del servidor', error };
         }
@@ -422,7 +380,8 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
-                        description
+                        description,
+                        grup
                     ),
                     sucursal:sucursal_id(
                         id,
@@ -501,6 +460,7 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
+                        grup,
                         recetas(
                             id,
                             descripcion,
@@ -594,6 +554,7 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
+                        grup,
                         recetas(
                             id,
                             descripcion,
@@ -719,7 +680,8 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
-                        description
+                        description,
+                        grup
                     ),
                     sucursal:sucursal_id(
                         id,
@@ -805,6 +767,7 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
+                        grup,
                         recetas(
                             id,
                             descripcion,
@@ -939,7 +902,8 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
-                        description
+                        description,
+                        grup
                     ),
                     sucursal:sucursal_id(
                         id,
@@ -1054,7 +1018,8 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
-                        description
+                        description,
+                        grup
                     ),
                     sucursal:sucursal_id(
                         id,
@@ -1134,7 +1099,8 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
-                        description
+                        description,
+                        grup
                     ),
                     sucursal:sucursal_id(
                         id,
@@ -1150,7 +1116,7 @@ class registrosProduccionDamabrava {
                         first_name,
                         last_name
                     )
-                `, { count: 'exact' });
+                `, { count: 'estimated' });
 
             // Filtrar por user_id o personal_id según el tipo de usuario
             if (userType === 'employee') {
@@ -1224,7 +1190,8 @@ class registrosProduccionDamabrava {
                 };
             });
 
-            const registrosConProducto = await enrichRegistrosConProducto(registrosConUsuarios);
+            // No enriquecer con recetas completas la lista por razones de rendimiento
+            const registrosConProducto = registrosConUsuarios;
 
             // Aplicar búsqueda por texto si se proporciona
             let registrosFiltrados = registrosConProducto;
@@ -1308,7 +1275,8 @@ class registrosProduccionDamabrava {
                     producto_almacen:producto_almacen_id(
                         id,
                         name,
-                        description
+                        description,
+                        grup
                     ),
                     sucursal:sucursal_id(
                         id,

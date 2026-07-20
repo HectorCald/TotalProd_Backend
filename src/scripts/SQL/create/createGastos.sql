@@ -10,6 +10,7 @@ CREATE TABLE gastos (
     personal_id UUID NULL,
     sucu_id UUID NULL,
     movimiento_entrada_id UUID NULL,
+    movimiento_acopio_entrada_id UUID NULL,
     CONSTRAINT gastos_proveedor_id_fkey 
         FOREIGN KEY (proveedor_id) REFERENCES proveedores (id) ON DELETE SET NULL,
     CONSTRAINT gastos_user_id_fkey 
@@ -17,6 +18,10 @@ CREATE TABLE gastos (
     CONSTRAINT gastos_personal_id_fkey 
         FOREIGN KEY (personal_id) REFERENCES personal (id) ON DELETE SET NULL,
     CONSTRAINT gastos_sucu_id_fkey 
-        FOREIGN KEY (sucu_id) REFERENCES sucursales (id) ON DELETE SET NULL
+        FOREIGN KEY (sucu_id) REFERENCES sucursales (id) ON DELETE SET NULL,
+    CONSTRAINT gastos_movimiento_entrada_id_fkey 
+        FOREIGN KEY (movimiento_entrada_id) REFERENCES movimientos (id) ON DELETE SET NULL,
+    CONSTRAINT gastos_movimiento_acopio_entrada_id_fkey 
+        FOREIGN KEY (movimiento_acopio_entrada_id) REFERENCES movimientos_acopio (id) ON DELETE SET NULL
 );
 

@@ -507,7 +507,7 @@ class transferenciasAlmacen {
                     sucursal_destino:sucu_destino_id(id, name),
                     precio:prices_types(id, name),
                     cliente:cliente_id(id, name, total_orders)
-                `, { count: 'exact' })
+                `, { count: 'estimated' })
                 .or(`sucu_origen_id.eq.${sucuId},sucu_destino_id.eq.${sucuId}`);
 
             // Aplicar filtro de estado si se proporciona

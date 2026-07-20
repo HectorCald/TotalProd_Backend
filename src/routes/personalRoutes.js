@@ -6,7 +6,7 @@ const { requireModuleAccess } = require('../middleware/moduleAuth');
 const router = express.Router();
 
 // Rutas públicas para empleados (sin autenticación)
-router.get('/validate-employee/:codigo', PersonalController.validateEmployeeCode);
+router.get('/validate-employee/:email', PersonalController.validateEmployeeEmail);
 router.post('/login-employee', PersonalController.loginEmployee);
 router.post('/:id/set-password', PersonalController.setPassword);
 router.post('/:id/change-password', PersonalController.changePassword); // Nueva ruta para cambiar contraseña
@@ -16,8 +16,6 @@ router.use(requireAuth);
 
 // Rutas que requieren autenticación pero NO verificación de módulo
 router.post('/:id/reset-password', PersonalController.resetPassword);
-router.post('/:id/update-location', PersonalController.updateLocation);
-router.get('/:id/location', PersonalController.getLocation);
 
 // Aplicar middleware de acceso al módulo 'Personal' a las rutas restantes
 router.use(requireModuleAccess('Personal'));

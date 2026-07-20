@@ -1,5 +1,7 @@
 const movimientosAlmacen = require('../models/movimientosAlmacen');
 const transferenciasAlmacen = require('../models/transferenciasAlmacen');
+const gastosModel = require('../models/gastos');
+const deudasModel = require('../models/deudas');
 const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
 
 class movimientosAlmacenController {
@@ -17,14 +19,14 @@ class movimientosAlmacenController {
             if (validateSucuId) {
                 const sucuId = req.query.sucu_id || req.headers['x-sucu-id'] || req.body.sucu_id;
                 if (!sucuId) {
-                    return res.status(400).json({ success: false, message: 'ID de la sucursal es requerido' });
+                    return res.status(400).json({ success: false, message: 'El ID de la sucursal es requerido' });
                 }
             }
 
             if (validateId) {
                 const { id } = req.params;
                 if (!id) {
-                    return res.status(400).json({ success: false, message: 'ID del movimiento es requerido' });
+                    return res.status(400).json({ success: false, message: 'El ID del movimiento es requerido' });
                 }
             }
 
@@ -58,7 +60,7 @@ class movimientosAlmacenController {
             return res.status(successStatus).json(result);
         } catch (error) {
             console.error(`Error en ${actionName}:`, error);
-            return res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
+            return res.status(500).json({ success: false, message: 'Ocurrió un error inesperado', error: error.message });
         }
     }
 
@@ -72,7 +74,7 @@ class movimientosAlmacenController {
             const finalUserId = userType === 'employee' ? null : user_id;
             const finalPersonalId = userType === 'employee' ? personal_id : null;
 
-            if (!sucu_id) return res.status(400).json({ success: false, message: 'ID de la sucursal es requerido' });
+            if (!sucu_id) return res.status(400).json({ success: false, message: 'El ID de la sucursal es requerido' });
             if (!type || !['entrada', 'salida'].includes(type)) return res.status(400).json({ success: false, message: 'El tipo de movimiento es obligatorio y debe ser "entrada" o "salida"' });
             if (!productos || !Array.isArray(productos) || productos.length === 0) return res.status(400).json({ success: false, message: 'Debe incluir al menos un producto en el movimiento' });
 
@@ -144,15 +146,35 @@ class movimientosAlmacenController {
 
         } catch (error) {
             console.error('Error en movimientosAlmacenController.create:', error);
-            return res.status(500).json({ success: false, message: 'Error interno del servidor', error: error.message });
+            return res.status(500).json({ success: false, message: 'Ocurrió un error inesperado', error: error.message });
         }
+    }
+
+    // Obtener todos los movimientos sin límite (Optimizado)
+    static async getAllSinLimite(req, res) {
+        const sucu_id = req.headers['x-sucu-id'] || req.query.sucu_id;
+        if (!sucu_id) return res.status(400).json({ success: false, message: 'Sucursal no especificada' });
+        
+        const { tipo, estado, ordenamiento, fecha_inicio, fecha_fin } = req.query;
+        let filtroFecha = null;
+        if (fecha_inicio || fecha_fin) {
+            filtroFecha = { inicio: fecha_inicio, fin: fecha_fin };
+        }
+
+        return movimientosAlmacenController._handleRequest(res, 'getAllSinLimite', req, async () => {
+            return await movimientosAlmacen.getAllSinLimite(sucu_id, tipo, estado, ordenamiento, filtroFecha);
+        });
     }
 
     // Crear movimiento rápido (entrada o salida)
     static async createFast(req, res) {
-        const { type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado, restar_ingredientes } = req.body;
+        const { type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado, restar_ingredientes,
+                adelanto, total_final,
+                registrar_gasto, costo, fecha_gasto } = req.body;
         const sucu_id = req.headers['x-sucu-id'] || req.body.sucu_id;
         const user_id = req.user?.id || null;
+        const personal_id = req.user?.type === 'employee' ? user_id : null;
+        const finalUserId = req.user?.type === 'employee' ? null : user_id;
 
         if (!sucu_id) return res.status(400).json({ success: false, message: 'Sucursal no especificada' });
         if (!type) return res.status(400).json({ success: false, message: 'Tipo de movimiento requerido' });
@@ -161,8 +183,10 @@ class movimientosAlmacenController {
         if (!productos || productos.length === 0) return res.status(400).json({ success: false, message: 'Debe incluir al menos un producto' });
 
         return movimientosAlmacenController._handleRequest(res, 'createFast', req, async () => {
-            return await movimientosAlmacen.createFast({
-                user_id,
+            // ── 1. Crear el movimiento ───────────────────────────────────
+            const movResult = await movimientosAlmacen.createFast({
+                user_id: finalUserId,
+                personal_id,
                 sucu_id,
                 type,
                 metodo_pago,
@@ -177,7 +201,91 @@ class movimientosAlmacenController {
                 agrupado: !!agrupado,
                 restar_ingredientes: !!restar_ingredientes
             });
+
+            if (!movResult.success) return movResult;
+            const movimientoId = movResult.data.id;
+
+            // ── 2. Fecha en zona horaria de Bolivia ────────────────────────
+            const getBoliviaDate = (offsetMonths = 0) => {
+                const d = new Date();
+                if (offsetMonths) d.setMonth(d.getMonth() + offsetMonths);
+                const tz = new Intl.DateTimeFormat('en-US', { timeZone: 'America/La_Paz', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+                return `${tz.find(p => p.type === 'year').value}-${tz.find(p => p.type === 'month').value}-${tz.find(p => p.type === 'day').value}`;
+            };
+
+            // ── 3. Crear deuda automática si es venta a crédito ───────────
+            if (type === 'salida' && metodo_pago?.toLowerCase() === 'credito' && cliente_id) {
+                const { supabase } = require('../config/supabase');
+                const { data: clienteObj } = await supabase.from('clients').select('name').eq('id', cliente_id).single();
+                const montoDeuda = parseFloat(total_final) || 0;
+
+                const deudaResult = await deudasModel.create({
+                    user_id: finalUserId,
+                    personal_id,
+                    sucu_id,
+                    fecha_deuda: getBoliviaDate(),
+                    fecha_vencimiento: getBoliviaDate(1),
+                    monto_total: montoDeuda,
+                    concepto: concepto || `Venta a ${clienteObj?.name || 'Cliente'}`,
+                    cliente_id,
+                    movimiento_salida_id: movimientoId
+                });
+
+                if (deudaResult.success && deudaResult.data?.id) {
+                    const adelantoNum = parseFloat(adelanto) || 0;
+                    if (adelantoNum > 0 && adelantoNum < montoDeuda) {
+                        await deudasModel.createPagoParcial({
+                            deuda_id: deudaResult.data.id,
+                            monto: adelantoNum,
+                            fecha: getBoliviaDate(),
+                            detalle: 'Adelanto al realizar la venta',
+                            user_id: finalUserId,
+                            personal_id
+                        });
+                    }
+                }
+            }
+
+            // ── 4. Crear gasto automático si es entrada con pago ──────────
+            if (type === 'entrada' && registrar_gasto && parseFloat(costo) > 0) {
+                await gastosModel.create({
+                    user_id: finalUserId,
+                    personal_id,
+                    sucu_id,
+                    fecha_gasto: fecha_gasto || getBoliviaDate(),
+                    valor: parseFloat(costo),
+                    concepto: concepto?.trim() || 'Pago de Entrada de Productos',
+                    metodo_pago: (metodo_pago || 'efectivo').toLowerCase(),
+                    proveedor_id: proveedor_id || null,
+                    movimiento_entrada_id: movimientoId
+                });
+            }
+
+            return movResult;
         }, { successStatus: 201, passRawResult: true });
+    }
+    // Obtener relaciones de un movimiento (gastos, pedidos, deudas)
+    static async getRelations(req, res) {
+        return movimientosAlmacenController._handleRequest(res, 'getRelations', req, async () => {
+            const { id } = req.params;
+            const { sucu_id } = req.query;
+            return await movimientosAlmacen.getRelations(id, sucu_id);
+        }, { validateId: true, passRawResult: true });
+    }
+
+    // Obtener todos los movimientos sin límite
+    static async getAllSinLimite(req, res) {
+        return movimientosAlmacenController._handleRequest(res, 'getAllSinLimite', req, async () => {
+            const sucu_id = req.query.sucu_id;
+            const tipo = req.query.tipo || null;
+            const estado = req.query.estado || null;
+            const ordenamiento = req.query.ordenamiento || 'fecha_desc';
+            const filtroFecha = (req.query.fecha_inicio || req.query.fecha_fin)
+                ? { inicio: req.query.fecha_inicio || null, fin: req.query.fecha_fin || null }
+                : null;
+
+            return await movimientosAlmacen.getAllSinLimite(sucu_id, tipo, estado, ordenamiento, filtroFecha);
+        }, { validateSucuId: true, passRawResult: true });
     }
 
     // Obtener todos los movimientos de la sucursal
@@ -195,51 +303,13 @@ class movimientosAlmacenController {
                 ? { inicio: req.query.fecha_inicio || null, fin: req.query.fecha_fin || null }
                 : null;
 
-            const bufferLimit = 99999;
-
-            let resultMovimientos = { success: true, data: [], pagination: { total: 0 } };
-            let totalMovimientos = 0;
-            if (tipo !== 'transferencia') {
-                resultMovimientos = await movimientosAlmacen.getAll(sucu_id, 1, bufferLimit, tipo, estado, ordenamiento, search, cliente, filtroFecha);
-                if (!resultMovimientos.success) throw new Error(resultMovimientos.message);
-                totalMovimientos = resultMovimientos.pagination?.total || resultMovimientos.data?.length || 0;
-            }
-
-            let transferencias = [];
-            let totalTransferencias = 0;
-            if (!tipo || tipo === 'transferencia') {
-                const estadoT = estado === 'finalizado' ? 'Finalizado' : estado === 'anulado' ? 'Anulado' : null;
-                const resultT = await transferenciasAlmacen.getAll(sucu_id, 1, bufferLimit, estadoT, ordenamiento, search, filtroFecha, cliente || null);
-                if (resultT.success && resultT.data) {
-                    totalTransferencias = resultT.pagination?.total || resultT.data?.length || 0;
-                    transferencias = resultT.data.map(t => ({
-                        id: t.id, type: 'transferencia', fecha: t.fecha,
-                        estado: t.estado === 'Anulado' ? 'anulado' : 'finalizado',
-                        concepto: t.concepto || `${t.sucursal_origen?.name || 'Origen'} > ${t.sucursal_destino?.name || 'Destino'}`,
-                        sucu_id: t.sucu_origen_id, sucu_origen_id: t.sucu_origen_id, sucu_destino_id: t.sucu_destino_id,
-                        sucursal: t.sucursal_origen, sucursal_origen: t.sucursal_origen, sucursal_destino: t.sucursal_destino,
-                        precio: t.precio, precio_id: t.precio_id, agrupado: t.agrupado,
-                        productos: t.productos || [], user: t.user, personal: t.personal,
-                        cliente: t.cliente || null, cliente_id: t.cliente_id || null,
-                        descuento: 0, aumento: 0, numero_orden: null, metodo_pago: null, proveedor: null
-                    }));
-                }
-            }
-
-            const allData = [...(resultMovimientos.data || []), ...transferencias];
-            allData.sort((a, b) => {
-                const diff = new Date(a.fecha) - new Date(b.fecha);
-                return ordenamiento === 'fecha_asc' ? diff : -diff;
-            });
-
-            const totalCombinado = search ? allData.length : (totalMovimientos + totalTransferencias);
-            const startIndex = (page - 1) * limit;
-            const paginatedData = allData.slice(startIndex, startIndex + limit);
+            const resultMovimientos = await movimientosAlmacen.getAll(sucu_id, page, limit, tipo, estado, ordenamiento, search, cliente, filtroFecha);
+            if (!resultMovimientos.success) throw new Error(resultMovimientos.message);
 
             return {
                 success: true,
-                data: paginatedData,
-                pagination: { total: totalCombinado, page, limit, hasNextPage: (startIndex + limit) < totalCombinado }
+                data: resultMovimientos.data,
+                pagination: resultMovimientos.pagination
             };
         }, { validateSucuId: true, passRawResult: true });
     }
@@ -248,6 +318,13 @@ class movimientosAlmacenController {
     static async getStatsForCharts(req, res) {
         return movimientosAlmacenController._handleRequest(res, 'getStatsForCharts', req, async () => {
             return await movimientosAlmacen.getStatsForCharts(req.query.sucu_id);
+        }, { validateSucuId: true, passRawResult: true });
+    }
+
+    // Obtener categorías más vendidas del mes
+    static async getCategoriasMasVendidas(req, res) {
+        return movimientosAlmacenController._handleRequest(res, 'getCategoriasMasVendidas', req, async () => {
+            return await movimientosAlmacen.getCategoriasMasVendidas(req.query.sucu_id);
         }, { validateSucuId: true, passRawResult: true });
     }
 
@@ -299,31 +376,94 @@ class movimientosAlmacenController {
     static async anularFast(req, res) {
         return movimientosAlmacenController._handleRequest(res, 'anularFast', req, async () => {
             const { id } = req.params;
+            const supabase = require('../config/supabase').supabase;
 
-            // Verificar si tiene deudas asociadas
-            const { data: deudasRelacionadas, error: deudasError } = await require('../config/supabase').supabase
+            // ── 1. Verificar pedidos_almacen asociados (bloquear o manejar) ─────────────
+            const { data: pedidoAlmacen } = await supabase
+                .from('pedidos_almacen')
+                .select('id, movimiento_salida_id, movimiento_entrada_id, estado')
+                .or(`movimiento_salida_id.eq.${id},movimiento_entrada_id.eq.${id}`)
+                .limit(1)
+                .maybeSingle();
+
+            if (pedidoAlmacen) {
+                if (pedidoAlmacen.estado === 'Completado' || pedidoAlmacen.estado === 'Finalizado') {
+                    return { success: false, message: 'No es posible anular ya que el pedido asociado está completado.' };
+                }
+                
+                if (pedidoAlmacen.estado === 'Entregado' || pedidoAlmacen.estado === 'Pendiente') {
+                    // Llamar a actualizar estado a Pendiente en lugar de fallar
+                    // Esto limpia los campos de movimiento_salida_id, movimiento_entrada_id y deuda_id
+                    const pedidosAlmacenController = require('./pedidosAlmacenController');
+                    await require('../models/pedidosAlmacen').updateEstado(pedidoAlmacen.id, 'Pendiente');
+                }
+            }
+
+            // ── 2. Verificar pedidos_acopio asociados (entrada) ───────────────
+            const { data: pedidoAcopio } = await supabase
+                .from('pedidos_acopio')
+                .select('id, estado, gasto_id, gasto_otros_id')
+                .eq('movimiento_entrada_id', id)
+                .limit(1)
+                .maybeSingle();
+
+            if (pedidoAcopio) {
+                if (pedidoAcopio.estado === 'Finalizado') {
+                    return { success: false, message: 'No es posible anular: el pedido de acopio asociado está Finalizado.' };
+                }
+                if (pedidoAcopio.estado === 'Entregado') {
+                    // Anular entrega del pedido: limpiar campos y eliminar gastos
+                    await supabase
+                        .from('pedidos_acopio')
+                        .update({
+                            estado: 'Pendiente',
+                            fecha_entregado: null,
+                            entregado_por: null,
+                            cantidad_entregada: null,
+                            cantidad_entregada_ud: null,
+                            estado_entrega: null,
+                            observaciones_entrega: null,
+                            movimiento_entrada_id: null,
+                            gasto_id: null,
+                            gasto_otros_id: null
+                        })
+                        .eq('id', pedidoAcopio.id);
+
+                    const gastosModel = require('../models/gastos');
+                    if (pedidoAcopio.gasto_otros_id) await gastosModel.delete(pedidoAcopio.gasto_otros_id);
+                    if (pedidoAcopio.gasto_id) await gastosModel.delete(pedidoAcopio.gasto_id);
+                }
+            }
+
+            // ── 3. Eliminar deudas asociadas automáticamente ──────────────────
+            const { data: deudasRelacionadas } = await supabase
                 .from('deudas')
                 .select('id')
-                .or(`movimiento_salida_id.eq.${id}`)
-                .limit(1)
-                .maybeSingle();
+                .eq('movimiento_salida_id', id);
 
-            if (deudasRelacionadas) {
-                return { success: false, message: 'El movimiento tiene deudas asociadas. Primero debe eliminar las deudas correspondientes.' };
+            if (deudasRelacionadas && deudasRelacionadas.length > 0) {
+                const deudasModel = require('../models/deudas');
+                for (const deuda of deudasRelacionadas) {
+                    // Eliminar pagos parciales primero
+                    await supabase.from('deuda_pagos_parciales').delete().eq('deuda_id', deuda.id);
+                    await deudasModel.delete(deuda.id);
+                }
             }
 
-            // Verificar si tiene pagos (gastos) asociados
-            const { data: gastosRelacionados, error: gastosError } = await require('../config/supabase').supabase
+            // ── 4. Eliminar gastos asociados automáticamente ──────────────────
+            const { data: gastosRelacionados } = await supabase
                 .from('gastos')
                 .select('id')
-                .or(`movimiento_entrada_id.eq.${id}`)
-                .limit(1)
-                .maybeSingle();
+                .eq('movimiento_entrada_id', id);
 
-            if (gastosRelacionados) {
-                return { success: false, message: 'El movimiento tiene un pago registrado asociado. Primero debe eliminar el pago correspondiente.' };
+            if (gastosRelacionados && gastosRelacionados.length > 0) {
+                const gastosModel = require('../models/gastos');
+                for (const gasto of gastosRelacionados) {
+                    await gastosModel.delete(gasto.id);
+                }
             }
 
+            // ── 5. Anular el movimiento ────────────────────────────────────────
             const result = await movimientosAlmacen.anularFast(id);
             if (!result.success) throw new Error(result.message);
             return { success: true, message: 'Movimiento anulado correctamente', data: result.data };
@@ -333,7 +473,26 @@ class movimientosAlmacenController {
     // Eliminar movimiento
     static async eliminar(req, res) {
         return movimientosAlmacenController._handleRequest(res, 'eliminar', req, async () => {
-            const result = await movimientosAlmacen.eliminar(req.params.id);
+            const { id } = req.params;
+
+            // Verificar si el movimiento está asociado a un pedido
+            const { data: pedidoRelacionado, error: pedidoError } = await require('../config/supabase').supabase
+                .from('pedidos_almacen')
+                .select('id, movimiento_salida_id, movimiento_entrada_id')
+                .or(`movimiento_salida_id.eq.${id},movimiento_entrada_id.eq.${id}`)
+                .limit(1)
+                .maybeSingle();
+
+            if (pedidoRelacionado) {
+                if (pedidoRelacionado.movimiento_salida_id == id) {
+                    return { success: false, message: 'El movimiento está asociado a un pedido. Debe cancelar la entrega del pedido.' };
+                }
+                if (pedidoRelacionado.movimiento_entrada_id == id) {
+                    return { success: false, message: 'El movimiento está asociado a un pedido. Debe cancelar el ingreso del pedido.' };
+                }
+            }
+
+            const result = await movimientosAlmacen.eliminar(id);
             if (!result.success) throw new Error(result.message);
             return { success: true, message: 'Movimiento eliminado correctamente' };
         }, { validateId: true, checkPermission: 'delete', passRawResult: true });

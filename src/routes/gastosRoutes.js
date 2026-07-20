@@ -12,6 +12,7 @@ router.use(requireAuth);
 router.use(requireModuleAccess('Gastos'));
 
 // Rutas para los gastos
+router.get('/sin-limite', gastosController.getAllSinLimite);
 router.get('/', gastosController.getAll);
 router.get('/por-fechas', gastosController.getByDateRange);
 router.get('/:id', gastosController.getById);

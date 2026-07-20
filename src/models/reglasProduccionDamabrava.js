@@ -95,9 +95,9 @@ class reglasProduccionDamabrava {
                         id,
                         name
                     )
-                `)
-                .eq('empresa_id', empresaId)
-                .order('fecha', { ascending: false });
+                `);
+
+
 
             if (error) {
                 return {

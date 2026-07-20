@@ -32,7 +32,7 @@ class comentarios {
           // Obtener conteo de apoyos para este comentario
           const { count, error: apoyosError } = await supabase
             .from('comentarios_apoyos')
-            .select('*', { count: 'exact', head: true })
+            .select('*', { count: 'estimated', head: true })
             .eq('comentario_id', comentario.id);
 
           if (apoyosError) {
@@ -192,7 +192,7 @@ class comentarios {
 
       let query = supabase
         .from('comentarios')
-        .select('id', { count: 'exact', head: true })
+        .select('id', { count: 'estimated', head: true })
         .gte('created_at', inicioDia.toISOString())
         .lt('created_at', finDia.toISOString());
 

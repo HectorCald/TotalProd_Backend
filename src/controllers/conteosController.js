@@ -30,7 +30,7 @@ class ConteosController {
         if (!sucuId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la sucursal es requerido'
+            message: 'El ID de la sucursal es requerido'
           });
         }
         if (req.query) req.query.sucu_id = sucuId;
@@ -45,7 +45,7 @@ class ConteosController {
         if (!empresaId) {
           return res.status(400).json({
             success: false,
-            message: 'ID de la empresa es requerido'
+            message: 'El ID de la empresa es requerido'
           });
         }
         if (req.query) req.query.empresa_id = empresaId;
@@ -57,7 +57,7 @@ class ConteosController {
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'ID del conteo es requerido'
+            message: 'El ID del conteo es requerido'
           });
         }
       }
@@ -98,7 +98,7 @@ class ConteosController {
       console.error(`[CONTEO CONTROLLER] Error en ConteosController.${actionName}:`, error);
       return res.status(500).json({
         success: false,
-        message: 'Error interno del servidor',
+        message: 'Ocurrió un error inesperado',
         error: error.message
       });
     }
@@ -168,7 +168,6 @@ class ConteosController {
       return await ConteosModel.replaceStock(id);
     }, {
       validateConteoId: true,
-      validateEmpresaId: true,
       checkPermission: 'replace'
     });
   }
@@ -179,7 +178,6 @@ class ConteosController {
       return await ConteosModel.replaceStockAcopio(id);
     }, {
       validateConteoId: true,
-      validateEmpresaId: true,
       checkPermission: 'replace_acopio'
     });
   }

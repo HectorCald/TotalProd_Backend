@@ -8,6 +8,13 @@ const requireModuleAccess = (moduleName) => {
       // Obtener el empresa_id del localStorage (enviado desde el frontend)
       let empresaId = req.body.empresa_id || req.query.empresa_id || req.params.empresaId;
       
+      // Si llega un array (por query params duplicados) o un string separado por comas, tomar el primero
+      if (Array.isArray(empresaId)) {
+        empresaId = empresaId[0];
+      } else if (typeof empresaId === 'string' && empresaId.includes(',')) {
+        empresaId = empresaId.split(',')[0];
+      }
+      
       // Si no hay empresa_id pero la URL contiene /empresa/, extraer el ID de la URL
       if (!empresaId && req.url.includes('/empresa/')) {
         const match = req.url.match(/\/empresa\/([^\/\?]+)/);

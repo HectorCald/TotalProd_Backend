@@ -376,7 +376,7 @@ class cotizaciones {
 
             let query = supabase
                 .from('cotizaciones')
-                .select(COTIZACION_SELECT, { count: 'exact' })
+                .select(COTIZACION_SELECT, { count: 'estimated' })
                 .eq('sucu_id', sucuId);
 
             if (estado) {
@@ -388,11 +388,11 @@ class cotizaciones {
             }
 
             if (filtroFecha?.inicio) {
-                query = query.gte('fecha', filtroFecha.inicio);
+                query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
             }
 
             if (filtroFecha?.fin) {
-                query = query.lte('fecha', filtroFecha.fin);
+                query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
             }
 
             if (searchTerm) {
