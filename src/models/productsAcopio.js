@@ -601,6 +601,42 @@ class productsAcopio {
   }
 
   
+  // Método ligero para selector de recetas (sin paginación, solo campos esenciales)
+  static async getAllForReceta(empresaId) {
+    try {
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
+      }
+
+      const { data, error } = await supabase
+        .from('products_acopio')
+        .select(`
+          id,
+          name,
+          type_measure:type_measure_id (
+            id,
+            name,
+            code,
+            code_menor,
+            value
+          )
+        `)
+        .eq('empresa_id', empresaId)
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Error de Supabase en getAllForReceta:', error);
+        throw new Error('No se pudo obtener los productos para receta');
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error al obtener productos para receta:', error);
+      throw error;
+    }
+  }
+
+  
 }
 
 module.exports = productsAcopio;

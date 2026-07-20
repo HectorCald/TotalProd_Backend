@@ -144,6 +144,22 @@ class productsAcopioController {
     });
   }
 
+  // Obtener todos los productos para selector de receta (sin paginación)
+  static async getProductsForReceta(req, res) {
+    return productsAcopioController._handleRequest(res, 'getProductsForReceta', req, async () => {
+      const empresaId = req.query.empresa_id;
+      const products = await productsAcopio.getAllForReceta(empresaId);
+
+      return {
+        success: true,
+        message: 'Productos para receta obtenidos correctamente',
+        data: products
+      };
+    }, {
+      validateEmpresaId: true
+    });
+  }
+
   // Crear un producto
   static async create(req, res) {
     const { name, description, quantity, type_measure_id, category_id, stock_minimo, receta } = req.body;
