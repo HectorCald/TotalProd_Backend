@@ -349,7 +349,10 @@ class pedidosAlmacenController {
   static async createFast(req, res) {
     const { sucursal_destino_id, observaciones, precio_id, agrupado, productos } = req.body;
     const sucu_id = req.headers['x-sucu-id'] || req.body.sucu_id;
-    const user_id = req.user?.id || null;
+    const rawUserId = req.user?.id || null;
+    const userType = req.user?.type;
+    const user_id = userType === 'employee' ? null : rawUserId;
+    const personal_id = userType === 'employee' ? rawUserId : null;
 
     if (!sucu_id) return res.status(400).json({ success: false, message: 'Sucursal no especificada' });
     if (!sucursal_destino_id) return res.status(400).json({ success: false, message: 'Sucursal destino requerida' });
@@ -359,6 +362,7 @@ class pedidosAlmacenController {
     return pedidosAlmacenController._handleRequest(res, 'createFast', req, async () => {
       return await pedidosAlmacen.createFast({
         user_id,
+        personal_id,
         sucu_id,
         sucursal_destino_id,
         observaciones: observaciones || null,

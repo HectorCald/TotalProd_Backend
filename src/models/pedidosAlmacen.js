@@ -154,7 +154,7 @@ class pedidosAlmacen {
       if (personalId && personalId !== null) {
         consultasPromises.push(
           supabase
-            .from('personal')
+            .from('staff')
             .select('id, first_name, last_name')
             .eq('id', personalId)
             .single()
@@ -452,7 +452,7 @@ class pedidosAlmacen {
       const personalMap = new Map();
       if (personalIds.length > 0) {
         const { data: personalData } = await supabase
-          .from('personal')
+          .from('staff')
           .select('id, first_name, last_name')
           .in('id', personalIds);
         (personalData || []).forEach(p => {
@@ -672,7 +672,7 @@ class pedidosAlmacen {
       if (personalIds.length > 0) {
         const tPersonalStart = Date.now();
         const { data: personalData } = await supabase
-          .from('personal')
+          .from('staff')
           .select('id, first_name, last_name')
           .in('id', personalIds);
         tPersonalBatchMs = Date.now() - tPersonalStart;
@@ -776,7 +776,7 @@ class pedidosAlmacen {
       // Si tiene personal_id, obtener el personal
       if (pedido.personal_id) {
         const { data: personalData } = await supabase
-          .from('personal')
+          .from('staff')
           .select('id, first_name, last_name')
           .eq('id', pedido.personal_id)
           .single();
@@ -954,7 +954,7 @@ class pedidosAlmacen {
       if (pedidoCompleto.personal_id) {
         consultasPromises.push(
           supabase
-            .from('personal')
+            .from('staff')
             .select('id, first_name, last_name')
             .eq('id', pedidoCompleto.personal_id)
             .single()
@@ -1130,7 +1130,7 @@ class pedidosAlmacen {
       if (pedidoCompleto.personal_id) {
         consultasPromises.push(
           supabase
-            .from('personal')
+            .from('staff')
             .select('id, first_name, last_name')
             .eq('id', pedidoCompleto.personal_id)
             .single()
@@ -1423,7 +1423,7 @@ class pedidosAlmacen {
       // Obtener personal
       if (personalIds.size > 0) {
         const { data: personalData } = await supabase
-          .from('personal')
+          .from('staff')
           .select('id, first_name, last_name')
           .in('id', Array.from(personalIds));
 
@@ -1564,7 +1564,7 @@ class pedidosAlmacen {
   static async createFast(pedidoData) {
     try {
       const sucu_id = pedidoData.branch_id || pedidoData.sucu_id;
-      const { sucursal_destino_id, precio_id, productos, observaciones, agrupado, user_id } = pedidoData;
+      const { sucursal_destino_id, precio_id, productos, observaciones, agrupado, user_id, personal_id } = pedidoData;
 
       if (!sucu_id) throw new Error('ID de la sucursal es requerido');
       if (!sucursal_destino_id) throw new Error('ID de la sucursal destino es requerido');
@@ -1611,6 +1611,7 @@ class pedidosAlmacen {
       };
 
       if (user_id) insertData.user_id = user_id;
+      if (personal_id) insertData.personal_id = personal_id;
 
       const { data: pedido, error: pedidoError } = await supabase
         .from('pedidos_almacen')
