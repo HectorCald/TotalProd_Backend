@@ -1564,6 +1564,7 @@ class pedidosAlmacen {
   static async createFast(pedidoData) {
     try {
       const sucu_id = pedidoData.branch_id || pedidoData.sucu_id;
+      const { sucursal_destino_id, precio_id, productos, observaciones, agrupado, user_id } = pedidoData;
 
       if (!sucu_id) throw new Error('ID de la sucursal es requerido');
       if (!sucursal_destino_id) throw new Error('ID de la sucursal destino es requerido');
