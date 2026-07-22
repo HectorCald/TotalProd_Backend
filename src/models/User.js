@@ -151,7 +151,7 @@ class User {
       };
 
       const { error: sucursalError } = await supabase
-        .from('sucursales')
+        .from('branches')
         .insert([sucursalData]);
 
       if (sucursalError) {
@@ -274,7 +274,7 @@ class User {
             logo_tipo,
             tipo,
             codigo,
-            sucursales (*)
+            branches (*)
           )
         `)
         .eq('id', id)

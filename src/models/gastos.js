@@ -4,7 +4,8 @@ class gastos {
     // Crear un nuevo gasto
     static async create(gastoData) {
         try {
-            const { user_id, personal_id, sucu_id, fecha_gasto, valor, concepto, metodo_pago, proveedor_id, movimiento_entrada_id, movimiento_acopio_entrada_id } = gastoData;
+            const { user_id, personal_id, sucu_id, branch_id, fecha_gasto, valor, concepto, metodo_pago, proveedor_id, movimiento_entrada_id, movimiento_acopio_entrada_id } = gastoData;
+            const targetBranchId = branch_id || sucu_id;
 
             // Usar la fecha proporcionada directamente (formato YYYY-MM-DD)
             let fechaFinal;
@@ -38,8 +39,8 @@ class gastos {
             if (personal_id && personal_id !== null) {
                 dbData.personal_id = personal_id;
             }
-            if (sucu_id && sucu_id !== null) {
-                dbData.sucu_id = sucu_id;
+            if (targetBranchId && targetBranchId !== null) {
+                dbData.sucu_id = targetBranchId;
             }
 
             const { data, error } = await supabase
@@ -150,10 +151,6 @@ class gastos {
                         id,
                         first_name,
                         last_name
-                    ),
-                    sucursal:sucu_id (
-                        id,
-                        name
                     )
                 `, { count: 'estimated' })
                 .eq('sucu_id', sucuId);

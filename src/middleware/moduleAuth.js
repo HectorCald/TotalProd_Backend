@@ -23,21 +23,21 @@ const requireModuleAccess = (moduleName) => {
         }
       }
       
-      // Si no hay empresa_id pero hay sucu_id, obtener empresa_id de la sucursal
-      if (!empresaId && (req.query.sucu_id || req.body.sucu_id)) {
-        const sucuId = req.query.sucu_id || req.body.sucu_id;
+      // Si no hay empresa_id pero hay branch_id o sucu_id, obtener empresa_id de la sucursal / branch
+      const branchId = req.query.branch_id || req.query.sucu_id || req.body.branch_id || req.body.sucu_id;
+      if (!empresaId && branchId) {
         try {
-          const { data: sucursal, error } = await supabase
-            .from('sucursales')
+          const { data: branch, error } = await supabase
+            .from('branches')
             .select('empresa_id')
-            .eq('id', sucuId)
+            .eq('id', branchId)
             .single();
           
-          if (!error && sucursal) {
-            empresaId = sucursal.empresa_id;
+          if (!error && branch) {
+            empresaId = branch.empresa_id;
           }
         } catch (error) {
-          console.error('Error al obtener empresa_id de sucu_id:', error);
+          console.error('Error al obtener empresa_id de branch_id:', error);
         }
       }
             

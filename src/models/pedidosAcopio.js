@@ -236,7 +236,7 @@ class pedidosAcopio {
       const sucursalMap = new Map();
       if (sucursalIds.length > 0) {
         const { data: sucursalesData } = await supabase
-          .from('sucursales')
+          .from('branches')
           .select('id, name')
           .in('id', sucursalIds);
         (sucursalesData || []).forEach(s => {

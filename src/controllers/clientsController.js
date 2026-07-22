@@ -14,7 +14,7 @@ class clientsController {
 
     try {
       if (validateSucuId) {
-        const sucuId = req.query.sucu_id || req.body.sucu_id;
+        const sucuId = req.query.branch_id || req.query.sucu_id || req.body.branch_id || req.body.sucu_id;
         if (!sucuId) {
           return res.status(400).json({
             success: false,
@@ -75,8 +75,8 @@ class clientsController {
   // Obtener todos los clientes de una sucursal
   static async getAll(req, res) {
     return clientsController._handleRequest(res, 'getAll', req, async () => {
-      const sucuId = req.query.sucu_id;
-      return await client.getAll(sucuId);
+      const branchId = req.query.branch_id || req.query.sucu_id;
+      return await client.getAll(branchId);
     }, {
       validateSucuId: true,
       successMessage: 'Clientes obtenidos exitosamente'
@@ -85,7 +85,8 @@ class clientsController {
 
   // Crear un cliente
   static async create(req, res) {
-    const { name, phone, direccion, description, total_orders, location, sucu_id } = req.body;
+    const { name, phone, direccion, description, total_orders, location, sucu_id, branch_id } = req.body;
+    const targetBranchId = branch_id || sucu_id;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -102,7 +103,7 @@ class clientsController {
         description: description?.trim() || null,
         total_orders: total_orders || 0,
         location: location || null
-      }, sucu_id);
+      }, targetBranchId);
     }, {
       validateSucuId: true,
       successStatus: 201,

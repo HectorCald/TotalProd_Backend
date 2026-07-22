@@ -14,7 +14,7 @@ class proveedoresController {
 
     try {
       if (validateSucuId) {
-        const sucuId = req.query.sucu_id || req.body.sucu_id;
+        const sucuId = req.query.branch_id || req.query.sucu_id || req.body.branch_id || req.body.sucu_id;
         if (!sucuId) {
           return res.status(400).json({
             success: false,
@@ -75,8 +75,8 @@ class proveedoresController {
   // Obtener todos los proveedores de una sucursal
   static async getAll(req, res) {
     return proveedoresController._handleRequest(res, 'getAll', req, async () => {
-      const sucuId = req.query.sucu_id;
-      return await proveedor.getAll(sucuId);
+      const branchId = req.query.branch_id || req.query.sucu_id;
+      return await proveedor.getAll(branchId);
     }, {
       validateSucuId: true,
       successMessage: 'Proveedores obtenidos exitosamente'
@@ -85,7 +85,8 @@ class proveedoresController {
 
   // Crear un proveedor
   static async create(req, res) {
-    const { name, phone, direccion, description, location, sucu_id } = req.body;
+    const { name, phone, direccion, description, location, sucu_id, branch_id } = req.body;
+    const targetBranchId = branch_id || sucu_id;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -101,7 +102,7 @@ class proveedoresController {
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
         location: location || null
-      }, sucu_id);
+      }, targetBranchId);
     }, {
       validateSucuId: true,
       successStatus: 201,

@@ -11,23 +11,25 @@ class proveedores {
     this.description = data.description;
     this.total_orders = data.total_orders;
     this.created_at = data.created_at;
-    this.sucu_id = data.sucu_id;
+    this.branch_id = data.branch_id || data.sucu_id;
+    this.sucu_id = this.branch_id;
   }
 
   // Método para obtener todos los proveedores de una sucursal
-  static async getAll(sucuId) {
+  static async getAll(branchId) {
     try {
-      if (!sucuId) {
+      if (!branchId) {
         throw new Error('ID de la sucursal es requerido');
       }
 
       const { data, error } = await supabase
-        .from('proveedores')
+        .from('suppliers')
         .select('*')
-        .eq('sucu_id', sucuId);
+        .eq('branch_id', branchId);
 
       if (error) {
-        throw new Error('No se pudo obtener los proveedores');
+        console.error('Error de Supabase en proveedores.getAll:', error);
+        throw new Error(`No se pudo obtener los proveedores: ${error.message}`);
       }
       
       return data;
@@ -38,7 +40,7 @@ class proveedores {
   }
 
   // Crear un proveedor
-  static async create(proveedorData, sucuId) {
+  static async create(proveedorData, branchId) {
     try {
       
       // Preparar datos para la base de datos
@@ -47,7 +49,7 @@ class proveedores {
         phone: proveedorData.phone || null,
         description: proveedorData.description || null,
         total_orders: 0,
-        sucu_id: sucuId,
+        branch_id: branchId,
       };
 
       // Si hay location, usarla directamente
@@ -56,7 +58,7 @@ class proveedores {
       }
 
       const { data, error } = await supabase
-          .from('proveedores')
+          .from('suppliers')
         .insert([dbData])
         .select();
 
@@ -84,7 +86,7 @@ class proveedores {
       }
 
       const { error } = await supabase
-        .from('proveedores')
+        .from('suppliers')
         .delete()
         .eq('id', id)
 
@@ -120,7 +122,7 @@ class proveedores {
       }
 
       const { data, error } = await supabase
-          .from('proveedores')
+          .from('suppliers')
         .update(dbData)
         .eq('id', id)
         .select();
@@ -149,7 +151,7 @@ class proveedores {
       }
 
       const { data, error } = await supabase
-        .from('proveedores')
+        .from('suppliers')
         .select('*')
         .eq('id', id)
         .single();

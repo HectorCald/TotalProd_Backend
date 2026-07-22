@@ -1,4 +1,4 @@
-CREATE TABLE sucursales (
+CREATE TABLE branches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     empresa_id UUID NOT NULL,

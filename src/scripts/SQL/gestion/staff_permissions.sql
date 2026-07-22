@@ -1,6 +1,6 @@
-CREATE TABLE personal_permisos (
+CREATE TABLE staff_permissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    personal_id UUID NOT NULL,
+    member_id UUID NOT NULL,
     can_delete BOOLEAN NOT NULL,
     can_create BOOLEAN NOT NULL,
     can_update BOOLEAN NOT NULL,
@@ -9,6 +9,5 @@ CREATE TABLE personal_permisos (
     can_info BOOLEAN NOT NULL,
     can_sucursales BOOLEAN NOT NULL,
     can_offline BOOLEAN NOT NULL DEFAULT false,
-    CONSTRAINT personal_permisos_personal_id_fkey 
-        FOREIGN KEY (personal_id) REFERENCES personal (id)
+    CONSTRAINT staff_permissions_member_id_fkey FOREIGN KEY (member_id) REFERENCES staff (id)
 );

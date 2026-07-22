@@ -5,7 +5,7 @@ CREATE TABLE clients (
     location POINT,
     description TEXT,
     total_orders INT NOT NULL,
-    sucu_id UUID NOT NULL,
+    branch_id UUID NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT clients_sucu_id_fkey FOREIGN KEY (sucu_id) REFERENCES sucursales (id)
+    CONSTRAINT clients_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES branches (id)
 );

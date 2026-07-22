@@ -13,9 +13,9 @@ const checkDeletePermission = async (personalId) => {
 
     // Consultar los permisos del personal
     const { data, error } = await supabase
-      .from('personal_permisos')
+      .from('staff_permissions')
       .select('can_delete')
-      .eq('personal_id', personalId)
+      .eq('member_id', personalId)
       .single();
 
     if (error) {
@@ -44,9 +44,9 @@ const checkAnularPermission = async (personalId) => {
 
     // Consultar los permisos del personal
     const { data, error } = await supabase
-      .from('personal_permisos')
+      .from('staff_permissions')
       .select('can_anular')
-      .eq('personal_id', personalId)
+      .eq('member_id', personalId)
       .single();
 
     if (error) {
@@ -75,9 +75,9 @@ const checkUpdatePermission = async (personalId) => {
 
     // Consultar los permisos del personal
     const { data, error } = await supabase
-      .from('personal_permisos')
+      .from('staff_permissions')
       .select('can_update')
-      .eq('personal_id', personalId)
+      .eq('member_id', personalId)
       .single();
 
     if (error) {
@@ -106,9 +106,9 @@ const checkCreatePermission = async (personalId) => {
 
     // Consultar los permisos del personal
     const { data, error } = await supabase
-      .from('personal_permisos')
+      .from('staff_permissions')
       .select('can_create')
-      .eq('personal_id', personalId)
+      .eq('member_id', personalId)
       .single();
 
     if (error) {
@@ -137,9 +137,9 @@ const checkReplacePermission = async (personalId) => {
 
     // Consultar los permisos del personal
     const { data, error } = await supabase
-      .from('personal_permisos')
+      .from('staff_permissions')
       .select('can_replace')
-      .eq('personal_id', personalId)
+      .eq('member_id', personalId)
       .single();
 
     if (error) {
@@ -168,9 +168,9 @@ const checkInfoPermission = async (personalId) => {
 
     // Consultar los permisos del personal
     const { data, error } = await supabase
-      .from('personal_permisos')
+      .from('staff_permissions')
       .select('can_info')
-      .eq('personal_id', personalId)
+      .eq('member_id', personalId)
       .single();
 
     if (error) {
@@ -198,9 +198,9 @@ const checkSucursalesPermission = async (personalId) => {
     }
 
     const { data, error } = await supabase
-      .from('personal_permisos')
+      .from('staff_permissions')
       .select('can_sucursales')
-      .eq('personal_id', personalId)
+      .eq('member_id', personalId)
       .single();
 
     if (error) {

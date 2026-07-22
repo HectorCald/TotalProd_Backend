@@ -11,23 +11,24 @@ class clients {
     this.description = data.description;
     this.total_orders = data.total_orders;
     this.created_at = data.created_at;
-    this.sucu_id = data.sucu_id;
+    this.branch_id = data.branch_id || data.sucu_id;
   }
 
   // Método para obtener todos los clientes de una sucursal
-  static async getAll(sucuId) {
+  static async getAll(branchId) {
     try {
-      if (!sucuId) {
+      if (!branchId) {
         throw new Error('ID de la sucursal es requerido');
       }
 
       const { data, error } = await supabase
         .from('clients')
         .select('*')
-        .eq('sucu_id', sucuId);
+        .eq('branch_id', branchId);
 
       if (error) {
-        throw new Error('No se pudo obtener los clientes');
+        console.error('Error de Supabase en clients.getAll:', error);
+        throw new Error(`No se pudo obtener los clientes: ${error.message}`);
       }
 
       return data || [];
@@ -37,7 +38,7 @@ class clients {
   }
 
   // Crear un cliente
-  static async create(clientData, sucuId) {
+  static async create(clientData, branchId) {
     try {
       
       // Preparar datos para la base de datos
@@ -46,7 +47,7 @@ class clients {
         phone: clientData.phone || null,
         description: clientData.description || null,
         total_orders: clientData.total_orders || 0,
-        sucu_id: sucuId,
+        branch_id: branchId,
       };
 
       // Si hay location, usarla directamente

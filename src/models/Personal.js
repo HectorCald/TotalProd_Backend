@@ -4,10 +4,16 @@ class Personal {
   // Constructor para crear un personal
   constructor(data) {
     this.id = data.id;
-    this.empresa_id = data.empresa_id;
+    this.company_id = data.company_id || data.empresa_id;
+    this.empresa_id = this.company_id;
     this.first_name = data.first_name;
     this.last_name = data.last_name;
-    this.email = data.codigo;
+    this.phone = data.phone || data.celular;
+    this.email = data.email || data.codigo;
+    this.position_id = data.position_id || data.cargo_id;
+    this.cargo_id = this.position_id;
+    this.branch_id = data.branch_id || data.sucursal_id;
+    this.sucursal_id = this.branch_id;
     this.is_active = data.is_active;
     this.created_at = data.created_at;
     this.modules = data.modules || [];
@@ -32,22 +38,17 @@ class Personal {
   static _formatPersonalData(personal) {
     if (!personal) return null;
 
-    // Procesar los módulos
-    const modules = personal.personal_modulo_permiso?.map(pmp => ({
-      ...pmp.sub_modulos,
-      modulos: pmp.sub_modulos.modules // Mapear modules como modulos para el frontend
-    })).filter(Boolean) || [];
-
     // Procesar los permisos
-    const permisos = personal.personal_permisos?.[0] ? {
-      crear: personal.personal_permisos[0].can_create,
-      eliminar: personal.personal_permisos[0].can_delete,
-      editar: personal.personal_permisos[0].can_update,
-      anular: personal.personal_permisos[0].can_anular,
-      reemplazar: personal.personal_permisos[0].can_replace,
-      info: personal.personal_permisos[0].can_info,
-      sucursales: personal.personal_permisos[0].can_sucursales,
-      offline: personal.personal_permisos[0].can_offline
+    const permissionsData = personal.staff_permissions?.[0] || personal.personal_permisos?.[0];
+    const permisos = permissionsData ? {
+      crear: permissionsData.can_create,
+      eliminar: permissionsData.can_delete,
+      editar: permissionsData.can_update,
+      anular: permissionsData.can_anular,
+      reemplazar: permissionsData.can_replace,
+      info: permissionsData.can_info,
+      sucursales: permissionsData.can_sucursales,
+      offline: permissionsData.can_offline
     } : {
       crear: false,
       eliminar: false,
@@ -60,22 +61,24 @@ class Personal {
     };
 
     // Procesar la sucursal con información de la empresa y plan
-    const sucursal = personal.sucursales ? {
-      id: personal.sucursales.id,
-      name: personal.sucursales.name,
-      empresas: personal.sucursales.empresas ? {
-        id: personal.sucursales.empresas.id,
-        name: personal.sucursales.empresas.name,
-        logo_tipo: personal.sucursales.empresas.logo_tipo,
-        codigo: personal.sucursales.empresas.codigo,
-        plan: personal.plan || null // El plan se añadirá después de la consulta
+    const branchData = personal.branches || personal.sucursales;
+    const sucursal = branchData ? {
+      id: branchData.id,
+      name: branchData.name,
+      empresas: branchData.empresas ? {
+        id: branchData.empresas.id,
+        name: branchData.empresas.name,
+        logo_tipo: branchData.empresas.logo_tipo,
+        codigo: branchData.empresas.codigo,
+        plan: personal.plan || null
       } : null
     } : null;
 
-    // Procesar los módulos desde el cargo
+    // Procesar los módulos desde el cargo/posicion
+    const cargoData = personal.cargos || personal.cargos_position_id;
     let finalModules = [];
-    if (personal.cargos && personal.cargos.cargo_sub_modulo) {
-        finalModules = personal.cargos.cargo_sub_modulo.map(csm => {
+    if (cargoData && cargoData.cargo_sub_modulo) {
+        finalModules = cargoData.cargo_sub_modulo.map(csm => {
             if (csm.sub_modulos) {
                 return {
                     ...csm.sub_modulos,
@@ -84,17 +87,23 @@ class Personal {
             }
             return null;
         }).filter(Boolean);
-    } else if (personal.personal_modulo_permiso) {
-        // Fallback al anterior por si acaso
-        finalModules = personal.personal_modulo_permiso.map(pmp => ({
-          ...pmp.sub_modulos,
-          modulos: pmp.sub_modulos.modules
-        })).filter(Boolean);
     }
+
+    const cargoName = cargoData?.name || personal.cargo || '--';
+    const userEmail = personal.email || personal.codigo || '--';
 
     return {
       ...personal,
-      email: personal.codigo,
+      company_id: personal.company_id || personal.empresa_id,
+      empresa_id: personal.company_id || personal.empresa_id,
+      position_id: personal.position_id || personal.cargo_id,
+      cargo_id: personal.position_id || personal.cargo_id,
+      branch_id: personal.branch_id || personal.sucursal_id,
+      sucursal_id: personal.branch_id || personal.sucursal_id,
+      email: userEmail,
+      codigo: userEmail,
+      cargo: cargoName,
+      cargos: cargoData || null,
       modules: finalModules,
       permisos: permisos,
       sucursal: sucursal
@@ -106,18 +115,18 @@ class Personal {
 
     // Primero verificar si la tabla existe
     const { data: tableCheck, error: tableError } = await supabase
-      .from('personal_permisos')
+      .from('staff_permissions')
       .select('*')
       .limit(1);
       
     if (tableError) return;
 
     // Eliminar permisos existentes
-    await supabase.from('personal_permisos').delete().eq('personal_id', personalId);
+    await supabase.from('staff_permissions').delete().eq('member_id', personalId);
 
     // Insertar nuevos permisos
-    await supabase.from('personal_permisos').insert([{
-      personal_id: personalId,
+    await supabase.from('staff_permissions').insert([{
+      member_id: personalId,
       can_delete: permisos.eliminar || false,
       can_create: permisos.crear || false,
       can_update: permisos.editar || false,
@@ -135,19 +144,18 @@ class Personal {
       if (!empresaId) throw new Error('ID de la empresa es requerido');
 
       const query = supabase
-        .from('personal')
+        .from('staff')
         .select(`
           *,
-          sucursales (id, name, empresas (id, name, logo_tipo, codigo)),
-          personal_permisos (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
-          cargos (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
+          branches (id, name, empresas (id, name, logo_tipo, codigo)),
+          staff_permissions (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
+          cargos:position_id (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
         `)
-        .eq('empresa_id', empresaId)
+        .eq('company_id', empresaId)
         .order('created_at', { ascending: false });
 
       const data = await this._executeQuery(query, 'No se pudo obtener el personal');
       
-      // Obtener el plan de la empresa (solo hacemos una consulta ya que todos son de la misma empresa)
       let plan = null;
       try {
         const User = require('./User');
@@ -172,22 +180,23 @@ class Personal {
       if (!id) throw new Error('ID del personal es requerido');
 
       const query = supabase
-        .from('personal')
+        .from('staff')
         .select(`
           *,
-          sucursales (id, name, empresas (id, name, logo_tipo, codigo)),
-          personal_permisos (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
-          cargos (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
+          branches (id, name, empresas (id, name, logo_tipo, codigo)),
+          staff_permissions (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
+          cargos:position_id (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
         `)
         .eq('id', id)
         .single();
 
       const data = await this._executeQuery(query, 'No se pudo obtener el personal');
       
-      if (data && data.empresa_id) {
+      const companyId = data?.company_id || data?.empresa_id;
+      if (data && companyId) {
         try {
           const User = require('./User');
-          data.plan = await User.getPlanByEmpresaId(data.empresa_id);
+          data.plan = await User.getPlanByEmpresaId(companyId);
         } catch (err) {
           console.error('Error al obtener plan en getById de Personal:', err);
         }
@@ -203,27 +212,36 @@ class Personal {
   // Método para crear personal
   static async create(personalData) {
     try {
-      const { first_name, last_name, email, cargo, cargo_id, empresa_id, sucursal_id, permisos = {}, ubicacion = null, rastrear = false } = personalData;
+      const { first_name, last_name, email, position_id, cargo_id, empresa_id, company_id, branch_id, sucursal_id, phone, permisos = {} } = personalData;
+      const targetCompanyId = company_id || empresa_id;
+      const targetPositionId = position_id || cargo_id;
+      const targetBranchId = branch_id || sucursal_id;
 
-      if (!first_name || !last_name || !email || (!cargo && !cargo_id) || !empresa_id) {
+      if (!first_name || !last_name || !email || !targetCompanyId) {
         throw new Error('Datos requeridos faltantes');
       }
 
       const { data: existingPersonal } = await supabase
-        .from('personal')
+        .from('staff')
         .select('id')
-        .eq('codigo', email)
-        .eq('empresa_id', empresa_id);
+        .eq('email', email)
+        .eq('company_id', targetCompanyId);
 
       if (existingPersonal && existingPersonal.length > 0) {
         throw new Error('El correo electrónico ya existe en esta empresa');
       }
 
       const query = supabase
-        .from('personal')
+        .from('staff')
         .insert([{
-          first_name, last_name, codigo: email, cargo, cargo_id: cargo_id || null,
-          empresa_id, sucursal_id: sucursal_id || null, ubicacion, rastrear, is_active: true
+          first_name,
+          last_name,
+          phone: phone || null,
+          email,
+          position_id: targetPositionId || null,
+          company_id: targetCompanyId,
+          branch_id: targetBranchId || null,
+          is_active: true
         }])
         .select()
         .single();
@@ -244,19 +262,23 @@ class Personal {
   // Método para actualizar personal
   static async update(id, personalData) {
     try {
-      const { first_name, last_name, email, cargo, cargo_id, is_active, sucursal_id, permisos = {}, ubicacion, rastrear } = personalData;
+      const { first_name, last_name, email, phone, position_id, cargo_id, is_active, branch_id, sucursal_id, permisos } = personalData;
+      const targetPositionId = position_id !== undefined ? position_id : cargo_id;
+      const targetBranchId = branch_id !== undefined ? branch_id : sucursal_id;
 
       if (!id) throw new Error('ID del personal es requerido');
 
       const currentPersonal = await this.getById(id);
       if (!currentPersonal) throw new Error('Personal no encontrado');
 
+      const currentCompanyId = currentPersonal.company_id || currentPersonal.empresa_id;
+
       if (email && email !== currentPersonal.email) {
         const { data: existingPersonal } = await supabase
-          .from('personal')
+          .from('staff')
           .select('id')
-          .eq('codigo', email)
-          .eq('empresa_id', currentPersonal.empresa_id)
+          .eq('email', email)
+          .eq('company_id', currentCompanyId)
           .neq('id', id);
 
         if (existingPersonal && existingPersonal.length > 0) {
@@ -267,16 +289,14 @@ class Personal {
       const updateData = {};
       if (first_name) updateData.first_name = first_name;
       if (last_name) updateData.last_name = last_name;
-      if (email) updateData.codigo = email;
-      if (cargo !== undefined) updateData.cargo = cargo;
-      if (cargo_id !== undefined) updateData.cargo_id = cargo_id;
+      if (phone !== undefined) updateData.phone = phone;
+      if (email) updateData.email = email;
+      if (targetPositionId !== undefined) updateData.position_id = targetPositionId;
       if (is_active !== undefined) updateData.is_active = is_active;
-      if (sucursal_id !== undefined) updateData.sucursal_id = sucursal_id;
-      if (ubicacion !== undefined) updateData.ubicacion = ubicacion;
-      if (rastrear !== undefined) updateData.rastrear = rastrear;
+      if (targetBranchId !== undefined) updateData.branch_id = targetBranchId;
 
       const query = supabase
-        .from('personal')
+        .from('staff')
         .update(updateData)
         .eq('id', id)
         .select()
@@ -300,10 +320,9 @@ class Personal {
     try {
       if (!id) throw new Error('ID del personal es requerido');
 
-      await supabase.from('personal_permisos').delete().eq('personal_id', id);
-      await supabase.from('personal_modulo_permiso').delete().eq('personal_id', id);
+      await supabase.from('staff_permissions').delete().eq('member_id', id);
 
-      const query = supabase.from('personal').delete().eq('id', id);
+      const query = supabase.from('staff').delete().eq('id', id);
       await this._executeQuery(query, 'No se pudo eliminar el personal');
 
       return true;
@@ -319,23 +338,24 @@ class Personal {
       if (!email) throw new Error('Correo electrónico es requerido');
 
       const query = supabase
-        .from('personal')
+        .from('staff')
         .select(`
           *,
-          sucursales (id, name, empresas (id, name, logo_tipo, codigo)),
-          personal_permisos (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
-          cargos (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
+          branches (id, name, empresas (id, name, logo_tipo, codigo)),
+          staff_permissions (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
+          cargos:position_id (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
         `)
-        .eq('codigo', email)
+        .eq('email', email)
         .single();
 
       const personalData = await this._executeQuery(query, 'No se pudo obtener el personal');
       if (!personalData) return null;
 
-      if (personalData.empresa_id) {
+      const companyId = personalData.company_id || personalData.empresa_id;
+      if (companyId) {
         try {
           const User = require('./User');
-          personalData.plan = await User.getPlanByEmpresaId(personalData.empresa_id);
+          personalData.plan = await User.getPlanByEmpresaId(companyId);
         } catch (err) {
           console.error('Error al obtener plan en getByEmail de Personal:', err);
         }
@@ -358,7 +378,7 @@ class Personal {
       const hashedPassword = await bcrypt.hash(password, saltRounds);
 
       const query = supabase
-        .from('personal')
+        .from('staff')
         .update({ password: hashedPassword, is_active: true })
         .eq('id', id)
         .select()
@@ -392,7 +412,8 @@ class Personal {
       }
 
       const { generateToken } = require('../config/jwt');
-      const tokenPayload = { id: personal.id, empresa_id: personal.empresa_id, type: 'employee' };
+      const companyId = personal.company_id || personal.empresa_id;
+      const tokenPayload = { id: personal.id, empresa_id: companyId, company_id: companyId, type: 'employee' };
       const token = generateToken(tokenPayload);
 
       return {
@@ -425,7 +446,7 @@ class Personal {
       const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
 
       const query = supabase
-        .from('personal')
+        .from('staff')
         .update({ password: hashedNewPassword })
         .eq('id', id)
         .select()
@@ -449,7 +470,7 @@ class Personal {
       if (!personal) return { success: false, message: 'Personal no encontrado' };
 
       const query = supabase
-        .from('personal')
+        .from('staff')
         .update({ password: null })
         .eq('id', id)
         .select()

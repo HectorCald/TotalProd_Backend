@@ -56,7 +56,7 @@ class movimientosAlmacen {
             logService.addLog('info', '📋 Obteniendo información de sucursal y empresa...');
 
             const { data: sucursalInfo, error: sucursalError } = await supabase
-                .from('sucursales')
+                .from('branches')
                 .select(`
                     id,
                     name,
@@ -117,11 +117,11 @@ class movimientosAlmacen {
                         await supabase.from('clients').update({ total_orders: numeroOrdenNormalizado }).eq('id', cliente_id);
                     }
                 } else if (type === 'entrada' && proveedor_id) {
-                    const { data: proveedor } = await supabase.from('proveedores').select('name, total_orders').eq('id', proveedor_id).single();
+                    const { data: proveedor } = await supabase.from('suppliers').select('name, total_orders').eq('id', proveedor_id).single();
                     if (proveedor) {
                         numeroOrdenNormalizado = (proveedor.total_orders || 0) + 1;
                         nombreEntidad = proveedor.name;
-                        await supabase.from('proveedores').update({ total_orders: numeroOrdenNormalizado }).eq('id', proveedor_id);
+                        await supabase.from('suppliers').update({ total_orders: numeroOrdenNormalizado }).eq('id', proveedor_id);
                     }
                 }
             }
@@ -622,11 +622,11 @@ class movimientosAlmacen {
                     await supabase.from('clients').update({ total_orders: numeroOrdenFinal }).eq('id', cliente_id);
                 }
             } else if (type === 'entrada' && proveedor_id) {
-                const { data: proveedor } = await supabase.from('proveedores').select('name, total_orders').eq('id', proveedor_id).single();
+                const { data: proveedor } = await supabase.from('suppliers').select('name, total_orders').eq('id', proveedor_id).single();
                 if (proveedor) {
                     numeroOrdenFinal = (proveedor.total_orders || 0) + 1;
                     nombreEntidad = proveedor.name;
-                    await supabase.from('proveedores').update({ total_orders: numeroOrdenFinal }).eq('id', proveedor_id);
+                    await supabase.from('suppliers').update({ total_orders: numeroOrdenFinal }).eq('id', proveedor_id);
                 }
             }
 
@@ -845,7 +845,7 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name, total_orders),
-                    proveedor:proveedores(id, name, total_orders),
+                    proveedor:suppliers(id, name, total_orders),
                     precio:prices_types(id, name),
                     sucursal:sucu_id(id, name),
                     user:user_id(id, first_name, last_name),
@@ -963,7 +963,7 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name),
-                    proveedor:proveedores(id, name),
+                    proveedor:suppliers(id, name),
                     precio:prices_types(id, name),
                     sucursal:sucu_id(id, name),
                     user:user_id(id, first_name, last_name),
@@ -1368,7 +1368,7 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name),
-                    proveedor:proveedores(id, name),
+                    proveedor:suppliers(id, name),
                     precio:prices_types(id, name)
                 `, { count: 'estimated' })
                 .eq('sucu_id', sucuId)
@@ -2188,7 +2188,7 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name, total_orders),
-                    proveedor:proveedores(id, name, total_orders),
+                    proveedor:suppliers(id, name, total_orders),
                     precio:prices_types(id, name),
                     sucursal:sucu_id(id, name),
                     user:user_id(id, first_name, last_name),
@@ -2314,7 +2314,7 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name, total_orders),
-                    proveedor:proveedores(id, name, total_orders),
+                    proveedor:suppliers(id, name, total_orders),
                     precio:prices_types(id, name),
                     sucursal:sucu_id(id, name),
                     user:user_id(id, first_name, last_name),
@@ -2455,7 +2455,7 @@ class movimientosAlmacen {
                 .select(`
                     *,
                     cliente:clients(id, name, total_orders),
-                    proveedor:proveedores(id, name, total_orders),
+                    proveedor:suppliers(id, name, total_orders),
                     precio:prices_types(id, name),
                     sucursal:sucu_id(id, name),
                     user:user_id(id, first_name, last_name),
@@ -3036,13 +3036,13 @@ class movimientosAlmacen {
             // Restar 1 al total_orders del proveedor si existe
             if (movimiento.proveedor_id) {
                 const { data: proveedor } = await supabase
-                    .from('proveedores')
+                    .from('suppliers')
                     .select('total_orders')
                     .eq('id', movimiento.proveedor_id)
                     .single();
                 if (proveedor) {
                     const nuevoTotal = Math.max(0, (proveedor.total_orders || 0) - 1);
-                    await supabase.from('proveedores').update({ total_orders: nuevoTotal }).eq('id', movimiento.proveedor_id);
+                    await supabase.from('suppliers').update({ total_orders: nuevoTotal }).eq('id', movimiento.proveedor_id);
                 }
             }
 

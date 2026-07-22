@@ -1,5 +1,4 @@
 const movimientosAlmacen = require('../models/movimientosAlmacen');
-const transferenciasAlmacen = require('../models/transferenciasAlmacen');
 const gastosModel = require('../models/gastos');
 const deudasModel = require('../models/deudas');
 const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');

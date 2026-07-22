@@ -14,7 +14,7 @@ class PersonalController {
 
     try {
       if (validateEmpresaId) {
-        const empresaId = req.query.empresa_id || req.body.empresa_id;
+        const empresaId = req.query.company_id || req.query.empresa_id || req.body.company_id || req.body.empresa_id;
         if (!empresaId) {
           return res.status(400).json({
             success: false,
@@ -92,7 +92,7 @@ class PersonalController {
   // Obtener todos los personal de una empresa
   static async getAll(req, res) {
     return PersonalController._handleRequest(res, 'getAll', req, async () => {
-      const empresaId = req.query.empresa_id;
+      const empresaId = req.query.company_id || req.query.empresa_id;
       return await Personal.getAll(empresaId);
     }, {
       validateEmpresaId: true,
@@ -118,23 +118,24 @@ class PersonalController {
   // Crear personal
   static async create(req, res) {
     return PersonalController._handleRequest(res, 'create', req, async () => {
-      const { first_name, last_name, email, cargo, cargo_id, sucursal_id, permisos = {}, ubicacion = null, rastrear = false } = req.body;
-      const empresaId = req.body.empresa_id;
+      const { first_name, last_name, email, phone, position_id, cargo_id, sucursal_id, branch_id, permisos = {} } = req.body;
+      const empresaId = req.body.company_id || req.body.empresa_id;
 
-      if (!first_name || !last_name || !email || (!cargo && !cargo_id)) {
-        return { success: false, message: 'Nombre, apellido, correo y cargo son requeridos' };
+      if (!first_name || !last_name || !email) {
+        return { success: false, message: 'Nombre, apellido y correo son requeridos' };
       }
 
       const personalData = {
         first_name: first_name.trim(),
         last_name: last_name.trim(),
-        email,
-        cargo,
-        cargo_id,
+        email: email.trim(),
+        phone: phone ? phone.trim() : null,
+        position_id: position_id || cargo_id || null,
+        cargo_id: position_id || cargo_id || null,
+        company_id: empresaId,
         empresa_id: empresaId,
-        sucursal_id: sucursal_id || null,
-        ubicacion,
-        rastrear,
+        branch_id: branch_id || sucursal_id || null,
+        sucursal_id: branch_id || sucursal_id || null,
         permisos
       };
 
@@ -151,18 +152,22 @@ class PersonalController {
   static async update(req, res) {
     return PersonalController._handleRequest(res, 'update', req, async () => {
       const { id } = req.params;
-      const { first_name, last_name, email, cargo, cargo_id, is_active, sucursal_id, permisos, ubicacion, rastrear } = req.body;
+      const { first_name, last_name, email, phone, position_id, cargo_id, is_active, branch_id, sucursal_id, permisos } = req.body;
 
       const personalData = {};
       if (first_name) personalData.first_name = first_name.trim();
       if (last_name) personalData.last_name = last_name.trim();
-      if (email) personalData.email = email;
-      if (cargo !== undefined) personalData.cargo = cargo;
-      if (cargo_id !== undefined) personalData.cargo_id = cargo_id;
+      if (email) personalData.email = email.trim();
+      if (phone !== undefined) personalData.phone = phone;
+      if (position_id !== undefined || cargo_id !== undefined) {
+        personalData.position_id = position_id !== undefined ? position_id : cargo_id;
+        personalData.cargo_id = personalData.position_id;
+      }
       if (is_active !== undefined) personalData.is_active = is_active;
-      if (sucursal_id !== undefined) personalData.sucursal_id = sucursal_id;
-      if (ubicacion !== undefined) personalData.ubicacion = ubicacion;
-      if (rastrear !== undefined) personalData.rastrear = rastrear;
+      if (branch_id !== undefined || sucursal_id !== undefined) {
+        personalData.branch_id = branch_id !== undefined ? branch_id : sucursal_id;
+        personalData.sucursal_id = personalData.branch_id;
+      }
       if (permisos !== undefined) personalData.permisos = permisos;
 
       return await Personal.update(id, personalData);

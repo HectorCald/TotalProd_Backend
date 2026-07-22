@@ -57,7 +57,7 @@ class pedidosAlmacen {
 
       // 2) SEGUNDO: Obtener el total_pedidos actualizado de la sucursal
       const { data: sucursalActualizada, error: sucursalError } = await supabase
-        .from('sucursales')
+        .from('branches')
         .select('total_pedidos')
         .eq('id', sucuId)
         .single();
@@ -1286,7 +1286,7 @@ class pedidosAlmacen {
 
       // Primero obtener el valor actual
       const { data: sucursal, error: fetchError } = await supabase
-        .from('sucursales')
+        .from('branches')
         .select('total_pedidos')
         .eq('id', sucursalId)
         .single();
@@ -1303,7 +1303,7 @@ class pedidosAlmacen {
       const nuevoTotal = (sucursal.total_pedidos || 0) + 1;
 
       const { error } = await supabase
-        .from('sucursales')
+        .from('branches')
         .update({ total_pedidos: nuevoTotal })
         .eq('id', sucursalId);
 
@@ -1338,7 +1338,7 @@ class pedidosAlmacen {
 
       // Primero obtener el valor actual
       const { data: sucursal, error: fetchError } = await supabase
-        .from('sucursales')
+        .from('branches')
         .select('total_pedidos')
         .eq('id', sucursalId)
         .single();
@@ -1352,7 +1352,7 @@ class pedidosAlmacen {
       const nuevoTotal = Math.max((sucursal.total_pedidos || 0) - 1, 0);
 
       const { error } = await supabase
-        .from('sucursales')
+        .from('branches')
         .update({ total_pedidos: nuevoTotal })
         .eq('id', sucursalId);
 
@@ -1563,7 +1563,7 @@ class pedidosAlmacen {
   // Crear pedido de golpe (fast) - inserción en lote
   static async createFast(pedidoData) {
     try {
-      const { user_id, sucu_id, sucursal_destino_id, observaciones, precio_id, agrupado, productos } = pedidoData;
+      const sucu_id = pedidoData.branch_id || pedidoData.sucu_id;
 
       if (!sucu_id) throw new Error('ID de la sucursal es requerido');
       if (!sucursal_destino_id) throw new Error('ID de la sucursal destino es requerido');
@@ -1576,7 +1576,7 @@ class pedidosAlmacen {
 
       // 2. Obtener el numero_pedido actualizado
       const { data: sucursalActualizada, error: sucursalError } = await supabase
-        .from('sucursales')
+        .from('branches')
         .select('total_pedidos')
         .eq('id', sucu_id)
         .single();

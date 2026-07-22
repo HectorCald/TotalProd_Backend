@@ -9,7 +9,7 @@ class sucursales {
             }
 
             const { data, error } = await supabase
-                .from('sucursales')
+                .from('branches')
                 .select(`
                     id,
                     name,
@@ -49,7 +49,7 @@ class sucursales {
 
             if (Array.isArray(empresasAsociadasIds) && empresasAsociadasIds.length > 0) {
                 const { data: casasMatriz, error: errorCasasMatriz } = await supabase
-                    .from('sucursales')
+                    .from('branches')
                     .select(`
                         id,
                         name,
@@ -107,7 +107,7 @@ class sucursales {
             if (!id) throw new Error('ID de sucursal es requerido');
 
             const { data, error } = await supabase
-                .from('sucursales')
+                .from('branches')
                 .select(`
                     id,
                     name,
@@ -151,7 +151,7 @@ class sucursales {
     static async create(sucursalData, precios = []) {
         try {
             const { data, error } = await supabase
-                .from('sucursales')
+                .from('branches')
                 .insert([sucursalData])
                 .select(`
                     id,
@@ -194,7 +194,7 @@ class sucursales {
             if (!id) throw new Error('ID de sucursal es requerido');
 
             const { data, error } = await supabase
-                .from('sucursales')
+                .from('branches')
                 .update(sucursalData)
                 .eq('id', id)
                 .select(`
@@ -243,7 +243,7 @@ class sucursales {
             const { data: movimientosAlmacen } = await supabase.from('movimientos_almacen').select('id').eq('sucu_id', id).limit(1);
             const { data: pedidosAcopio } = await supabase.from('pedidos_acopio').select('id').eq('sucu_id', id).limit(1);
             const { data: pedidosAlmacen } = await supabase.from('pedidos_almacen').select('id').eq('sucursal_id', id).limit(1);
-            const { data: personal } = await supabase.from('personal').select('id').eq('sucursal_id', id).limit(1);
+            const { data: personal } = await supabase.from('staff').select('id').or(`branch_id.eq.${id},sucursal_id.eq.${id}`).limit(1);
 
             if (movimientosAcopio && movimientosAcopio.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene movimientos de acopio asociados');
             if (movimientosAlmacen && movimientosAlmacen.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene movimientos de almacén asociados');
@@ -252,7 +252,7 @@ class sucursales {
             if (personal && personal.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene personal asociado');
 
             const { error } = await supabase
-                .from('sucursales')
+                .from('branches')
                 .delete()
                 .eq('id', id);
 
