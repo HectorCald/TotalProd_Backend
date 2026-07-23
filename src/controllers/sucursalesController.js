@@ -63,7 +63,7 @@ class sucursalesController {
             const empresaId = req.query.empresa_id;
             let empresasAsociadasIds = [];
             
-            if (empresaId === '259a05d2-2417-47b0-8bbd-50cd5723aae1' && req.query.empresas_asociadas) {
+            if (req.query.empresas_asociadas) {
                 const asocString = Array.isArray(req.query.empresas_asociadas) 
                     ? req.query.empresas_asociadas.join(',') 
                     : String(req.query.empresas_asociadas);
