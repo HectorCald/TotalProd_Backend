@@ -1595,7 +1595,15 @@ class pedidosAlmacen {
       };
       const codigoPedido = `PA-${genAlfanumerico()}`;
 
-      const fechaISO = fecha ? new Date(fecha + 'T12:00:00Z').toISOString() : new Date().toISOString();
+      let fechaISO = new Date().toISOString();
+      if (fecha) {
+        if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+          fechaISO = new Date(fecha + 'T12:00:00Z').toISOString();
+        } else {
+          const parsed = new Date(fecha);
+          if (!isNaN(parsed.getTime())) fechaISO = parsed.toISOString();
+        }
+      }
 
       // 4. Insertar pedido principal
       const insertData = {
@@ -1664,6 +1672,16 @@ class pedidosAlmacen {
       if (!sucursal_destino_id) throw new Error('ID de la sucursal destino es requerido');
       if (!productos || !Array.isArray(productos) || productos.length === 0) throw new Error('Debe incluir al menos un producto');
 
+      let fechaISO = undefined;
+      if (fecha) {
+        if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+          fechaISO = new Date(fecha + 'T12:00:00Z').toISOString();
+        } else {
+          const parsed = new Date(fecha);
+          if (!isNaN(parsed.getTime())) fechaISO = parsed.toISOString();
+        }
+      }
+
       // 1. Actualizar el pedido principal
       const { error: pedidoError } = await supabase
         .from('pedidos_almacen')
@@ -1672,7 +1690,7 @@ class pedidosAlmacen {
           precio_id,
           sucursal_destino_id,
           agrupado: !!agrupado,
-          ...(fecha && { fecha: new Date(fecha + 'T12:00:00Z').toISOString() })
+          ...(fechaISO && { fecha: fechaISO })
         })
         .eq('id', pedidoId);
 

@@ -95,7 +95,16 @@ class cotizaciones {
                 cliente_id: cliente_id || null,
                 precio_id: precio_id || null,
                 agrupado: !!agrupado,
-                fecha: fecha ? new Date(fecha + 'T12:00:00Z').toISOString() : new Date().toISOString(),
+                fecha: (() => {
+                    let d = new Date();
+                    if (fecha) {
+                        d = (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha))
+                            ? new Date(fecha + 'T12:00:00Z')
+                            : new Date(fecha);
+                    }
+                    if (isNaN(d.getTime())) d = new Date();
+                    return d.toISOString();
+                })(),
                 fecha_vencimiento: fecha_vencimiento || null,
                 estado: 'pendiente',
                 numero_cotizacion: numeroCotizacion,

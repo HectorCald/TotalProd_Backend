@@ -640,7 +640,17 @@ class movimientosAlmacen {
             };
             const codigoMovimiento = `${prefix}${genAlfanumerico()}`;
 
-            const fechaMovimientoISO = fecha ? new Date(fecha + 'T12:00:00Z').toISOString() : new Date().toISOString();
+            let fechaMovimientoISO = new Date().toISOString();
+            if (fecha) {
+                if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+                    fechaMovimientoISO = new Date(fecha + 'T12:00:00Z').toISOString();
+                } else {
+                    const parsed = new Date(fecha);
+                    if (!isNaN(parsed.getTime())) {
+                        fechaMovimientoISO = parsed.toISOString();
+                    }
+                }
+            }
 
             const insertData = {
                 sucu_id,
@@ -888,14 +898,14 @@ class movimientosAlmacen {
             // Obtener stock en lote (batch) para eliminar consulta N+1
             const productIds = (productos || []).map(p => p.producto?.id).filter(Boolean);
             let stocksMap = new Map();
-            
+
             if (productIds.length > 0) {
                 const { data: stocksActuales } = await supabase
                     .from('productos_sucursal')
                     .select('producto_id, stock')
                     .eq('sucursal_id', movimiento.sucu_id)
                     .in('producto_id', productIds);
-                    
+
                 if (stocksActuales) {
                     stocksActuales.forEach(s => stocksMap.set(s.producto_id, s.stock));
                 }
@@ -1089,21 +1099,25 @@ class movimientosAlmacen {
                 const user = mov.user ? { id: mov.user.id, name: `${mov.user.first_name || ''} ${mov.user.last_name || ''}`.trim() } : null;
                 const personal = mov.personal ? { id: mov.personal.id, name: `${mov.personal.first_name || ''} ${mov.personal.last_name || ''}`.trim() } : null;
                 const movProductos = todosLosProductos.filter(p => p.movimiento_almacen_id === mov.id);
-                
+
                 const calculateSpecialPrice = (precioBase, grup, esAgrupado, esVenta) => {
-                    const precioCrudo = esAgrupado ? (Number(precioBase) * Number(grup || 1)) : Number(precioBase);
-                    return (esVenta && esAgrupado) ? Math.round(precioCrudo) : precioCrudo;
+                    const isActuallyGrouped = esAgrupado && Number(grup) > 0;
+                    const precioCrudo = isActuallyGrouped ? (Number(precioBase) * Number(grup)) : Number(precioBase);
+                    return (esVenta && isActuallyGrouped) ? Math.round(precioCrudo) : precioCrudo;
+                };
+
+                const calculateSubtotal = (cantidad, precioBase, grup, esAgrupado, esVenta) => {
+                    const precio = calculateSpecialPrice(precioBase, grup, esAgrupado, esVenta);
+                    const isActuallyGrouped = esAgrupado && Number(grup) > 0;
+                    const precioUnitarioFinal = isActuallyGrouped ? (precio / Number(grup)) : precio;
+                    return precioUnitarioFinal * Number(cantidad || 0);
                 };
 
                 const subtotal = movProductos.reduce((sum, p) => {
                     const esAgrupado = !!mov.agrupado;
                     const esVenta = mov.type === 'salida' || mov.tipo === 'salida';
                     const grup = p.producto?.grup;
-                    
-                    const precioAgrupado = calculateSpecialPrice(p.precio_unitario, grup, esAgrupado, esVenta);
-                    const precioUnitarioFinal = esAgrupado ? (precioAgrupado / Number(grup || 1)) : precioAgrupado;
-                    const prodSubtotal = precioUnitarioFinal * Number(p.cantidad || 0);
-                    
+                    const prodSubtotal = calculateSubtotal(p.cantidad, p.precio_unitario, grup, esAgrupado, esVenta);
                     return sum + prodSubtotal;
                 }, 0);
 
@@ -1141,12 +1155,12 @@ class movimientosAlmacen {
         try {
             let query = supabase
                 .from('movimientos_almacen')
-                .select('id, fecha, metodo_pago, type, estado')
+                .select('id, fecha, metodo_pago, type, estado, descuento, aumento, porcentaje, agrupado')
                 .eq('sucu_id', sucuId);
 
             if (tipo) query = query.eq('type', tipo);
             if (estado) query = query.eq('estado', estado);
-            
+
             if (filtroFecha) {
                 if (filtroFecha.inicio) query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
                 if (filtroFecha.fin) query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
@@ -1169,7 +1183,7 @@ class movimientosAlmacen {
                 promesas.push(
                     supabase
                         .from('movimiento_almacen_producto')
-                        .select('movimiento_almacen_id, subtotal, cantidad, producto:producto_almacen_id(costo_produccion)')
+                        .select('movimiento_almacen_id, precio_unitario, cantidad, producto:producto_almacen_id(costo_produccion, grup)')
                         .in('movimiento_almacen_id', chunkIds)
                 );
             }
@@ -1180,7 +1194,25 @@ class movimientosAlmacen {
 
             const resultadoOptimizado = movimientos.map(mov => {
                 const movProductos = todosLosProductos.filter(p => p.movimiento_almacen_id === mov.id);
-                const total = movProductos.reduce((sum, p) => sum + (parseFloat(p.subtotal) || 0), 0);
+                
+                const calculateSpecialPrice = (precioBase, grup, esAgrupado, esVenta) => {
+                    const precioCrudo = esAgrupado ? (Number(precioBase) * Number(grup || 1)) : Number(precioBase);
+                    return (esVenta && esAgrupado) ? Math.round(precioCrudo) : precioCrudo;
+                };
+
+                const calculateSubtotal = (cantidad, precioBase, grup, esAgrupado, esVenta) => {
+                    const precio = calculateSpecialPrice(precioBase, grup, esAgrupado, esVenta);
+                    const precioUnitarioFinal = esAgrupado ? (precio / Number(grup || 1)) : precio;
+                    return precioUnitarioFinal * Number(cantidad || 0);
+                };
+
+                const total = movProductos.reduce((sum, p) => {
+                    const esAgrupado = !!mov.agrupado;
+                    const esVenta = mov.type === 'salida' || mov.tipo === 'salida';
+                    const grup = p.producto?.grup;
+                    const prodSubtotal = calculateSubtotal(p.cantidad, p.precio_unitario, grup, esAgrupado, esVenta);
+                    return sum + (prodSubtotal || 0);
+                }, 0);
                 const costo_produccion_total = movProductos.reduce((sum, p) => sum + ((parseFloat(p.producto?.costo_produccion) || 0) * (parseFloat(p.cantidad) || 0)), 0);
 
                 return {
@@ -1189,6 +1221,9 @@ class movimientosAlmacen {
                     metodo_pago: mov.metodo_pago,
                     type: mov.type,
                     estado: mov.estado,
+                    descuento: mov.descuento,
+                    aumento: mov.aumento,
+                    porcentaje: mov.porcentaje,
                     total: total,
                     costo_produccion: costo_produccion_total
                 };
@@ -1343,12 +1378,12 @@ class movimientosAlmacen {
                 if (!prod) return;
 
                 totalProductos += cantidad;
-                
+
                 const cats = prod.producto_categoria || [];
                 const categoryName = cats.length > 0 && cats[0].category_almacen?.name
                     ? cats[0].category_almacen.name
                     : 'Sin categoría';
-                
+
                 conteoCategorias[categoryName] = (conteoCategorias[categoryName] || 0) + cantidad;
             });
 
@@ -2033,7 +2068,7 @@ class movimientosAlmacen {
                     .from('movimientos_almacen')
                     .update({ produccion_damabrava_id: null })
                     .eq('id', movimientoId);
-                
+
                 if (limpiarDamabravaError) {
                     console.error('Error limpiando produccion_damabrava_id:', limpiarDamabravaError);
                 } else {
@@ -3073,9 +3108,9 @@ class movimientosAlmacen {
         try {
             const [
                 { data: productos, error: productosError },
-                gastosRes, 
-                pedidosEntradaRes, 
-                pedidosSalidaRes, 
+                gastosRes,
+                pedidosEntradaRes,
+                pedidosSalidaRes,
                 deudasRes
             ] = await Promise.all([
                 supabase
@@ -3114,19 +3149,19 @@ class movimientosAlmacen {
             ]);
 
             let productosConStock = productos || [];
-            
+
             // Si hay sucu_id, cargar el stock optimizadamente
             if (sucu_id && productosConStock.length > 0) {
                 const productIds = productosConStock.map(p => p.producto?.id).filter(Boolean);
                 let stocksMap = new Map();
-                
+
                 if (productIds.length > 0) {
                     const { data: stocksActuales } = await supabase
                         .from('productos_sucursal')
                         .select('producto_id, stock')
                         .eq('sucursal_id', sucu_id)
                         .in('producto_id', productIds);
-                        
+
                     if (stocksActuales) {
                         stocksActuales.forEach(s => stocksMap.set(s.producto_id, s.stock));
                     }

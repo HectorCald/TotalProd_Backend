@@ -119,6 +119,7 @@ class productsAlmacen {
           id,
           name,
           grup,
+          empresa_id,
           price_product (
             id,
             valor,

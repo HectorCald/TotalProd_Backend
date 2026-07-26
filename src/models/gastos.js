@@ -10,16 +10,13 @@ class gastos {
             // Usar la fecha proporcionada directamente (formato YYYY-MM-DD)
             let fechaFinal;
             if (fecha_gasto) {
-                // Si viene una fecha específica, usarla directamente
-                fechaFinal = fecha_gasto;
+                // Si es solo fecha (YYYY-MM-DD), agregar T12:00:00 para evitar desfase de zona horaria
+                fechaFinal = (typeof fecha_gasto === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha_gasto))
+                    ? fecha_gasto + 'T12:00:00'
+                    : fecha_gasto;
             } else {
-                // Si no viene fecha, usar la actual - CORREGIDO (igual que movimientosAlmacen.js)
-                const ahora = new Date();
-                const año = ahora.getFullYear();
-                const mes = String(ahora.getMonth() + 1).padStart(2, '0');
-                const dia = String(ahora.getDate()).padStart(2, '0');
-                
-                fechaFinal = `${año}-${mes}-${dia}`;
+                // Si no viene fecha, usar la actual
+                fechaFinal = new Date().toISOString();
             }
 
             const dbData = {
@@ -368,11 +365,11 @@ class gastos {
                 proveedor_id: proveedor_id || null
             };
 
-            // Si viene una fecha específica, convertirla a zona horaria de Bolivia
+            // Si viene una fecha específica, agregar T12:00:00 para evitar desfase de zona horaria
             if (fecha_gasto) {
-                const fechaOriginal = new Date(fecha_gasto);
-                const fechaGastoBolivia = new Date(fechaOriginal.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
-                dbData.fecha_gasto = fechaGastoBolivia.toISOString();
+                dbData.fecha_gasto = (typeof fecha_gasto === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha_gasto))
+                    ? fecha_gasto + 'T12:00:00'
+                    : fecha_gasto;
             }
 
             const { data, error } = await supabase

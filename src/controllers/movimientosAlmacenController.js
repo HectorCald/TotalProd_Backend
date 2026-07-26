@@ -225,7 +225,13 @@ class movimientosAlmacenController {
                     sucu_id,
                     fecha_deuda: fecha || getBoliviaDate(),
                     fecha_vencimiento: (() => {
-                        const d = fecha ? new Date(fecha + 'T12:00:00Z') : new Date();
+                        let d = new Date();
+                        if (fecha) {
+                            d = (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha))
+                                ? new Date(fecha + 'T12:00:00Z')
+                                : new Date(fecha);
+                        }
+                        if (isNaN(d.getTime())) d = new Date(); // fallback
                         d.setMonth(d.getMonth() + 1);
                         return d.toISOString().split('T')[0];
                     })(),
@@ -277,25 +283,12 @@ class movimientosAlmacenController {
         }, { validateId: true, passRawResult: true });
     }
 
-    // Obtener todos los movimientos sin límite
-    static async getAllSinLimite(req, res) {
-        return movimientosAlmacenController._handleRequest(res, 'getAllSinLimite', req, async () => {
-            const sucu_id = req.query.sucu_id;
-            const tipo = req.query.tipo || null;
-            const estado = req.query.estado || null;
-            const ordenamiento = req.query.ordenamiento || 'fecha_desc';
-            const filtroFecha = (req.query.fecha_inicio || req.query.fecha_fin)
-                ? { inicio: req.query.fecha_inicio || null, fin: req.query.fecha_fin || null }
-                : null;
 
-            return await movimientosAlmacen.getAllSinLimite(sucu_id, tipo, estado, ordenamiento, filtroFecha);
-        }, { validateSucuId: true, passRawResult: true });
-    }
 
     // Obtener todos los movimientos de la sucursal
     static async getAll(req, res) {
         return movimientosAlmacenController._handleRequest(res, 'getAll', req, async () => {
-            const sucu_id = req.query.sucu_id;
+            const sucu_id = req.query.sucu_id || req.headers['x-sucu-id'];
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 30;
             const tipo = req.query.tipo || null;
@@ -336,7 +329,7 @@ class movimientosAlmacenController {
     static async getByType(req, res) {
         return movimientosAlmacenController._handleRequest(res, 'getByType', req, async () => {
             const { tipo } = req.params;
-            const sucu_id = req.query.sucu_id;
+            const sucu_id = req.query.sucu_id || req.headers['x-sucu-id'];
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 30;
             return await movimientosAlmacen.getAll(sucu_id, page, limit, tipo);
@@ -347,7 +340,7 @@ class movimientosAlmacenController {
     static async getById(req, res) {
         return movimientosAlmacenController._handleRequest(res, 'getById', req, async () => {
             const { id } = req.params;
-            const sucu_id = req.query.sucu_id;
+            const sucu_id = req.query.sucu_id || req.headers['x-sucu-id'];
             const result = await movimientosAlmacen.getById(id);
             if (!result.success) return res.status(404).json(result);
 

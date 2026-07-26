@@ -30,17 +30,13 @@ class deudas {
 
             // Usar la fecha proporcionada directamente (formato YYYY-MM-DD)
             let fechaDeudaFinal;
-            const fechaDeudaNormalizada = formatDateInput(fecha_deuda);
+            const fechaDeudaNormalizada = formatDateInput(fecha_deuda, { keepTime: true });
 
             if (fechaDeudaNormalizada) {
                 fechaDeudaFinal = fechaDeudaNormalizada;
             } else {
-                // Si no viene fecha, usar la actual en formato YYYY-MM-DD
-                const ahora = new Date();
-                const año = ahora.getFullYear();
-                const mes = String(ahora.getMonth() + 1).padStart(2, '0');
-                const dia = String(ahora.getDate()).padStart(2, '0');
-                fechaDeudaFinal = `${año}-${mes}-${dia}`;
+                // Si no viene fecha, usar la actual
+                fechaDeudaFinal = new Date().toISOString();
             }
 
             const fechaVencimientoFinal = formatDateInput(fecha_vencimiento);
@@ -725,8 +721,9 @@ class deudas {
                 personal_id: personal_id || null
             };
             if (fecha) {
-                // Guardar como timestamp o date según la columna; la tabla usa TIMESTAMPTZ
-                pagoData.fecha = fecha;
+                // Si es solo fecha (YYYY-MM-DD), agregar T12:00:00 para evitar desfase de zona horaria
+                // ya que la columna es TIMESTAMPTZ y Supabase interpreta fechas sin hora como UTC medianoche
+                pagoData.fecha = (typeof fecha === 'string' && fecha.length === 10) ? fecha + 'T12:00:00' : fecha;
             }
             if (detalle) {
                 pagoData.detalle = detalle;
