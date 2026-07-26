@@ -148,7 +148,7 @@ class cotizacionesController {
 
     // Crear cotización rápida de golpe
     static async createFast(req, res) {
-        const { metodo_pago, cliente_id, precio_id, productos, fecha_vencimiento, agrupado, descuento, aumento, porcentaje } = req.body;
+        const { metodo_pago, cliente_id, precio_id, productos, fecha_vencimiento, agrupado, descuento, aumento, porcentaje, fecha } = req.body;
         const sucu_id = req.headers['x-sucu-id'] || req.body.sucu_id;
 
         if (!sucu_id) return res.status(400).json({ success: false, message: 'Sucursal no especificada' });
@@ -174,7 +174,8 @@ class cotizacionesController {
                 agrupado: !!agrupado,
                 descuento: parseFloat(descuento) || 0,
                 aumento: parseFloat(aumento) || 0,
-                porcentaje: !!porcentaje
+                porcentaje: !!porcentaje,
+                fecha
             });
 
             return result;

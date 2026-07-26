@@ -329,13 +329,13 @@ class pedidosAlmacen {
         query = query.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
       }
 
-      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en UTC)
+      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local -04:00)
       if (filtroFecha) {
         if (filtroFecha.inicio) {
-          query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
+          query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
         }
         if (filtroFecha.fin) {
-          query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
+          query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
         }
       }
 
@@ -510,13 +510,13 @@ class pedidosAlmacen {
         countQuery = countQuery.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
       }
 
-      // Aplicar filtro de fecha en el conteo también (incluyendo el día completo en UTC)
+      // Aplicar filtro de fecha en el conteo también (incluyendo el día completo en zona horaria local -04:00)
       if (filtroFecha) {
         if (filtroFecha.inicio) {
-          countQuery = countQuery.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
+          countQuery = countQuery.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
         }
         if (filtroFecha.fin) {
-          countQuery = countQuery.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
+          countQuery = countQuery.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
         }
       }
 
@@ -1564,7 +1564,7 @@ class pedidosAlmacen {
   static async createFast(pedidoData) {
     try {
       const sucu_id = pedidoData.branch_id || pedidoData.sucu_id;
-      const { sucursal_destino_id, precio_id, productos, observaciones, agrupado, user_id, personal_id } = pedidoData;
+      const { sucursal_destino_id, precio_id, productos, observaciones, agrupado, user_id, personal_id, fecha } = pedidoData;
 
       if (!sucu_id) throw new Error('ID de la sucursal es requerido');
       if (!sucursal_destino_id) throw new Error('ID de la sucursal destino es requerido');
@@ -1595,7 +1595,7 @@ class pedidosAlmacen {
       };
       const codigoPedido = `PA-${genAlfanumerico()}`;
 
-      const fechaISO = new Date().toISOString();
+      const fechaISO = fecha ? new Date(fecha + 'T12:00:00Z').toISOString() : new Date().toISOString();
 
       // 4. Insertar pedido principal
       const insertData = {
@@ -1657,7 +1657,7 @@ class pedidosAlmacen {
   }
 
   // Actualizar pedido de golpe (fast) - inserción en lote de detalles
-  static async updateFast(pedidoId, { observaciones, precio_id, sucursal_destino_id, agrupado, productos }) {
+  static async updateFast(pedidoId, { observaciones, precio_id, sucursal_destino_id, agrupado, productos, fecha }) {
     try {
       if (!pedidoId) throw new Error('ID del pedido es requerido');
       if (!precio_id) throw new Error('ID del precio es requerido');
@@ -1671,7 +1671,8 @@ class pedidosAlmacen {
           observaciones: observaciones || null,
           precio_id,
           sucursal_destino_id,
-          agrupado: !!agrupado
+          agrupado: !!agrupado,
+          ...(fecha && { fecha: new Date(fecha + 'T12:00:00Z').toISOString() })
         })
         .eq('id', pedidoId);
 

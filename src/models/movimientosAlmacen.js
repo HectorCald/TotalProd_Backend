@@ -609,7 +609,7 @@ class movimientosAlmacen {
     // Inserción de golpe rápida
     static async createFast(movimientoData) {
         try {
-            const { user_id, personal_id, sucu_id, type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado, restar_ingredientes } = movimientoData;
+            const { user_id, personal_id, sucu_id, type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado, restar_ingredientes, fecha } = movimientoData;
 
             let numeroOrdenFinal = null;
             let nombreEntidad = '';
@@ -640,7 +640,7 @@ class movimientosAlmacen {
             };
             const codigoMovimiento = `${prefix}${genAlfanumerico()}`;
 
-            const fechaMovimientoISO = new Date().toISOString();
+            const fechaMovimientoISO = fecha ? new Date(fecha + 'T12:00:00Z').toISOString() : new Date().toISOString();
 
             const insertData = {
                 sucu_id,
@@ -683,8 +683,7 @@ class movimientosAlmacen {
                     movimiento_almacen_id: movimiento.id,
                     producto_almacen_id: producto.id,
                     cantidad: cantidad,
-                    precio_unitario: precio,
-                    subtotal: precio * cantidad
+                    precio_unitario: precio
                 };
             });
 
@@ -1030,13 +1029,13 @@ class movimientosAlmacen {
                 query = query.eq('cliente_id', clienteId);
             }
 
-            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en UTC)
+            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local -04:00)
             if (filtroFecha) {
                 if (filtroFecha.inicio) {
-                    query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
+                    query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
                 }
                 if (filtroFecha.fin) {
-                    query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
+                    query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
                 }
             }
 
@@ -1076,7 +1075,7 @@ class movimientosAlmacen {
                     promesas.push(
                         supabase
                             .from('movimiento_almacen_producto')
-                            .select('movimiento_almacen_id, subtotal, cantidad, producto:producto_almacen_id(name, costo_produccion)')
+                            .select('movimiento_almacen_id, precio_unitario, cantidad, producto:producto_almacen_id(name, costo_produccion, grup)')
                             .in('movimiento_almacen_id', chunkIds)
                     );
                 }
@@ -1090,7 +1089,24 @@ class movimientosAlmacen {
                 const user = mov.user ? { id: mov.user.id, name: `${mov.user.first_name || ''} ${mov.user.last_name || ''}`.trim() } : null;
                 const personal = mov.personal ? { id: mov.personal.id, name: `${mov.personal.first_name || ''} ${mov.personal.last_name || ''}`.trim() } : null;
                 const movProductos = todosLosProductos.filter(p => p.movimiento_almacen_id === mov.id);
-                const subtotal = movProductos.reduce((sum, p) => sum + (parseFloat(p.subtotal) || 0), 0);
+                
+                const calculateSpecialPrice = (precioBase, grup, esAgrupado, esVenta) => {
+                    const precioCrudo = esAgrupado ? (Number(precioBase) * Number(grup || 1)) : Number(precioBase);
+                    return (esVenta && esAgrupado) ? Math.round(precioCrudo) : precioCrudo;
+                };
+
+                const subtotal = movProductos.reduce((sum, p) => {
+                    const esAgrupado = !!mov.agrupado;
+                    const esVenta = mov.type === 'salida' || mov.tipo === 'salida';
+                    const grup = p.producto?.grup;
+                    
+                    const precioAgrupado = calculateSpecialPrice(p.precio_unitario, grup, esAgrupado, esVenta);
+                    const precioUnitarioFinal = esAgrupado ? (precioAgrupado / Number(grup || 1)) : precioAgrupado;
+                    const prodSubtotal = precioUnitarioFinal * Number(p.cantidad || 0);
+                    
+                    return sum + prodSubtotal;
+                }, 0);
+
                 return {
                     ...mov,
                     user,
@@ -1132,8 +1148,8 @@ class movimientosAlmacen {
             if (estado) query = query.eq('estado', estado);
             
             if (filtroFecha) {
-                if (filtroFecha.inicio) query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
-                if (filtroFecha.fin) query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
+                if (filtroFecha.inicio) query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
+                if (filtroFecha.fin) query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
             }
 
             const ascending = ordenamiento === 'fecha_asc';

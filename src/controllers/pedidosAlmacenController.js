@@ -347,7 +347,7 @@ class pedidosAlmacenController {
 
   // Crear pedido de golpe (fast)
   static async createFast(req, res) {
-    const { sucursal_destino_id, observaciones, precio_id, agrupado, productos } = req.body;
+    const { sucursal_destino_id, observaciones, precio_id, agrupado, productos, fecha } = req.body;
     const sucu_id = req.headers['x-sucu-id'] || req.body.sucu_id;
     const rawUserId = req.user?.id || null;
     const userType = req.user?.type;
@@ -368,6 +368,7 @@ class pedidosAlmacenController {
         observaciones: observaciones || null,
         precio_id,
         agrupado: !!agrupado,
+        fecha,
         productos
       });
     }, { successStatus: 201 });
@@ -375,7 +376,7 @@ class pedidosAlmacenController {
 
   // Actualizar pedido de golpe (fast)
   static async updateFast(req, res) {
-    const { observaciones, precio_id, agrupado, productos, sucursal_destino_id } = req.body;
+    const { observaciones, precio_id, agrupado, productos, sucursal_destino_id, fecha } = req.body;
     const { id } = req.params;
 
     if (!id) return res.status(400).json({ success: false, message: 'ID del pedido es requerido' });
@@ -389,6 +390,7 @@ class pedidosAlmacenController {
         precio_id,
         sucursal_destino_id,
         agrupado: !!agrupado,
+        fecha,
         productos
       });
     });

@@ -480,13 +480,13 @@ class movimientosAcopio {
         query = query.eq('cliente_id', clienteFilter);
       }
 
-      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en UTC)
+      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local -04:00)
       if (filtroFecha) {
         if (filtroFecha.inicio) {
-          query = query.gte('date', `${filtroFecha.inicio}T00:00:00.000Z`);
+          query = query.gte('date', `${filtroFecha.inicio}T00:00:00.000-04:00`);
         }
         if (filtroFecha.fin) {
-          query = query.lte('date', `${filtroFecha.fin}T23:59:59.999Z`);
+          query = query.lte('date', `${filtroFecha.fin}T23:59:59.999-04:00`);
         }
       }
 

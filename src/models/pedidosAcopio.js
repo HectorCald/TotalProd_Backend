@@ -149,13 +149,13 @@ class pedidosAcopio {
         query = query.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
       }
 
-      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en UTC)
+      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local -04:00)
       if (filtroFecha) {
         if (filtroFecha.inicio) {
-          query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
+          query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
         }
         if (filtroFecha.fin) {
-          query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
+          query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
         }
       }
 
@@ -269,13 +269,13 @@ class pedidosAcopio {
         countQuery = countQuery.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
       }
 
-      // Aplicar filtro de fecha en el conteo también (incluyendo el día completo en UTC)
+      // Aplicar filtro de fecha en el conteo también (incluyendo el día completo en zona horaria local -04:00)
       if (filtroFecha) {
         if (filtroFecha.inicio) {
-          countQuery = countQuery.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
+          countQuery = countQuery.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
         }
         if (filtroFecha.fin) {
-          countQuery = countQuery.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
+          countQuery = countQuery.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
         }
       }
 

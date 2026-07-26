@@ -4,7 +4,6 @@ CREATE TABLE movimiento_almacen_producto (
     producto_almacen_id UUID NOT NULL,
     cantidad INTEGER NOT NULL,
     precio_unitario NUMERIC(12,2) NOT NULL,
-    subtotal NUMERIC(12,2) NOT NULL,
     CONSTRAINT movimiento_almacen_producto_movimiento_id_fkey
         FOREIGN KEY (movimiento_almacen_id) REFERENCES movimientos_almacen (id) ON DELETE CASCADE,
     CONSTRAINT movimiento_almacen_producto_producto_id_fkey

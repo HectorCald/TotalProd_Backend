@@ -50,7 +50,7 @@ class cotizaciones {
                 user_id, personal_id, sucu_id,
                 metodo_pago, cliente_id, precio_id,
                 productos, fecha_vencimiento,
-                agrupado, descuento, aumento, porcentaje
+                agrupado, descuento, aumento, porcentaje, fecha
             } = cotizacionData;
 
             // Obtener último número de cotización de la sucursal
@@ -95,7 +95,7 @@ class cotizaciones {
                 cliente_id: cliente_id || null,
                 precio_id: precio_id || null,
                 agrupado: !!agrupado,
-                fecha: new Date().toISOString(),
+                fecha: fecha ? new Date(fecha + 'T12:00:00Z').toISOString() : new Date().toISOString(),
                 fecha_vencimiento: fecha_vencimiento || null,
                 estado: 'pendiente',
                 numero_cotizacion: numeroCotizacion,
@@ -130,8 +130,7 @@ class cotizaciones {
                     cotizacion_id: cotizacion.id,
                     producto_almacen_id: producto.id,
                     cantidad: producto.cantidad,
-                    precio_unitario: producto.precioNormalizado,
-                    subtotal: producto.subtotalNormalizado
+                    precio_unitario: producto.precioNormalizado
                 }));
 
                 const { error: productosError } = await supabase
@@ -388,11 +387,11 @@ class cotizaciones {
             }
 
             if (filtroFecha?.inicio) {
-                query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000Z`);
+                query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
             }
 
             if (filtroFecha?.fin) {
-                query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999Z`);
+                query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
             }
 
             if (searchTerm) {
@@ -505,8 +504,7 @@ class cotizaciones {
                         id,
                         producto_almacen_id,
                         cantidad,
-                        precio_unitario,
-                        subtotal
+                        precio_unitario
                     `)
                     .in('cotizacion_id', batchIds);
 
@@ -555,7 +553,6 @@ class cotizaciones {
                         id: p.id,
                         cantidad: p.cantidad,
                         precio_unitario: p.precio_unitario,
-                        subtotal: p.subtotal,
                         producto: productoAlmacen || null
                     };
 

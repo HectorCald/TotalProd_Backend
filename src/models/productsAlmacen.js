@@ -324,7 +324,12 @@ class productsAlmacen {
 
       // Search filter
       if (search && search.trim() !== '') {
-        query = query.ilike('name', `%${search.trim()}%`);
+        // Reemplazar vocales con el comodín '_' de SQL para ignorar acentos
+        // Reemplazar espacios, guiones y asteriscos con '%' para coincidencias parciales
+        const searchWildcard = search.trim()
+          .replace(/[aeiouáéíóúüAEIOUÁÉÍÓÚÜ]/g, '_')
+          .replace(/[\s\-*]+/g, '%');
+        query = query.ilike('name', `%${searchWildcard}%`);
       }
 
       // Category filter - buscar en tabla intermedia producto_categoria

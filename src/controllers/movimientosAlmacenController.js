@@ -169,7 +169,7 @@ class movimientosAlmacenController {
     static async createFast(req, res) {
         const { type, metodo_pago, cliente_id, proveedor_id, precio_id, productos, descuento, aumento, concepto, porcentaje, agrupado, restar_ingredientes,
                 adelanto, total_final,
-                registrar_gasto, costo, fecha_gasto } = req.body;
+                registrar_gasto, costo, fecha_gasto, fecha } = req.body;
         const sucu_id = req.headers['x-sucu-id'] || req.body.sucu_id;
         const user_id = req.user?.id || null;
         const personal_id = req.user?.type === 'employee' ? user_id : null;
@@ -198,7 +198,8 @@ class movimientosAlmacenController {
                 concepto: concepto || null,
                 porcentaje: !!porcentaje,
                 agrupado: !!agrupado,
-                restar_ingredientes: !!restar_ingredientes
+                restar_ingredientes: !!restar_ingredientes,
+                fecha
             });
 
             if (!movResult.success) return movResult;
@@ -222,8 +223,12 @@ class movimientosAlmacenController {
                     user_id: finalUserId,
                     personal_id,
                     sucu_id,
-                    fecha_deuda: getBoliviaDate(),
-                    fecha_vencimiento: getBoliviaDate(1),
+                    fecha_deuda: fecha || getBoliviaDate(),
+                    fecha_vencimiento: (() => {
+                        const d = fecha ? new Date(fecha + 'T12:00:00Z') : new Date();
+                        d.setMonth(d.getMonth() + 1);
+                        return d.toISOString().split('T')[0];
+                    })(),
                     monto_total: montoDeuda,
                     concepto: concepto || `Venta a ${clienteObj?.name || 'Cliente'}`,
                     cliente_id,
@@ -236,7 +241,7 @@ class movimientosAlmacenController {
                         await deudasModel.createPagoParcial({
                             deuda_id: deudaResult.data.id,
                             monto: adelantoNum,
-                            fecha: getBoliviaDate(),
+                            fecha: fecha || getBoliviaDate(),
                             detalle: 'Adelanto al realizar la venta',
                             user_id: finalUserId,
                             personal_id
@@ -251,7 +256,7 @@ class movimientosAlmacenController {
                     user_id: finalUserId,
                     personal_id,
                     sucu_id,
-                    fecha_gasto: fecha_gasto || getBoliviaDate(),
+                    fecha_gasto: fecha_gasto || fecha || getBoliviaDate(),
                     valor: parseFloat(costo),
                     concepto: concepto?.trim() || 'Pago de Entrada de Productos',
                     metodo_pago: (metodo_pago || 'efectivo').toLowerCase(),

@@ -320,8 +320,8 @@ class registrosProduccionDamabrava {
                 }
             }
 
-            if (fechaInicio) query = query.gte('fecha', `${fechaInicio}T00:00:00.000Z`);
-            if (fechaFin) query = query.lte('fecha', `${fechaFin}T23:59:59.999Z`);
+            if (fechaInicio) query = query.gte('fecha', `${fechaInicio}T00:00:00.000-04:00`);
+            if (fechaFin) query = query.lte('fecha', `${fechaFin}T23:59:59.999-04:00`);
 
             const ascending = ordenamiento === 'fecha_asc';
             query = query.order('fecha', { ascending });
