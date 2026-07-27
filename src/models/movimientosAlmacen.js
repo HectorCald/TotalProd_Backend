@@ -278,8 +278,7 @@ class movimientosAlmacen {
                         movimiento_almacen_id: movimiento.id,
                         producto_almacen_id: producto.id,
                         cantidad: cantidad,
-                        precio_unitario: precio,
-                        subtotal: precio * cantidad
+                        precio_unitario: precio
                     };
                 });
 
@@ -2249,7 +2248,6 @@ class movimientosAlmacen {
                         producto_almacen_id,
                         cantidad,
                         precio_unitario,
-                        subtotal,
                         producto:producto_almacen_id(
                             id,
                             name,
@@ -2409,8 +2407,7 @@ class movimientosAlmacen {
                         movimiento_almacen_id,
                         producto_almacen_id,
                         cantidad,
-                        precio_unitario,
-                        subtotal
+                        precio_unitario
                     `)
                     .in('movimiento_almacen_id', batchIds);
 
@@ -2549,8 +2546,7 @@ class movimientosAlmacen {
                         movimiento_almacen_id,
                         producto_almacen_id,
                         cantidad,
-                        precio_unitario,
-                        subtotal
+                        precio_unitario
                     `)
                     .in('movimiento_almacen_id', batchIds);
 
@@ -2838,8 +2834,7 @@ class movimientosAlmacen {
                 movimiento_almacen_id: movimientoId,
                 producto_almacen_id: producto.id,
                 cantidad: producto.cantidad,
-                precio_unitario: producto.precio,
-                subtotal: producto.cantidad * producto.precio
+                precio_unitario: producto.precio
             }));
 
             const { data, error } = await supabase
