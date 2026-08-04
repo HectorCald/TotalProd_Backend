@@ -1102,7 +1102,7 @@ class movimientosAlmacen {
                 const calculateSpecialPrice = (precioBase, grup, esAgrupado, esVenta) => {
                     const isActuallyGrouped = esAgrupado && Number(grup) > 0;
                     const precioCrudo = isActuallyGrouped ? (Number(precioBase) * Number(grup)) : Number(precioBase);
-                    return (esVenta && isActuallyGrouped) ? Math.round(precioCrudo) : precioCrudo;
+                    return precioCrudo;
                 };
 
                 const calculateSubtotal = (cantidad, precioBase, grup, esAgrupado, esVenta) => {
@@ -1196,7 +1196,7 @@ class movimientosAlmacen {
                 
                 const calculateSpecialPrice = (precioBase, grup, esAgrupado, esVenta) => {
                     const precioCrudo = esAgrupado ? (Number(precioBase) * Number(grup || 1)) : Number(precioBase);
-                    return (esVenta && esAgrupado) ? Math.round(precioCrudo) : precioCrudo;
+                    return precioCrudo;
                 };
 
                 const calculateSubtotal = (cantidad, precioBase, grup, esAgrupado, esVenta) => {
