@@ -144,7 +144,16 @@ class productsAlmacenController {
     return productsAlmacenController._handleRequest(res, 'getProductsForConteo', req, async () => {
       const empresaId = req.query.empresa_id;
       const sucuId = req.query.sucu_id;
-      return await productsAlmacen.getProductsForConteo(empresaId, sucuId);
+
+      let empresasAsociadasIds = [];
+      if (req.query.empresas_asociadas) {
+        const asociadas = Array.isArray(req.query.empresas_asociadas) 
+          ? req.query.empresas_asociadas 
+          : [req.query.empresas_asociadas];
+        empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
+      }
+
+      return await productsAlmacen.getProductsForConteo(empresaId, sucuId, empresasAsociadasIds);
     }, {
       validateEmpresaId: true,
       validateSucuId: true,

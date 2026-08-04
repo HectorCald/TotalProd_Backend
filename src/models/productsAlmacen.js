@@ -503,19 +503,23 @@ class productsAlmacen {
   }
 
   // Método para obtener productos específicos para conteo
-  static async getProductsForConteo(empresaId, sucuId) {
+  static async getProductsForConteo(empresaId, sucuId, empresasAsociadasIds = []) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
       }
 
-      const { data, error } = await supabase
+      // Construir lista de empresas a consultar (propia + asociadas)
+      const allEmpresaIds = [empresaId, ...empresasAsociadasIds.filter(id => id && String(id) !== String(empresaId))];
+
+      let query = supabase
         .from('products_almacen')
         .select(`
           id,
           name,
           category_id,
           grup,
+          empresa_id,
           productos_sucursal (
             stock,
             sucursal_id
@@ -524,8 +528,15 @@ class productsAlmacen {
             categoria_id
           )
         `)
-        .eq('empresa_id', empresaId)
         .order('name', { ascending: true });
+
+      if (allEmpresaIds.length > 1) {
+        query = query.in('empresa_id', allEmpresaIds);
+      } else {
+        query = query.eq('empresa_id', empresaId);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error de Supabase:', error);
