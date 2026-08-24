@@ -125,8 +125,8 @@ class gastosController {
   // Obtener todos los gastos sin límite
   static async getAllSinLimite(req, res) {
     return gastosController._handleRequest(res, 'getAllSinLimite', req, async () => {
-      const { metodo_pago = null, sucu_id } = req.query;
-      
+      const { metodo_pago = null, proveedor_id = null, search = '', sucu_id } = req.query;
+
       let filtroFecha = null;
       if (req.query.fecha_inicio || req.query.fecha_fin) {
         filtroFecha = {
@@ -134,11 +134,13 @@ class gastosController {
           fin: req.query.fecha_fin || null
         };
       }
-      
+
       return await gastos.getAllSinLimite(
         sucu_id,
         metodo_pago,
-        filtroFecha
+        filtroFecha,
+        proveedor_id,
+        search
       );
     }, {
       validateSucuId: true

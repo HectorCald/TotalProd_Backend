@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
 
 class pedidosAcopio {
   // Crear un pedido (un registro por cada producto)
@@ -29,7 +30,7 @@ class pedidosAcopio {
           estado: 'Pendiente',
           producto_acopio_id: producto.id,
           cantidad: producto.cantidad,
-          tipo_medida: producto.medidaPedido || 'kg'
+          tipo_medida: producto.tipo_medida || producto.medidaPedido || 'kg'
         };
 
         // Solo incluir user_id o personal_id si no son null
@@ -149,15 +150,8 @@ class pedidosAcopio {
         query = query.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
       }
 
-      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local -04:00)
-      if (filtroFecha) {
-        if (filtroFecha.inicio) {
-          query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
-        }
-        if (filtroFecha.fin) {
-          query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
-        }
-      }
+      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local)
+      query = aplicarFiltroFecha(query, 'fecha', filtroFecha);
 
       const { data: pedidos, error } = await query;
 
@@ -269,15 +263,8 @@ class pedidosAcopio {
         countQuery = countQuery.or(`user_id.eq.${normalizedResponsableId},personal_id.eq.${normalizedResponsableId}`);
       }
 
-      // Aplicar filtro de fecha en el conteo también (incluyendo el día completo en zona horaria local -04:00)
-      if (filtroFecha) {
-        if (filtroFecha.inicio) {
-          countQuery = countQuery.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
-        }
-        if (filtroFecha.fin) {
-          countQuery = countQuery.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
-        }
-      }
+      // Aplicar filtro de fecha en el conteo también (incluyendo el día completo en zona horaria local)
+      countQuery = aplicarFiltroFecha(countQuery, 'fecha', filtroFecha);
 
       const { count, error: countError } = await countQuery;
 

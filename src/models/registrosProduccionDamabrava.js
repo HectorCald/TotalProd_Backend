@@ -1,6 +1,7 @@
 const { supabase } = require('../config/supabase');
 const productsAlmacen = require('./productsAlmacen');
 const movimientosAlmacen = require('./movimientosAlmacen');
+const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
 
 const enrichRegistroConProducto = async (registro) => {
     if (!registro || !registro.producto_almacen || !registro.producto_almacen.id) {
@@ -320,8 +321,7 @@ class registrosProduccionDamabrava {
                 }
             }
 
-            if (fechaInicio) query = query.gte('fecha', `${fechaInicio}T00:00:00.000-04:00`);
-            if (fechaFin) query = query.lte('fecha', `${fechaFin}T23:59:59.999-04:00`);
+            query = aplicarFiltroFecha(query, 'fecha', { inicio: fechaInicio, fin: fechaFin });
 
             const ascending = ordenamiento === 'fecha_asc';
             query = query.order('fecha', { ascending });

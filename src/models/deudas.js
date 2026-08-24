@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
 
 const formatDateInput = (value, { keepTime = false } = {}) => {
     if (!value) return null;
@@ -191,15 +192,8 @@ class deudas {
                 }
             }
 
-            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local -04:00)
-            if (filtroFecha) {
-                if (filtroFecha.inicio) {
-                    query = query.gte('fecha_deuda', `${filtroFecha.inicio}T00:00:00.000-04:00`);
-                }
-                if (filtroFecha.fin) {
-                    query = query.lte('fecha_deuda', `${filtroFecha.fin}T23:59:59.999-04:00`);
-                }
-            }
+            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local)
+            query = aplicarFiltroFecha(query, 'fecha_deuda', filtroFecha);
 
             // Aplicar ordenamiento
             switch (ordenamiento) {

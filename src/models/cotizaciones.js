@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
 
 // Función para generar código aleatorio de 8 caracteres alfanuméricos
 const generarCodigoAleatorio = () => {
@@ -395,13 +396,7 @@ class cotizaciones {
                 query = query.eq('cliente_id', clienteId);
             }
 
-            if (filtroFecha?.inicio) {
-                query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
-            }
-
-            if (filtroFecha?.fin) {
-                query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
-            }
+            query = aplicarFiltroFecha(query, 'fecha', filtroFecha);
 
             if (searchTerm) {
                 const normalizedSearch = `%${searchTerm}%`;

@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
 
 class gastos {
     // Crear un nuevo gasto
@@ -96,21 +97,70 @@ class gastos {
     }
 
     // Obtener todos los gastos sin límite
-    static async getAllSinLimite(sucuId, metodoPago = null, filtroFecha = null) {
+    static async getAllSinLimite(sucuId, metodoPago = null, filtroFecha = null, proveedorId = null, search = '') {
         try {
             if (!sucuId) return { success: false, message: 'No hay sucursal seleccionada' };
-            let query = supabase.from('gastos').select('id, valor, metodo_pago, fecha_gasto').eq('sucu_id', sucuId);
+            let query = supabase
+                .from('gastos')
+                .select(`
+                    id,
+                    valor,
+                    concepto,
+                    metodo_pago,
+                    fecha_gasto,
+                    proveedor:proveedor_id (
+                        id,
+                        name
+                    ),
+                    user:user_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id (
+                        id,
+                        first_name,
+                        last_name
+                    )
+                `)
+                .eq('sucu_id', sucuId);
 
             if (metodoPago) query = query.eq('metodo_pago', metodoPago);
-            if (filtroFecha) {
-                if (filtroFecha.inicio) query = query.gte('fecha_gasto', `${filtroFecha.inicio}T00:00:00.000-04:00`);
-                if (filtroFecha.fin) query = query.lte('fecha_gasto', `${filtroFecha.fin}T23:59:59.999-04:00`);
+            if (proveedorId) query = query.eq('proveedor_id', proveedorId);
+
+            const searchTokens = gastos.normalizeSearchTokens(search);
+            if (searchTokens.length > 0) {
+                const orFilters = searchTokens.flatMap(token => ([
+                    `concepto.ilike.%${token}%`,
+                    `metodo_pago.ilike.%${token}%`
+                ]));
+                query = query.or(orFilters.join(','));
             }
+
+            query = aplicarFiltroFecha(query, 'fecha_gasto', filtroFecha);
 
             const { data, error } = await query;
             if (error) throw new Error('Error al obtener los gastos sin límite');
 
-            return { success: true, data };
+            // Procesar los datos para agregar el campo name a user y personal (igual que getAll)
+            const processedData = (data || []).map(gasto => {
+                const processedGasto = { ...gasto };
+                if (gasto.user) {
+                    processedGasto.user = {
+                        ...gasto.user,
+                        name: `${gasto.user.first_name} ${gasto.user.last_name}`.trim()
+                    };
+                }
+                if (gasto.personal) {
+                    processedGasto.personal = {
+                        ...gasto.personal,
+                        name: `${gasto.personal.first_name} ${gasto.personal.last_name}`.trim()
+                    };
+                }
+                return processedGasto;
+            });
+
+            return { success: true, data: processedData };
         } catch (error) {
             console.error('Error en gastos.getAllSinLimite:', error);
             return { success: false, message: 'Error interno del servidor', error };
@@ -172,15 +222,8 @@ class gastos {
                 query = query.eq('proveedor_id', proveedorId);
             }
 
-            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local -04:00)
-            if (filtroFecha) {
-                if (filtroFecha.inicio) {
-                    query = query.gte('fecha_gasto', `${filtroFecha.inicio}T00:00:00.000-04:00`);
-                }
-                if (filtroFecha.fin) {
-                    query = query.lte('fecha_gasto', `${filtroFecha.fin}T23:59:59.999-04:00`);
-                }
-            }
+            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local)
+            query = aplicarFiltroFecha(query, 'fecha_gasto', filtroFecha);
 
             // Aplicar ordenamiento
             switch (ordenamiento) {

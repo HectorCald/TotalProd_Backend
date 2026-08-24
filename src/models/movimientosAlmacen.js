@@ -1,6 +1,7 @@
 const { supabase, processBatch, retryOperation, validateBatchResults, CONFIG } = require('../config/supabase');
 const deudas = require('./deudas');
 const MovimientoLogService = require('../services/movimientoLogService');
+const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
 
 // Función helper para normalizar texto (quitar acentos)
 const normalizeText = (text) => {
@@ -1038,15 +1039,8 @@ class movimientosAlmacen {
                 query = query.eq('cliente_id', clienteId);
             }
 
-            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local -04:00)
-            if (filtroFecha) {
-                if (filtroFecha.inicio) {
-                    query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
-                }
-                if (filtroFecha.fin) {
-                    query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
-                }
-            }
+            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local)
+            query = aplicarFiltroFecha(query, 'fecha', filtroFecha);
 
             // Aplicar ordenamiento
             const ascending = ordenamiento === 'fecha_asc';
@@ -1160,10 +1154,7 @@ class movimientosAlmacen {
             if (tipo) query = query.eq('type', tipo);
             if (estado) query = query.eq('estado', estado);
 
-            if (filtroFecha) {
-                if (filtroFecha.inicio) query = query.gte('fecha', `${filtroFecha.inicio}T00:00:00.000-04:00`);
-                if (filtroFecha.fin) query = query.lte('fecha', `${filtroFecha.fin}T23:59:59.999-04:00`);
-            }
+            query = aplicarFiltroFecha(query, 'fecha', filtroFecha);
 
             const ascending = ordenamiento === 'fecha_asc';
             query = query.order('fecha', { ascending });
