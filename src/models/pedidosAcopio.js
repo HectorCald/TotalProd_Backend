@@ -199,7 +199,7 @@ class pedidosAcopio {
       const personalMap = new Map();
       if (personalIds.length > 0) {
         const { data: personalData } = await supabase
-          .from('personal')
+          .from('staff')
           .select('id, first_name, last_name')
           .in('id', personalIds);
         (personalData || []).forEach(p => {
