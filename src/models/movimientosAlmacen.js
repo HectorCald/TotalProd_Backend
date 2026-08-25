@@ -734,20 +734,11 @@ class movimientosAlmacen {
                     nuevaCantidad = stockActualValue - Number(producto.cantidad);
                 }
 
-                if (stockActual) {
-                    upserts.push({
-                        id: stockActual.id,
-                        producto_id: producto.id,
-                        sucursal_id: sucu_id,
-                        stock: nuevaCantidad
-                    });
-                } else {
-                    upserts.push({
-                        producto_id: producto.id,
-                        sucursal_id: sucu_id,
-                        stock: nuevaCantidad
-                    });
-                }
+                upserts.push({
+                    producto_id: producto.id,
+                    sucursal_id: sucu_id,
+                    stock: nuevaCantidad
+                });
             }
 
             if (upserts.length > 0) {
@@ -3014,7 +3005,6 @@ class movimientosAlmacen {
                 }
 
                 upserts.push({
-                    ...(stockActual ? { id: stockActual.id } : {}),
                     producto_id: producto.producto_almacen_id,
                     sucursal_id: movimiento.sucu_id,
                     stock: nuevaCantidad
@@ -3022,7 +3012,7 @@ class movimientosAlmacen {
             }
 
             if (upserts.length > 0) {
-                const { error: upsertError } = await supabase.from('productos_sucursal').upsert(upserts);
+                const { error: upsertError } = await supabase.from('productos_sucursal').upsert(upserts, { onConflict: 'producto_id, sucursal_id' });
                 if (upsertError) {
                     return { success: false, message: 'Error al revertir stock de los productos' };
                 }
