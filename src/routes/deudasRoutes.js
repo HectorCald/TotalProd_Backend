@@ -1,7 +1,6 @@
 const express = require('express');
 const deudasController = require('../controllers/deudasController');
 const { requireAuth } = require('../middleware/auth');
-const { requireModuleAccess } = require('../middleware/moduleAuth');
 
 const router = express.Router();
 
@@ -12,9 +11,6 @@ router.use(requireAuth);
 router.get('/:id/pagos-parciales', deudasController.getPagosParciales);
 router.post('/:id/pagos-parciales', deudasController.createPagoParcial);
 router.delete('/:id/pagos-parciales/:pago_id', deudasController.deletePagoParcial);
-
-// Aplicar middleware de acceso al módulo 'Deudas' a todas las rutas
-router.use(requireModuleAccess('Deudas'));
 
 // Rutas para las deudas
 router.get('/', deudasController.getAll);

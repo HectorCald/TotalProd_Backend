@@ -2,11 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ConteosController = require('../controllers/conteosController');
 const { requireAuth } = require('../middleware/auth');
-const { requireModuleAccess } = require('../middleware/moduleAuth');
 router.use(requireAuth);
-
-// Aplicar middleware de acceso al módulo 'Conteos' a todas las rutas
-router.use(requireModuleAccess('Conteos'));
 
 // Obtener detalles de un conteo específico
 router.get('/:id/detalles', ConteosController.getDetalles);

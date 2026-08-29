@@ -157,7 +157,7 @@ class UserController {
 
       if (!user) {
         // Intentar como empleado si falla como usuario normal
-        const Personal = require('../models/Personal');
+        const Personal = require('../main/personal/Personal');
         const employeeResult = await Personal.loginEmployee(email, password);
 
         if (employeeResult.success) {
@@ -196,8 +196,6 @@ class UserController {
           phone: fullUser.phone,
           email: fullUser.email,
           is_active: fullUser.is_active,
-          plan_id: fullUser.plan_id,
-          plan: fullUser.plan,
           modules: fullUser.modules,
           empresa_id: fullUser.empresa_id,
           empresa: fullUser.empresa,
@@ -237,8 +235,6 @@ class UserController {
           phone: user.phone,
           email: user.email,
           is_active: user.is_active,
-          plan_id: user.plan_id,
-          plan: user.plan,
           modules: user.modules,
           empresa_id: user.empresa_id,
           empresa: user.empresa,
@@ -349,8 +345,6 @@ class UserController {
             phone: fullUser.phone,
             email: fullUser.email,
             is_active: fullUser.is_active,
-            plan_id: fullUser.plan_id,
-            plan: fullUser.plan,
             modules: fullUser.modules,
             empresa_id: fullUser.empresa_id,
             empresa: fullUser.empresa,

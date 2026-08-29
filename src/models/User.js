@@ -57,19 +57,7 @@ class User {
   // Método estático para crear un usuario
   static async create(userData) {
     try {
-      // 1. Obtener el ID del plan Free
-      const { data: freePlan, error: planError } = await supabase
-        .from('plans')
-        .select('id')
-        .eq('name', 'Free')
-        .single();
-
-      if (planError || !freePlan) {
-        console.error('❌ Error al obtener plan Free:', planError);
-        throw new Error('No se pudo obtener el plan Free por defecto');
-      }
-
-      // 2. Preparar datos para Supabase (sin plan_id)
+      // 1. Preparar datos para Supabase (sin plan_id)
       const newUser = {
         first_name: userData.firstName,
         last_name: userData.lastName,
@@ -79,7 +67,7 @@ class User {
         is_active: true
       };
 
-      // 3. Insertar usuario en Supabase
+      // 2. Insertar usuario en Supabase
       const { data: insertedUser, error } = await supabase
         .from('users')
         .insert([newUser])
@@ -89,28 +77,6 @@ class User {
       if (error) {
         console.error('❌ Error al insertar usuario:', error);
         throw new Error(`Error al crear usuario: ${error.message}`);
-      }
-
-      // 4. Crear registro en user_plans
-      // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
-      const ahora = new Date();
-      const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
-
-      const userPlanData = {
-        user_id: insertedUser.id,
-        plan_id: freePlan.id,
-        start_date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
-        end_date: 'infinity', // Plan Free es infinito
-        is_active: true
-      };
-
-      const { error: userPlanError } = await supabase
-        .from('user_plans')
-        .insert([userPlanData]);
-
-      if (userPlanError) {
-        console.error('❌ Error al crear user_plan:', userPlanError);
-        throw new Error(`Error al asignar plan Free: ${userPlanError.message}`);
       }
 
       // 5. Generar código único: nombre empresa (minúscula, sin espacios/acentos) + inicial nombre + inicial apellido; si existe, añadir 1, 2, etc.
@@ -288,67 +254,16 @@ class User {
         throw new Error('No se pudo obtener el usuario');
       }
 
-      // 2. Obtener el plan actual desde user_plans (activo o no)
-      const { data: activeUserPlan, error: userPlanError } = await supabase
-        .from('user_plans')
-        .select(`
-          *,
-          plans (
-            id,
-            name,
-            price,
-            duration,
-            plan_modules (
-              modules (
-                id,
-                name,
-                description
-              )
-            )
-          )
-        `)
-        .eq('user_id', id)
-        .order('start_date', { ascending: false })
-        .limit(1)
-        .single();
+      user.plan = null;
+      user.plan_id = null;
 
-      if (userPlanError && userPlanError.code !== 'PGRST116') {
-        console.error('Error al obtener plan activo:', userPlanError);
-        // No lanzar error, continuar sin plan
-      }
-      
-      // 3. Procesar los datos del plan
-      if (activeUserPlan && activeUserPlan.plans) {
-        user.plan = activeUserPlan.plans;
-        user.plan_id = activeUserPlan.plans.id;
-        user.plan.is_active = activeUserPlan.is_active; // Incluir el estado del plan
-        user.plan.end_date = activeUserPlan.end_date; // Incluir la fecha de fin del plan
-        
-        // Procesar los módulos del plan
-        if (activeUserPlan.plans.plan_modules) {
-          user.plan.modules = activeUserPlan.plans.plan_modules.map(pm => pm.modules);
-          delete user.plan.plan_modules; // Limpiar datos innecesarios
-        }
-      } else {
-        user.plan = null;
-        user.plan_id = null;
-      }
-
-      // 4. Procesar datos de la empresa
+      // Procesar datos de la empresa
       if (user.empresas && user.empresas.length > 0) {
         user.empresa = user.empresas[0]; // El usuario es propietario de una empresa
         user.empresa_id = user.empresas[0].id;
         user.logo_tipo = user.empresas[0].logo_tipo; // Incluir el logo de la empresa
         user.empresa.tipo = user.empresas[0].tipo; // Incluir el tipo de la empresa
-        
-        // Obtener el plan de la empresa
-        try {
-          const empresaPlan = await User.getPlanByEmpresaId(user.empresa_id);
-          user.empresa.plan = empresaPlan;
-        } catch (planError) {
-          console.error('Error al obtener plan de la empresa en getById:', planError);
-          user.empresa.plan = null;
-        }
+        user.empresa.plan = null;
 
         delete user.empresas; // Limpiar datos innecesarios
       } else {
@@ -365,83 +280,8 @@ class User {
     }
   }
 
-  // Método estático para obtener el plan del propietario de la empresa
   static async getPlanByEmpresaId(empresaId) {
-    try {
-      // 1. Obtener la empresa con su propietario
-      const { data: empresa, error: empresaError } = await supabase
-        .from('empresas')
-        .select(`
-          id,
-          name,
-          propietario_id
-        `)
-        .eq('id', empresaId)
-        .single();
-
-      if (empresaError) {
-        if (empresaError.code === 'PGRST116') {
-          return null; // Empresa no encontrada
-        }
-        console.error('Error al obtener empresa:', empresaError);
-        throw new Error('No se pudo obtener la empresa');
-      }
-
-      if (!empresa || !empresa.propietario_id) {
-        return null; // Empresa sin propietario
-      }
-
-      // 2. Obtener el plan del propietario con consulta optimizada
-      const { data: activeUserPlan, error: userPlanError } = await supabase
-        .from('user_plans')
-        .select(`
-          *,
-          plans!inner (
-            id,
-            name,
-            price,
-            duration,
-            plan_modules!inner (
-              modules!inner (
-                id,
-                name,
-                description
-              )
-            )
-          )
-        `)
-        .eq('user_id', empresa.propietario_id)
-        .eq('is_active', true)
-        .gt('end_date', new Date().toISOString())
-        .order('start_date', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (userPlanError && userPlanError.code !== 'PGRST116') {
-        console.error('Error al obtener plan del propietario:', userPlanError);
-        // No lanzar error, continuar sin plan
-      }
-      
-      // 3. Procesar los datos del plan
-      if (activeUserPlan && activeUserPlan.plans) {
-        const plan = activeUserPlan.plans;
-        plan.is_active = activeUserPlan.is_active;
-        plan.end_date = activeUserPlan.end_date;
-        
-        // Procesar los módulos del plan
-        if (activeUserPlan.plans.plan_modules) {
-          plan.modules = activeUserPlan.plans.plan_modules.map(pm => pm.modules);
-          delete plan.plan_modules; // Limpiar datos innecesarios
-        }
-        
-        return plan;
-      }
-
-      return null; // No hay plan activo
-    } catch (error) {
-      console.error('Error al obtener plan por empresa ID:', error);
-      throw new Error('No se pudo obtener el plan de la empresa');
-    }
+    return null;
   }
 
   // Método estático para verificar contraseña actual
@@ -497,58 +337,7 @@ class User {
 
   // Método estático para actualizar el plan del usuario
   static async updatePlan(userId, planName) {
-    try {
-      // 1. Obtener el ID del plan por nombre
-      const { data: plan, error: planError } = await supabase
-        .from('plans')
-        .select('id')
-        .eq('name', planName)
-        .single();
-
-      if (planError || !plan) {
-        console.error('Error al obtener plan:', planError);
-        throw new Error(`No se pudo encontrar el plan: ${planName}`);
-      }
-
-      // 2. Desactivar el plan actual del usuario
-      const { error: deactivateError } = await supabase
-        .from('user_plans')
-        .update({ is_active: false })
-        .eq('user_id', userId)
-        .eq('is_active', true);
-
-      if (deactivateError) {
-        console.error('Error al desactivar plan actual:', deactivateError);
-        throw new Error('No se pudo desactivar el plan actual');
-      }
-
-      // 3. Crear nuevo registro de plan
-      // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
-      const ahora = new Date();
-      const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
-
-      const userPlanData = {
-        user_id: userId,
-        plan_id: plan.id,
-        start_date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
-        end_date: planName === 'Free' ? 'infinity' : null, // Plan Free es infinito
-        is_active: true
-      };
-
-      const { error: insertError } = await supabase
-        .from('user_plans')
-        .insert([userPlanData]);
-
-      if (insertError) {
-        console.error('Error al crear nuevo plan:', insertError);
-        throw new Error('No se pudo asignar el nuevo plan');
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error en updatePlan:', error);
-      throw error;
-    }
+    return true;
   }
 
   // Método estático para actualizar datos de usuario y empresa

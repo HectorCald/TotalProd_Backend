@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const cargosController = require('../controllers/cargosController');
 const { requireAuth } = require('../middleware/auth');
-const { requireModuleAccess } = require('../middleware/moduleAuth');
 
 // Aplicar middleware de autenticación a todas las rutas
 router.use(requireAuth);
@@ -11,12 +10,12 @@ router.use(requireAuth);
 router.get('/', cargosController.getAll);
 
 // POST /api/cargos - Crear un cargo
-router.post('/', requireModuleAccess('Cargos'), cargosController.create);
+router.post('/', cargosController.create);
 
 // PUT /api/cargos/:id - Actualizar un cargo
-router.put('/:id', requireModuleAccess('Cargos'), cargosController.update);
+router.put('/:id', cargosController.update);
 
 // DELETE /api/cargos/:id - Eliminar un cargo
-router.delete('/:id', requireModuleAccess('Cargos'), cargosController.delete);
+router.delete('/:id', cargosController.delete);
 
 module.exports = router;

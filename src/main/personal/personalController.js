@@ -1,5 +1,5 @@
-const Personal = require('../models/Personal');
-const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
+const Personal = require('./Personal');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../../utils/permissionsHelper');
 
 class PersonalController {
 
@@ -100,21 +100,6 @@ class PersonalController {
     });
   }
 
-  // Obtener personal por ID
-  static async getById(req, res) {
-    return PersonalController._handleRequest(res, 'getById', req, async () => {
-      const { id } = req.params;
-      const personal = await Personal.getById(id);
-      if (!personal) {
-        return { success: false, status: 404, message: 'Personal no encontrado' };
-      }
-      return personal;
-    }, {
-      validatePersonalId: true,
-      successMessage: 'Personal obtenido exitosamente'
-    });
-  }
-
   // Crear personal
   static async create(req, res) {
     return PersonalController._handleRequest(res, 'create', req, async () => {
@@ -190,35 +175,18 @@ class PersonalController {
     });
   }
 
-  // Validar correo de empleado
-  static async validateEmployeeEmail(req, res) {
-    return PersonalController._handleRequest(res, 'validateEmployeeEmail', req, async () => {
-      const { email } = req.params;
-
-      if (!email) {
-        return { success: false, message: 'Correo es requerido' };
-      }
-
-      const personal = await Personal.getByEmail(email);
-
+  // Obtener personal por ID
+  static async getById(req, res) {
+    return PersonalController._handleRequest(res, 'getById', req, async () => {
+      const { id } = req.params;
+      const personal = await Personal.getById(id);
       if (!personal) {
-        return { success: false, status: 404, message: 'Correo de empleado no válido' };
+        return { success: false, status: 404, message: 'Personal no encontrado' };
       }
-
-      if (personal.password && !personal.is_active) {
-        return { success: false, status: 403, message: 'Cuenta inactiva' };
-      }
-
-      return {
-        success: true,
-        message: 'Correo válido',
-        data: {
-          personal: personal,
-          hasPassword: !!personal.password
-        }
-      };
+      return personal;
     }, {
-      validateEmpresaId: false
+      validatePersonalId: true,
+      successMessage: 'Personal obtenido exitosamente'
     });
   }
 
@@ -243,50 +211,6 @@ class PersonalController {
     });
   }
 
-  // Login de empleado
-  static async loginEmployee(req, res) {
-    return PersonalController._handleRequest(res, 'loginEmployee', req, async () => {
-      const { email, password } = req.body;
-
-      if (!email || !password) {
-        return { success: false, message: 'Correo y contraseña son requeridos' };
-      }
-
-      const result = await Personal.loginEmployee(email, password);
-
-      if (!result.success) {
-        return { success: false, status: 401, message: result.message };
-      }
-
-      return {
-        success: true,
-        message: 'Login exitoso',
-        data: result.data
-      };
-    });
-  }
-
-  // Cambiar contraseña de empleado
-  static async changePassword(req, res) {
-    return PersonalController._handleRequest(res, 'changePassword', req, async () => {
-      const { id } = req.params;
-      const { currentPassword, newPassword } = req.body;
-
-      if (!currentPassword || !newPassword) {
-        return { success: false, message: 'Contraseña actual y nueva contraseña son requeridos' };
-      }
-
-      if (newPassword.length < 8) {
-        return { success: false, message: 'La nueva contraseña debe tener al menos 8 caracteres' };
-      }
-
-      const result = await Personal.changePassword(id, currentPassword, newPassword);
-      return result; // Result ya tiene success, message
-    }, {
-      validatePersonalId: true
-    });
-  }
-
   // Resetear contraseña de empleado
   static async resetPassword(req, res) {
     return PersonalController._handleRequest(res, 'resetPassword', req, async () => {
@@ -298,33 +222,6 @@ class PersonalController {
     });
   }
 
-  // Actualizar ubicación del empleado
-  static async updateLocation(req, res) {
-    return PersonalController._handleRequest(res, 'updateLocation', req, async () => {
-      const { id } = req.params;
-      const { latitude, longitude } = req.body;
-
-      if (!latitude || !longitude) {
-        return { success: false, message: 'Latitud y longitud son requeridos' };
-      }
-
-      const result = await Personal.updateLocation(id, latitude, longitude);
-      return result;
-    }, {
-      validatePersonalId: true
-    });
-  }
-
-  // Obtener ubicación del empleado
-  static async getLocation(req, res) {
-    return PersonalController._handleRequest(res, 'getLocation', req, async () => {
-      const { id } = req.params;
-      const result = await Personal.getLocation(id);
-      return result;
-    }, {
-      validatePersonalId: true
-    });
-  }
 }
 
 module.exports = PersonalController;

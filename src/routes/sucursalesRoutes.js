@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const sucursalesController = require('../controllers/sucursalesController');
 const { requireAuth } = require('../middleware/auth');
-const { requireModuleAccess } = require('../middleware/moduleAuth');
 
 router.use(requireAuth);
 
@@ -11,9 +10,9 @@ router.get('/', sucursalesController.getAll);
 router.get('/:id/precios', sucursalesController.getPreciosBySucursalId);
 router.get('/:id', sucursalesController.getById);
 
-// Rutas que SÍ requieren módulo (escritura)
-router.post('/', requireModuleAccess('Sucursales'), sucursalesController.create);
-router.put('/:id', requireModuleAccess('Sucursales'), sucursalesController.update);
-router.delete('/:id', requireModuleAccess('Sucursales'), sucursalesController.delete);
+// Rutas (escritura)
+router.post('/', sucursalesController.create);
+router.put('/:id', sucursalesController.update);
+router.delete('/:id', sucursalesController.delete);
 
 module.exports = router;

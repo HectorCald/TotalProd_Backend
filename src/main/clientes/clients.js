@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabase } = require('../../config/supabase');
 
 class clients {
 
@@ -135,47 +135,6 @@ class clients {
       }
     } catch (error) {
       throw error;
-    }
-  }
-
-    // Obtener la ubicación de un cliente: la de la tabla clients si existe;
-  // si no, la del último movimiento (movimientos_almacen.ubicacion) donde cliente_id = id y ubicacion no es null.
-  static async getLocation(clientId) {
-    try {
-      if (!clientId) {
-        return { location: null };
-      }
-
-      const { data: client, error: errClient } = await supabase
-        .from('clients')
-        .select('location')
-        .eq('id', clientId)
-        .single();
-
-      if (errClient || !client) {
-        return { location: null };
-      }
-
-      if (client.location != null) {
-        return { location: client.location };
-      }
-
-      const { data: mov, error: errMov } = await supabase
-        .from('movimientos_almacen')
-        .select('ubicacion')
-        .eq('cliente_id', clientId)
-        .not('ubicacion', 'is', null)
-        .order('fecha', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (errMov || !mov || mov.ubicacion == null) {
-        return { location: null };
-      }
-
-      return { location: mov.ubicacion };
-    } catch (error) {
-      return { location: null };
     }
   }
 

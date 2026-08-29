@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const userRoutes = require('./userRoutes');
 const passwordResetRoutes = require('./passwordResetRoutes');
-const clientRoutes = require('./clientRoutes');
-const proveedorRoutes = require('./proveedoresRoutes');
+const clientRoutes = require('../main/clientes/clientRoutes');
+const proveedorRoutes = require('../main/proveedores/proveedoresRoutes');
 const productsAcopioRoutes = require('./productsAcopioRoutes');
 const productsAlmacenRoutes = require('./productsAlmacenRoutes');
 const typeMeasureRoutes = require('./typeMeasureRoutes');
@@ -15,10 +15,8 @@ const movimientosAlmacenRoutes = require('./movimientosAlmacenRoutes');
 const pedidosAcopioRoutes = require('./pedidosAcopioRoutes');
 const pedidosAlmacenRoutes = require('./pedidosAlmacenRoutes');
 const modulesRoutes = require('./modulesRoutes');
-const planRoutes = require('./planRoutes');
-const codigoPromocionalRoutes = require('./codigoPromocionalRoutes');
 const sucursalesRoutes = require('./sucursalesRoutes');
-const personalRoutes = require('./personalRoutes');
+const personalRoutes = require('../main/personal/personalRoutes');
 const gastosRoutes = require('./gastosRoutes');
 const deudasRoutes = require('./deudasRoutes');
 const registrosProduccionDamabravaRoutes = require('./registrosProduccionDamabravaRoutes');
@@ -92,12 +90,6 @@ router.use('/pedidos-almacen', pedidosAlmacenRoutes);
 
 // Rutas de módulos
 router.use('/modules', modulesRoutes);
-
-// Rutas de planes
-router.use('/plans', planRoutes);
-
-// Rutas de códigos promocionales
-router.use('/codigo-promocional', codigoPromocionalRoutes);
 
 // Rutas de sucursales
 router.use('/sucursales', sucursalesRoutes);

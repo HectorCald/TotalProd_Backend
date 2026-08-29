@@ -1,5 +1,5 @@
-const proveedor = require('../models/proveedores');
-const { checkDeletePermission, checkUpdatePermission } = require('../utils/permissionsHelper');
+const proveedor = require('./proveedores');
+const { checkDeletePermission, checkUpdatePermission } = require('../../utils/permissionsHelper');
 
 class proveedoresController {
 

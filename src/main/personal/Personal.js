@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabase } = require('../../config/supabase');
 
 class Personal {
   // Constructor para crear un personal
@@ -17,125 +17,6 @@ class Personal {
     this.is_active = data.is_active;
     this.created_at = data.created_at;
     this.modules = data.modules || [];
-  }
-
-  // --- Helpers internos ---
-  static async _executeQuery(query, errorMessage) {
-    const { data, error } = await query;
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return null; // Personal no encontrado
-      }
-      if (error.code === '23505') {
-        throw new Error('El correo electrónico ya existe en esta empresa');
-      }
-      console.error(`Error en _executeQuery (${errorMessage}):`, error);
-      throw new Error(errorMessage);
-    }
-    return data;
-  }
-
-  static _formatPersonalData(personal) {
-    if (!personal) return null;
-
-    // Procesar los permisos
-    const permissionsData = personal.staff_permissions?.[0] || personal.personal_permisos?.[0];
-    const permisos = permissionsData ? {
-      crear: permissionsData.can_create,
-      eliminar: permissionsData.can_delete,
-      editar: permissionsData.can_update,
-      anular: permissionsData.can_anular,
-      reemplazar: permissionsData.can_replace,
-      info: permissionsData.can_info,
-      sucursales: permissionsData.can_sucursales,
-      offline: permissionsData.can_offline
-    } : {
-      crear: false,
-      eliminar: false,
-      editar: false,
-      anular: false,
-      reemplazar: false,
-      info: false,
-      sucursales: false,
-      offline: false
-    };
-
-    // Procesar la sucursal con información de la empresa y plan
-    const branchData = personal.branches || personal.sucursales;
-    const sucursal = branchData ? {
-      id: branchData.id,
-      name: branchData.name,
-      empresas: branchData.empresas ? {
-        id: branchData.empresas.id,
-        name: branchData.empresas.name,
-        logo_tipo: branchData.empresas.logo_tipo,
-        codigo: branchData.empresas.codigo,
-        plan: personal.plan || null
-      } : null
-    } : null;
-
-    // Procesar los módulos desde el cargo/posicion
-    const cargoData = personal.cargos || personal.cargos_position_id;
-    let finalModules = [];
-    if (cargoData && cargoData.cargo_sub_modulo) {
-        finalModules = cargoData.cargo_sub_modulo.map(csm => {
-            if (csm.sub_modulos) {
-                return {
-                    ...csm.sub_modulos,
-                    modulos: csm.sub_modulos.modules
-                };
-            }
-            return null;
-        }).filter(Boolean);
-    }
-
-    const cargoName = cargoData?.name || personal.cargo || '--';
-    const userEmail = personal.email || personal.codigo || '--';
-
-    return {
-      ...personal,
-      company_id: personal.company_id || personal.empresa_id,
-      empresa_id: personal.company_id || personal.empresa_id,
-      position_id: personal.position_id || personal.cargo_id,
-      cargo_id: personal.position_id || personal.cargo_id,
-      branch_id: personal.branch_id || personal.sucursal_id,
-      sucursal_id: personal.branch_id || personal.sucursal_id,
-      email: userEmail,
-      codigo: userEmail,
-      cargo: cargoName,
-      cargos: cargoData || null,
-      modules: finalModules,
-      permisos: permisos,
-      sucursal: sucursal
-    };
-  }
-
-  static async _savePermissions(personalId, permisos) {
-    if (!permisos || Object.keys(permisos).length === 0) return;
-
-    // Primero verificar si la tabla existe
-    const { data: tableCheck, error: tableError } = await supabase
-      .from('staff_permissions')
-      .select('*')
-      .limit(1);
-      
-    if (tableError) return;
-
-    // Eliminar permisos existentes
-    await supabase.from('staff_permissions').delete().eq('member_id', personalId);
-
-    // Insertar nuevos permisos
-    await supabase.from('staff_permissions').insert([{
-      member_id: personalId,
-      can_delete: permisos.eliminar || false,
-      can_create: permisos.crear || false,
-      can_update: permisos.editar || false,
-      can_anular: permisos.anular || false,
-      can_replace: permisos.reemplazar || false,
-      can_info: permisos.info || false,
-      can_sucursales: permisos.sucursales || false,
-      can_offline: permisos.offline || false
-    }]);
   }
 
   // Método para obtener todos los personal de una empresa
@@ -170,41 +51,6 @@ class Personal {
       });
     } catch (error) {
       console.error('Error al obtener el personal:', error);
-      throw new Error('No se pudo obtener el personal');
-    }
-  }
-
-  // Método para obtener personal por ID
-  static async getById(id) {
-    try {
-      if (!id) throw new Error('ID del personal es requerido');
-
-      const query = supabase
-        .from('staff')
-        .select(`
-          *,
-          branches (id, name, empresas (id, name, logo_tipo, codigo)),
-          staff_permissions (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
-          cargos:position_id (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
-        `)
-        .eq('id', id)
-        .single();
-
-      const data = await this._executeQuery(query, 'No se pudo obtener el personal');
-      
-      const companyId = data?.company_id || data?.empresa_id;
-      if (data && companyId) {
-        try {
-          const User = require('./User');
-          data.plan = await User.getPlanByEmpresaId(companyId);
-        } catch (err) {
-          console.error('Error al obtener plan en getById de Personal:', err);
-        }
-      }
-
-      return this._formatPersonalData(data);
-    } catch (error) {
-      console.error('Error al obtener personal por ID:', error);
       throw new Error('No se pudo obtener el personal');
     }
   }
@@ -332,10 +178,10 @@ class Personal {
     }
   }
 
-  // Método para obtener personal por correo
-  static async getByEmail(email) {
+  // Método para obtener personal por ID
+  static async getById(id) {
     try {
-      if (!email) throw new Error('Correo electrónico es requerido');
+      if (!id) throw new Error('ID del personal es requerido');
 
       const query = supabase
         .from('staff')
@@ -345,29 +191,19 @@ class Personal {
           staff_permissions (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
           cargos:position_id (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
         `)
-        .eq('email', email)
+        .eq('id', id)
         .single();
 
-      const personalData = await this._executeQuery(query, 'No se pudo obtener el personal');
-      if (!personalData) return null;
+      const data = await this._executeQuery(query, 'No se pudo obtener el personal');
+      
 
-      const companyId = personalData.company_id || personalData.empresa_id;
-      if (companyId) {
-        try {
-          const User = require('./User');
-          personalData.plan = await User.getPlanByEmpresaId(companyId);
-        } catch (err) {
-          console.error('Error al obtener plan en getByEmail de Personal:', err);
-        }
-      }
-
-      return this._formatPersonalData(personalData);
+      return this._formatPersonalData(data);
     } catch (error) {
-      console.error('Error al obtener personal por correo:', error);
+      console.error('Error al obtener personal por ID:', error);
       throw new Error('No se pudo obtener el personal');
     }
   }
-
+  
   // Método para establecer contraseña
   static async setPassword(id, password) {
     try {
@@ -388,76 +224,6 @@ class Personal {
     } catch (error) {
       console.error('Error al establecer contraseña:', error);
       throw error;
-    }
-  }
-
-  // Método para login de empleado
-  static async loginEmployee(email, password) {
-    try {
-      if (!email || !password) throw new Error('Correo electrónico y contraseña son requeridos');
-
-      const personal = await this.getByEmail(email);
-      if (!personal) return { success: false, message: 'Correo de empleado no válido' };
-      if (!personal.is_active) return { success: false, message: 'Su cuenta está inactiva. Contacte al administrador.' };
-      if (!personal.password) return { success: false, message: 'No tiene contraseña establecida' };
-
-      const bcrypt = require('bcryptjs');
-      const isPasswordValid = await bcrypt.compare(password, personal.password);
-
-      if (!isPasswordValid) {
-        return {
-          success: false,
-          message: 'La contraseña ingresada no es correcta. Verifica que estés usando la contraseña de tu cuenta e intenta nuevamente.'
-        };
-      }
-
-      const { generateToken } = require('../config/jwt');
-      const companyId = personal.company_id || personal.empresa_id;
-      const tokenPayload = { id: personal.id, empresa_id: companyId, company_id: companyId, type: 'employee' };
-      const token = generateToken(tokenPayload);
-
-      return {
-        success: true,
-        data: {
-          personal: personal,
-          token: token
-        }
-      };
-    } catch (error) {
-      console.error('Error en login de empleado:', error);
-      return { success: false, message: 'Error en el login' };
-    }
-  }
-
-  // Método para cambiar contraseña de empleado
-  static async changePassword(id, currentPassword, newPassword) {
-    try {
-      if (!id || !currentPassword || !newPassword) throw new Error('ID del personal, contraseña actual y nueva contraseña son requeridos');
-
-      const personal = await this.getById(id);
-      if (!personal) return { success: false, message: 'Personal no encontrado' };
-      if (!personal.password) return { success: false, message: 'No tiene contraseña establecida' };
-
-      const bcrypt = require('bcryptjs');
-      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, personal.password);
-      if (!isCurrentPasswordValid) return { success: false, message: 'La contraseña actual es incorrecta' };
-
-      const saltRounds = 10;
-      const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
-
-      const query = supabase
-        .from('staff')
-        .update({ password: hashedNewPassword })
-        .eq('id', id)
-        .select()
-        .single();
-
-      await this._executeQuery(query, 'No se pudo cambiar la contraseña');
-
-      return { success: true, message: 'Contraseña cambiada exitosamente' };
-    } catch (error) {
-      console.error('Error al cambiar contraseña:', error);
-      return { success: false, message: error.message };
     }
   }
 
@@ -486,6 +252,190 @@ class Personal {
       console.error('Error al resetear contraseña:', error);
       return { success: false, message: error.message };
     }
+  }
+
+  // Método para obtener personal por correo
+  static async getByEmail(email) {
+    try {
+      if (!email) throw new Error('Correo electrónico es requerido');
+
+      const query = supabase
+        .from('staff')
+        .select(`
+          *,
+          branches (id, name, empresas (id, name, logo_tipo, codigo)),
+          staff_permissions (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
+          cargos:position_id (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
+        `)
+        .eq('email', email)
+        .single();
+
+      const personalData = await this._executeQuery(query, 'No se pudo obtener el personal');
+      if (!personalData) return null;
+
+
+      return this._formatPersonalData(personalData);
+    } catch (error) {
+      console.error('Error al obtener personal por correo:', error);
+      throw new Error('No se pudo obtener el personal');
+    }
+  }
+
+  // Método para login de empleado
+  static async loginEmployee(email, password) {
+    try {
+      if (!email || !password) throw new Error('Correo electrónico y contraseña son requeridos');
+
+      const personal = await this.getByEmail(email);
+      if (!personal) return { success: false, message: 'Correo de empleado no válido' };
+      if (!personal.is_active) return { success: false, message: 'Su cuenta está inactiva. Contacte al administrador.' };
+      if (!personal.password) return { success: false, message: 'No tiene contraseña establecida' };
+
+      const bcrypt = require('bcryptjs');
+      const isPasswordValid = await bcrypt.compare(password, personal.password);
+
+      if (!isPasswordValid) {
+        return {
+          success: false,
+          message: 'La contraseña ingresada no es correcta. Verifica que estés usando la contraseña de tu cuenta e intenta nuevamente.'
+        };
+      }
+
+      const { generateToken } = require('../../config/jwt');
+      const companyId = personal.company_id || personal.empresa_id;
+      const tokenPayload = { id: personal.id, empresa_id: companyId, company_id: companyId, type: 'employee' };
+      const token = generateToken(tokenPayload);
+
+      return {
+        success: true,
+        data: {
+          personal: personal,
+          token: token
+        }
+      };
+    } catch (error) {
+      console.error('Error en login de empleado:', error);
+      return { success: false, message: 'Error en el login' };
+    }
+  }
+
+  // --- Helpers internos ---
+  static async _executeQuery(query, errorMessage) {
+    const { data, error } = await query;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null; // Personal no encontrado
+      }
+      if (error.code === '23505') {
+        throw new Error('El correo electrónico ya existe en esta empresa');
+      }
+      console.error(`Error en _executeQuery (${errorMessage}):`, error);
+      throw new Error(errorMessage);
+    }
+    return data;
+  }
+
+  static _formatPersonalData(personal) {
+    if (!personal) return null;
+
+    // Procesar los permisos
+    const permissionsData = personal.staff_permissions?.[0] || personal.personal_permisos?.[0];
+    const permisos = permissionsData ? {
+      crear: permissionsData.can_create,
+      eliminar: permissionsData.can_delete,
+      editar: permissionsData.can_update,
+      anular: permissionsData.can_anular,
+      reemplazar: permissionsData.can_replace,
+      info: permissionsData.can_info,
+      sucursales: permissionsData.can_sucursales,
+      offline: permissionsData.can_offline
+    } : {
+      crear: false,
+      eliminar: false,
+      editar: false,
+      anular: false,
+      reemplazar: false,
+      info: false,
+      sucursales: false,
+      offline: false
+    };
+
+    // Procesar la sucursal con información de la empresa y plan
+    const branchData = personal.branches || personal.sucursales;
+    const sucursal = branchData ? {
+      id: branchData.id,
+      name: branchData.name,
+      empresas: branchData.empresas ? {
+        id: branchData.empresas.id,
+        name: branchData.empresas.name,
+        logo_tipo: branchData.empresas.logo_tipo,
+        codigo: branchData.empresas.codigo,
+        plan: personal.plan || null
+      } : null
+    } : null;
+
+    // Procesar los módulos desde el cargo/posicion
+    const cargoData = personal.cargos || personal.cargos_position_id;
+    let finalModules = [];
+    if (cargoData && cargoData.cargo_sub_modulo) {
+        finalModules = cargoData.cargo_sub_modulo.map(csm => {
+            if (csm.sub_modulos) {
+                return {
+                    ...csm.sub_modulos,
+                    modulos: csm.sub_modulos.modules
+                };
+            }
+            return null;
+        }).filter(Boolean);
+    }
+
+    const cargoName = cargoData?.name || personal.cargo || '--';
+    const userEmail = personal.email || personal.codigo || '--';
+
+    return {
+      ...personal,
+      company_id: personal.company_id || personal.empresa_id,
+      empresa_id: personal.company_id || personal.empresa_id,
+      position_id: personal.position_id || personal.cargo_id,
+      cargo_id: personal.position_id || personal.cargo_id,
+      branch_id: personal.branch_id || personal.sucursal_id,
+      sucursal_id: personal.branch_id || personal.sucursal_id,
+      email: userEmail,
+      codigo: userEmail,
+      cargo: cargoName,
+      cargos: cargoData || null,
+      modules: finalModules,
+      permisos: permisos,
+      sucursal: sucursal
+    };
+  }
+
+  static async _savePermissions(personalId, permisos) {
+    if (!permisos || Object.keys(permisos).length === 0) return;
+
+    // Primero verificar si la tabla existe
+    const { data: tableCheck, error: tableError } = await supabase
+      .from('staff_permissions')
+      .select('*')
+      .limit(1);
+      
+    if (tableError) return;
+
+    // Eliminar permisos existentes
+    await supabase.from('staff_permissions').delete().eq('member_id', personalId);
+
+    // Insertar nuevos permisos
+    await supabase.from('staff_permissions').insert([{
+      member_id: personalId,
+      can_delete: permisos.eliminar || false,
+      can_create: permisos.crear || false,
+      can_update: permisos.editar || false,
+      can_anular: permisos.anular || false,
+      can_replace: permisos.reemplazar || false,
+      can_info: permisos.info || false,
+      can_sucursales: permisos.sucursales || false,
+      can_offline: permisos.offline || false
+    }]);
   }
 }
 

@@ -1,5 +1,5 @@
-const client = require('../models/clients');
-const { checkDeletePermission, checkUpdatePermission } = require('../utils/permissionsHelper');
+const client = require('./clients');
+const { checkDeletePermission, checkUpdatePermission } = require('../../utils/permissionsHelper');
 
 class clientsController {
 
@@ -148,17 +148,6 @@ class clientsController {
       validateClientId: true,
       checkPermission: 'update',
       successMessage: 'Cliente actualizado exitosamente'
-    });
-  }
-
-    // Obtener ubicación del cliente (tabla clients o último movimiento con ubicación)
-  static async getLocation(req, res) {
-    return clientsController._handleRequest(res, 'getLocation', req, async () => {
-      const { id } = req.params;
-      return await client.getLocation(id);
-    }, {
-      validateClientId: true,
-      successMessage: 'Ubicación obtenida'
     });
   }
 

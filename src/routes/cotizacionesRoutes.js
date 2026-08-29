@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const cotizacionesController = require('../controllers/cotizacionesController');
 const { requireAuth } = require('../middleware/auth');
-const { requireModuleAccess } = require('../middleware/moduleAuth');
 
 
 
@@ -10,8 +9,6 @@ const { requireModuleAccess } = require('../middleware/moduleAuth');
 router.use(requireAuth);
 // Obtener una cotización por ID
 router.get('/:id', cotizacionesController.getById);
-// Aplicar middleware de acceso al módulo 'Cotizaciones' a todas las rutas
-router.use(requireModuleAccess('Cotizaciones'));
 
 
 // Obtener todas las cotizaciones
