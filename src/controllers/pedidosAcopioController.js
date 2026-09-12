@@ -1,5 +1,5 @@
 const pedidosAcopio = require('../models/pedidosAcopio');
-const gastosModel = require('../models/gastos');
+const gastosModel = require('../main/pagos/gastos');
 const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
 
 class pedidosAcopioController {

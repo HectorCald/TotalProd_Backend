@@ -1,103 +1,11 @@
-const { supabase } = require('../config/supabase');
-const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
+const { supabase } = require('../../config/supabase');
+const { aplicarFiltroFecha, normalizarFechaEntrada } = require('../../utils/fechaRangeHelper');
+const { normalizeSearchTokens } = require('../../utils/searchHelper');
 
 class gastos {
-    // Crear un nuevo gasto
-    static async create(gastoData) {
-        try {
-            const { user_id, personal_id, sucu_id, branch_id, fecha_gasto, valor, concepto, metodo_pago, proveedor_id, movimiento_entrada_id, movimiento_acopio_entrada_id } = gastoData;
-            const targetBranchId = branch_id || sucu_id;
-
-            // Usar la fecha proporcionada directamente (formato YYYY-MM-DD)
-            let fechaFinal;
-            if (fecha_gasto) {
-                // Si es solo fecha (YYYY-MM-DD), agregar T12:00:00 para evitar desfase de zona horaria
-                fechaFinal = (typeof fecha_gasto === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha_gasto))
-                    ? fecha_gasto + 'T12:00:00'
-                    : fecha_gasto;
-            } else {
-                // Si no viene fecha, usar la actual
-                fechaFinal = new Date().toISOString();
-            }
-
-            const dbData = {
-                fecha_gasto: fechaFinal,
-                valor,
-                concepto,
-                metodo_pago,
-                proveedor_id: proveedor_id || null,
-                movimiento_entrada_id: movimiento_entrada_id || null,
-                movimiento_acopio_entrada_id: movimiento_acopio_entrada_id || null
-            };
-
-            // Solo agregar user_id o personal_id si tienen valor
-            if (user_id && user_id !== null) {
-                dbData.user_id = user_id;
-            }
-            if (personal_id && personal_id !== null) {
-                dbData.personal_id = personal_id;
-            }
-            if (targetBranchId && targetBranchId !== null) {
-                dbData.sucu_id = targetBranchId;
-            }
-
-            const { data, error } = await supabase
-                .from('gastos')
-                .insert([dbData])
-                .select(`
-                    *,
-                    proveedor:proveedor_id (
-                        id,
-                        name
-                    )
-                `)
-                .single();
-
-            if (error) {
-                console.error('Error al crear gasto:', error);
-                throw new Error('Error al crear el gasto');
-            }
-
-            return {
-                success: true,
-                data: data,
-                message: 'Gasto creado correctamente'
-            };
-
-        } catch (error) {
-            console.error('Error en create gasto:', error);
-            return {
-                success: false,
-                message: error.message || 'Error al crear el gasto'
-            };
-        }
-    }
-
-    // Obtener todos los gastos con paginación y filtros
-    static normalizeSearchTokens(search = '') {
-        if (!search) return [];
-        const normalized = search
-            .toString()
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[-_/]+/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        if (!normalized) return [];
-
-        const tokens = new Set();
-        normalized.split(' ').forEach(token => {
-            const cleanToken = token.replace(/'/g, '');
-            if (cleanToken) tokens.add(cleanToken);
-        });
-
-        return Array.from(tokens);
-    }
 
     // Obtener todos los gastos sin límite
-    static async getAllSinLimite(sucuId, metodoPago = null, filtroFecha = null, proveedorId = null, search = '') {
+    static async getAllSinLimite(sucuId, filtroFecha = null) {
         try {
             if (!sucuId) return { success: false, message: 'No hay sucursal seleccionada' };
             let query = supabase
@@ -124,18 +32,6 @@ class gastos {
                     )
                 `)
                 .eq('sucu_id', sucuId);
-
-            if (metodoPago) query = query.eq('metodo_pago', metodoPago);
-            if (proveedorId) query = query.eq('proveedor_id', proveedorId);
-
-            const searchTokens = gastos.normalizeSearchTokens(search);
-            if (searchTokens.length > 0) {
-                const orFilters = searchTokens.flatMap(token => ([
-                    `concepto.ilike.%${token}%`,
-                    `metodo_pago.ilike.%${token}%`
-                ]));
-                query = query.or(orFilters.join(','));
-            }
 
             query = aplicarFiltroFecha(query, 'fecha_gasto', filtroFecha);
 
@@ -167,6 +63,7 @@ class gastos {
         }
     }
 
+    // Obtener todos los gastos con paginación y filtros
     static async getAll(page = 1, limit = 30, search = '', metodoPago = null, proveedorId = null, ordenamiento = 'fecha_desc', sucuIdParam = null, filtroFecha = null) {
         try {
             const sucuId = sucuIdParam;
@@ -203,7 +100,7 @@ class gastos {
                 .eq('sucu_id', sucuId);
 
             // Aplicar búsqueda si se proporciona
-            const searchTokens = gastos.normalizeSearchTokens(search);
+            const searchTokens = normalizeSearchTokens(search);
             if (searchTokens.length > 0) {
                 const orFilters = searchTokens.flatMap(token => ([
                     `concepto.ilike.%${token}%`,
@@ -329,69 +226,62 @@ class gastos {
         }
     }
 
-    // Obtener un gasto por ID
-    static async getById(id) {
+    // Crear un nuevo gasto
+    static async create(gastoData) {
         try {
+            const { user_id, personal_id, sucu_id, branch_id, fecha_gasto, valor, concepto, metodo_pago, proveedor_id, movimiento_entrada_id, movimiento_acopio_entrada_id } = gastoData;
+            const targetBranchId = branch_id || sucu_id;
+            const fechaFinal = normalizarFechaEntrada(fecha_gasto);
+
+            const dbData = {
+                fecha_gasto: fechaFinal,
+                valor,
+                concepto,
+                metodo_pago,
+                proveedor_id: proveedor_id || null,
+                movimiento_entrada_id: movimiento_entrada_id || null,
+                movimiento_acopio_entrada_id: movimiento_acopio_entrada_id || null
+            };
+
+            // Solo agregar user_id o personal_id si tienen valor
+            if (user_id && user_id !== null) {
+                dbData.user_id = user_id;
+            }
+            if (personal_id && personal_id !== null) {
+                dbData.personal_id = personal_id;
+            }
+            if (targetBranchId && targetBranchId !== null) {
+                dbData.sucu_id = targetBranchId;
+            }
+
             const { data, error } = await supabase
                 .from('gastos')
+                .insert([dbData])
                 .select(`
                     *,
                     proveedor:proveedor_id (
                         id,
                         name
-                    ),
-                    user:user_id (
-                        id,
-                        first_name,
-                        last_name
-                    ),
-                    personal:personal_id (
-                        id,
-                        first_name,
-                        last_name
-                    ),
-                    sucursal:sucu_id (
-                        id,
-                        name
                     )
                 `)
-                .eq('id', id)
                 .single();
 
             if (error) {
-                console.error('Error al obtener gasto por ID:', error);
-                throw new Error('Error al obtener el gasto');
-            }
-
-            // Procesar los datos para agregar el campo name a user y personal
-            let processedData = { ...data };
-            
-            // Procesar user
-            if (data.user) {
-                processedData.user = {
-                    ...data.user,
-                    name: `${data.user.first_name} ${data.user.last_name}`.trim()
-                };
-            }
-            
-            // Procesar personal
-            if (data.personal) {
-                processedData.personal = {
-                    ...data.personal,
-                    name: `${data.personal.first_name} ${data.personal.last_name}`.trim()
-                };
+                console.error('Error al crear gasto:', error);
+                throw new Error('Error al crear el gasto');
             }
 
             return {
                 success: true,
-                data: processedData
+                data: data,
+                message: 'Gasto creado correctamente'
             };
 
         } catch (error) {
-            console.error('Error en getById gasto:', error);
+            console.error('Error en create gasto:', error);
             return {
                 success: false,
-                message: error.message || 'Error al obtener el gasto'
+                message: error.message || 'Error al crear el gasto'
             };
         }
     }
@@ -408,11 +298,8 @@ class gastos {
                 proveedor_id: proveedor_id || null
             };
 
-            // Si viene una fecha específica, agregar T12:00:00 para evitar desfase de zona horaria
             if (fecha_gasto) {
-                dbData.fecha_gasto = (typeof fecha_gasto === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha_gasto))
-                    ? fecha_gasto + 'T12:00:00'
-                    : fecha_gasto;
+                dbData.fecha_gasto = normalizarFechaEntrada(fecha_gasto, false);
             }
 
             const { data, error } = await supabase
@@ -486,16 +373,9 @@ class gastos {
         }
     }
 
-    // Obtener gastos por rango de fechas
-    static async getByDateRange(fechaInicio, fechaFin, sucuId) {
+    // Obtener un gasto por ID
+    static async getById(id) {
         try {
-            if (!sucuId) {
-                return {
-                    success: false,
-                    message: 'No hay sucursal seleccionada'
-                };
-            }
-
             const { data, error } = await supabase
                 .from('gastos')
                 .select(`
@@ -503,28 +383,59 @@ class gastos {
                     proveedor:proveedor_id (
                         id,
                         name
+                    ),
+                    user:user_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    sucursal:sucu_id (
+                        id,
+                        name
                     )
                 `)
-                .eq('sucu_id', sucuId)
-                .gte('fecha_gasto', fechaInicio)
-                .lte('fecha_gasto', fechaFin)
-                .order('fecha_gasto', { ascending: true });
+                .eq('id', id)
+                .single();
 
             if (error) {
-                console.error('Error al obtener gastos por rango de fechas:', error);
-                throw new Error('Error al obtener los gastos');
+                console.error('Error al obtener gasto por ID:', error);
+                throw new Error('Error al obtener el gasto');
+            }
+
+            // Procesar los datos para agregar el campo name a user y personal
+            let processedData = { ...data };
+            
+            // Procesar user
+            if (data.user) {
+                processedData.user = {
+                    ...data.user,
+                    name: `${data.user.first_name} ${data.user.last_name}`.trim()
+                };
+            }
+            
+            // Procesar personal
+            if (data.personal) {
+                processedData.personal = {
+                    ...data.personal,
+                    name: `${data.personal.first_name} ${data.personal.last_name}`.trim()
+                };
             }
 
             return {
                 success: true,
-                data: data || []
+                data: processedData
             };
 
         } catch (error) {
-            console.error('Error en getByDateRange gastos:', error);
+            console.error('Error en getById gasto:', error);
             return {
                 success: false,
-                message: error.message || 'Error al obtener los gastos'
+                message: error.message || 'Error al obtener el gasto'
             };
         }
     }

@@ -1,27 +1,5 @@
-const { supabase } = require('../config/supabase');
-const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
-
-const formatDateInput = (value, { keepTime = false } = {}) => {
-    if (!value) return null;
-
-    if (value instanceof Date) {
-        return keepTime ? value.toISOString() : value.toISOString().split('T')[0];
-    }
-
-    if (typeof value === 'string') {
-        // Para dates sin tiempo (YYYY-MM-DD)
-        if (!keepTime && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-            return value;
-        }
-
-        const parsed = new Date(value);
-        if (!isNaN(parsed.getTime())) {
-            return keepTime ? parsed.toISOString() : parsed.toISOString().split('T')[0];
-        }
-    }
-
-    return null;
-};
+const { supabase } = require('../../config/supabase');
+const { aplicarFiltroFecha, normalizarFechaEntrada, extraerFechaBase, obtenerFechaBolivia } = require('../../utils/fechaRangeHelper');
 
 class deudas {
     // Crear una nueva deuda
@@ -29,18 +7,9 @@ class deudas {
         try {
             const { user_id, personal_id, sucu_id, fecha_deuda, fecha_vencimiento, monto_total, concepto, cliente_id, movimiento_salida_id, destino_sucursal_id } = deudaData;
 
-            // Usar la fecha proporcionada directamente (formato YYYY-MM-DD)
-            let fechaDeudaFinal;
-            const fechaDeudaNormalizada = formatDateInput(fecha_deuda, { keepTime: true });
+            const fechaDeudaFinal = normalizarFechaEntrada(fecha_deuda);
+            const fechaVencimientoFinal = extraerFechaBase(fecha_vencimiento);
 
-            if (fechaDeudaNormalizada) {
-                fechaDeudaFinal = fechaDeudaNormalizada;
-            } else {
-                // Si no viene fecha, usar la actual
-                fechaDeudaFinal = new Date().toISOString();
-            }
-
-            const fechaVencimientoFinal = formatDateInput(fecha_vencimiento);
             if (fecha_vencimiento && !fechaVencimientoFinal) {
                 throw new Error('Fecha de vencimiento inválida');
             }
@@ -122,6 +91,72 @@ class deudas {
                 success: false,
                 message: error.message || 'Error al crear la deuda'
             };
+        }
+    }
+
+    // Obtener todas las deudas sin límite
+    static async getAllSinLimite(sucuId, filtroFecha = null) {
+        try {
+            if (!sucuId) return { success: false, message: 'No hay sucursal seleccionada' };
+            let query = supabase
+                .from('deudas')
+                .select(`
+                    id,
+                    monto_total,
+                    saldo_pendiente,
+                    concepto,
+                    estado,
+                    fecha_deuda,
+                    fecha_vencimiento,
+                    movimiento_salida_id,
+                    cliente:cliente_id (
+                        id,
+                        name
+                    ),
+                    user:user_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    sucursal:sucu_id (
+                        id,
+                        name
+                    )
+                `)
+                .eq('sucu_id', sucuId);
+
+            query = aplicarFiltroFecha(query, 'fecha_deuda', filtroFecha);
+
+            const { data, error } = await query;
+            if (error) throw new Error('Error al obtener las deudas sin límite');
+
+            // Procesar los datos para agregar el campo name a user y personal
+            const processedData = (data || []).map(deuda => {
+                const processedDeuda = { ...deuda };
+                if (deuda.user) {
+                    processedDeuda.user = {
+                        ...deuda.user,
+                        name: `${deuda.user.first_name} ${deuda.user.last_name}`.trim()
+                    };
+                }
+                if (deuda.personal) {
+                    processedDeuda.personal = {
+                        ...deuda.personal,
+                        name: `${deuda.personal.first_name} ${deuda.personal.last_name}`.trim()
+                    };
+                }
+                return processedDeuda;
+            });
+
+            return { success: true, data: processedData };
+        } catch (error) {
+            console.error('Error en deudas.getAllSinLimite:', error);
+            return { success: false, message: 'Error interno del servidor', error };
         }
     }
 
@@ -284,7 +319,6 @@ class deudas {
         }
     }
 
-
     // Obtener una deuda por ID
     static async getById(id) {
         try {
@@ -387,17 +421,13 @@ class deudas {
                 dbData.cliente_id = cliente_id || null;
             }
 
-            // No aplicar conversiones de zona horaria: persistir tal cual viene (YYYY-MM-DD para columnas DATE)
             if (fecha_deuda) {
-                const fechaNormalizada = formatDateInput(fecha_deuda);
-                if (fechaNormalizada) {
-                    dbData.fecha_deuda = fechaNormalizada;
-                }
+                dbData.fecha_deuda = normalizarFechaEntrada(fecha_deuda, false);
             }
 
             let vencimientoNormalizado = null;
             if (fecha_vencimiento) {
-                vencimientoNormalizado = formatDateInput(fecha_vencimiento);
+                vencimientoNormalizado = extraerFechaBase(fecha_vencimiento);
                 if (!vencimientoNormalizado) {
                     throw new Error('Fecha de vencimiento inválida');
                 }
@@ -423,10 +453,7 @@ class deudas {
             if (parseFloat(finalSaldo) === 0) {
                 finalEstado = 'pagada';
             } else {
-                // Obtener fecha actual en Bolivia (GMT-4)
-                const ahora = new Date();
-                const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
-                const hoy = ahoraBolivia.toISOString().split('T')[0];
+                const hoy = obtenerFechaBolivia(new Date());
 
                 if (finalVencimiento < hoy) {
                     finalEstado = 'vencida';
@@ -507,6 +534,12 @@ class deudas {
     // Eliminar una deuda
     static async delete(id) {
         try {
+            // Eliminar pagos parciales asociados si existen
+            await supabase
+                .from('deuda_pagos_parciales')
+                .delete()
+                .eq('deuda_id', id);
+
             const { error } = await supabase
                 .from('deudas')
                 .delete()
@@ -527,76 +560,6 @@ class deudas {
             return {
                 success: false,
                 message: error.message || 'Error al eliminar la deuda'
-            };
-        }
-    }
-
-    // Eliminar deudas por movimiento_salida_id
-    static async deleteByMovimientoSalidaId(movimientoSalidaId) {
-        try {
-            const { error } = await supabase
-                .from('deudas')
-                .delete()
-                .eq('movimiento_salida_id', movimientoSalidaId);
-
-            if (error) {
-                console.error('Error al eliminar deudas por movimiento_salida_id:', error);
-                throw new Error('Error al eliminar las deudas asociadas al movimiento');
-            }
-
-            return {
-                success: true,
-                message: 'Deudas asociadas al movimiento eliminadas correctamente'
-            };
-
-        } catch (error) {
-            console.error('Error en deleteByMovimientoSalidaId:', error);
-            return {
-                success: false,
-                message: error.message || 'Error al eliminar las deudas asociadas al movimiento'
-            };
-        }
-    }
-
-    // Obtener deudas por rango de fechas
-    static async getByDateRange(fechaInicio, fechaFin, sucuId) {
-        try {
-            if (!sucuId) {
-                return {
-                    success: false,
-                    message: 'No hay sucursal seleccionada'
-                };
-            }
-
-            const { data, error } = await supabase
-                .from('deudas')
-                .select(`
-                    *,
-                    cliente:cliente_id (
-                        id,
-                        name
-                    )
-                `)
-                .eq('sucu_id', sucuId)
-                .gte('fecha_deuda', fechaInicio)
-                .lte('fecha_deuda', fechaFin)
-                .order('fecha_deuda', { ascending: false });
-
-            if (error) {
-                console.error('Error al obtener deudas por rango de fechas:', error);
-                throw new Error('Error al obtener las deudas');
-            }
-
-            return {
-                success: true,
-                data: data || []
-            };
-
-        } catch (error) {
-            console.error('Error en getByDateRange deudas:', error);
-            return {
-                success: false,
-                message: error.message || 'Error al obtener las deudas'
             };
         }
     }
@@ -637,51 +600,24 @@ class deudas {
         }
     }
 
-    // Obtener deudas vencidas
-    static async getDeudasVencidas(sucuId) {
+    // Listar pagos parciales de una deuda
+    static async getPagosParciales(deuda_id) {
         try {
-            if (!sucuId) {
-                return {
-                    success: false,
-                    message: 'No hay sucursal seleccionada'
-                };
-            }
-
-            // Crear timestamp en zona horaria de Bolivia (GMT-4)
-            const ahora = new Date();
-            const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
-            const hoy = ahoraBolivia.toISOString().split('T')[0];
-
             const { data, error } = await supabase
-                .from('deudas')
-                .select(`
-                    *,
-                    cliente:cliente_id (
-                        id,
-                        name
-                    )
-                `)
-                .eq('sucu_id', sucuId)
-                .eq('estado', 'pendiente')
-                .lt('fecha_vencimiento', hoy)
-                .order('fecha_vencimiento', { ascending: true });
+                .from('deuda_pagos_parciales')
+                .select('*')
+                .eq('deuda_id', deuda_id)
+                .order('fecha', { ascending: false });
 
             if (error) {
-                console.error('Error al obtener deudas vencidas:', error);
-                throw new Error('Error al obtener las deudas vencidas');
+                console.error('Error listando pagos parciales:', error);
+                throw new Error('Error al obtener los pagos parciales');
             }
 
-            return {
-                success: true,
-                data: data || []
-            };
-
+            return { success: true, data: data || [] };
         } catch (error) {
-            console.error('Error en getDeudasVencidas:', error);
-            return {
-                success: false,
-                message: error.message || 'Error al obtener las deudas vencidas'
-            };
+            console.error('Error en getPagosParciales:', error);
+            return { success: false, message: error.message || 'Error al obtener los pagos parciales' };
         }
     }
 
@@ -715,9 +651,7 @@ class deudas {
                 personal_id: personal_id || null
             };
             if (fecha) {
-                // Si es solo fecha (YYYY-MM-DD), agregar T12:00:00 para evitar desfase de zona horaria
-                // ya que la columna es TIMESTAMPTZ y Supabase interpreta fechas sin hora como UTC medianoche
-                pagoData.fecha = (typeof fecha === 'string' && fecha.length === 10) ? fecha + 'T12:00:00' : fecha;
+                pagoData.fecha = normalizarFechaEntrada(fecha);
             }
             if (detalle) {
                 pagoData.detalle = detalle;
@@ -739,9 +673,7 @@ class deudas {
             if (nuevoSaldo === 0) {
                 finalEstado = 'pagada';
             } else {
-                const ahora = new Date();
-                const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
-                const hoy = ahoraBolivia.toISOString().split('T')[0];
+                const hoy = obtenerFechaBolivia(new Date());
 
                 if (deudaActual.fecha_vencimiento && deudaActual.fecha_vencimiento < hoy) {
                     finalEstado = 'vencida';
@@ -802,27 +734,6 @@ class deudas {
         }
     }
 
-    // Listar pagos parciales de una deuda
-    static async getPagosParciales(deuda_id) {
-        try {
-            const { data, error } = await supabase
-                .from('deuda_pagos_parciales')
-                .select('*')
-                .eq('deuda_id', deuda_id)
-                .order('fecha', { ascending: false });
-
-            if (error) {
-                console.error('Error listando pagos parciales:', error);
-                throw new Error('Error al obtener los pagos parciales');
-            }
-
-            return { success: true, data: data || [] };
-        } catch (error) {
-            console.error('Error en getPagosParciales:', error);
-            return { success: false, message: error.message || 'Error al obtener los pagos parciales' };
-        }
-    }
-
     // Eliminar pago parcial y revertir saldo/estado si corresponde
     static async deletePagoParcial(deuda_id, pago_id) {
         try {
@@ -870,14 +781,11 @@ class deudas {
                 throw new Error('Error al eliminar el pago parcial');
             }
 
-            // Actualizar deuda con nuevo saldo y estado según regla
             let finalEstado = 'pendiente';
             if (nuevoSaldo === 0) {
                 finalEstado = 'pagada';
             } else {
-                const ahora = new Date();
-                const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
-                const hoy = ahoraBolivia.toISOString().split('T')[0];
+                const hoy = obtenerFechaBolivia(new Date());
 
                 if (deudaActual.fecha_vencimiento && deudaActual.fecha_vencimiento < hoy) {
                     finalEstado = 'vencida';

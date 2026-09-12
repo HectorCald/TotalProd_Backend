@@ -1,5 +1,6 @@
-const gastos = require('../models/gastos');
-const { checkDeletePermission, checkUpdatePermission, checkInfoPermission } = require('../utils/permissionsHelper');
+const gastos = require('./gastos');
+const { checkDeletePermission, checkUpdatePermission, checkInfoPermission } = require('../../utils/permissionsHelper');
+const { parseFiltroFecha } = require('../../utils/fechaRangeHelper');
 
 class gastosController {
 
@@ -85,7 +86,7 @@ class gastosController {
       return res.status(500).json({
         success: false,
         message: error.message || `Error al ${
-          actionName === 'getAll' || actionName === 'getByDateRange' ? 'obtener los' :
+          actionName === 'getAll' || actionName === 'getAllSinLimite' ? 'obtener los' :
           actionName === 'getById' ? 'obtener el' :
           actionName === 'create' ? 'crear el' :
           actionName === 'update' ? 'actualizar el' : 'eliminar el'
@@ -94,18 +95,22 @@ class gastosController {
     }
   }
 
+    // Obtener todos los gastos sin límite
+  static async getAllSinLimite(req, res) {
+    return gastosController._handleRequest(res, 'getAllSinLimite', req, async () => {
+      const { sucu_id } = req.query;
+      const filtroFecha = parseFiltroFecha(req.query);
+      return await gastos.getAllSinLimite(sucu_id, filtroFecha);
+    }, {
+      validateSucuId: true
+    });
+  }
+
   // Obtener todos los gastos con paginación
   static async getAll(req, res) {
     return gastosController._handleRequest(res, 'getAll', req, async () => {
       const { page = 1, limit = 30, search = '', metodo_pago = null, proveedor_id = null, ordenamiento = 'fecha_desc', sucu_id } = req.query;
-      
-      let filtroFecha = null;
-      if (req.query.fecha_inicio || req.query.fecha_fin) {
-        filtroFecha = {
-          inicio: req.query.fecha_inicio || null,
-          fin: req.query.fecha_fin || null
-        };
-      }
+      const filtroFecha = parseFiltroFecha(req.query);
       
       return await gastos.getAll(
         parseInt(page), 
@@ -119,42 +124,6 @@ class gastosController {
       );
     }, {
       validateSucuId: true
-    });
-  }
-
-  // Obtener todos los gastos sin límite
-  static async getAllSinLimite(req, res) {
-    return gastosController._handleRequest(res, 'getAllSinLimite', req, async () => {
-      const { metodo_pago = null, proveedor_id = null, search = '', sucu_id } = req.query;
-
-      let filtroFecha = null;
-      if (req.query.fecha_inicio || req.query.fecha_fin) {
-        filtroFecha = {
-          inicio: req.query.fecha_inicio || null,
-          fin: req.query.fecha_fin || null
-        };
-      }
-
-      return await gastos.getAllSinLimite(
-        sucu_id,
-        metodo_pago,
-        filtroFecha,
-        proveedor_id,
-        search
-      );
-    }, {
-      validateSucuId: true
-    });
-  }
-
-  // Obtener un gasto por ID
-  static async getById(req, res) {
-    return gastosController._handleRequest(res, 'getById', req, async () => {
-      const { id } = req.params;
-      return await gastos.getById(id);
-    }, {
-      validateGastoId: true,
-      checkPermission: 'info'
     });
   }
 
@@ -292,22 +261,14 @@ class gastosController {
     });
   }
 
-  // Obtener gastos por rango de fechas
-  static async getByDateRange(req, res) {
-    return gastosController._handleRequest(res, 'getByDateRange', req, async () => {
-      const { fechaInicio, fechaFin, sucu_id } = req.query;
-
-      if (!fechaInicio || !fechaFin) {
-        return {
-          success: false,
-          message: 'Las fechas de inicio y fin son requeridas',
-          status: 400
-        };
-      }
-
-      return await gastos.getByDateRange(fechaInicio, fechaFin, sucu_id);
+  // Obtener un gasto por ID
+  static async getById(req, res) {
+    return gastosController._handleRequest(res, 'getById', req, async () => {
+      const { id } = req.params;
+      return await gastos.getById(id);
     }, {
-      validateSucuId: true
+      validateGastoId: true,
+      checkPermission: 'info'
     });
   }
 }

@@ -1,6 +1,4 @@
 const pedidosAlmacen = require('../models/pedidosAlmacen');
-const movimientosAlmacenController = require('./movimientosAlmacenController');
-const deudasController = require('./deudasController');
 
 class pedidosAlmacenController {
 

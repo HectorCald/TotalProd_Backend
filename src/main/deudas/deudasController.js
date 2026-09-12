@@ -1,5 +1,7 @@
-const deudas = require('../models/deudas');
-const { checkDeletePermission, checkUpdatePermission } = require('../utils/permissionsHelper');
+const deudas = require('./deudas');
+const { supabase } = require('../../config/supabase');
+const { checkDeletePermission, checkUpdatePermission } = require('../../utils/permissionsHelper');
+const { parseFiltroFecha } = require('../../utils/fechaRangeHelper');
 
 class deudasController {
 
@@ -86,18 +88,22 @@ class deudasController {
     }
   }
 
+  // Obtener todas las deudas sin límite
+  static async getAllSinLimite(req, res) {
+    return deudasController._handleRequest(res, 'getAllSinLimite', req, async () => {
+      const { sucu_id } = req.query;
+      const filtroFecha = parseFiltroFecha(req.query);
+      return await deudas.getAllSinLimite(sucu_id, filtroFecha);
+    }, {
+      validateSucuId: true
+    });
+  }
+
   // Obtener todas las deudas con paginación
   static async getAll(req, res) {
     return deudasController._handleRequest(res, 'getAll', req, async () => {
       const { page = 1, limit = 10, search = '', estado = null, cliente_id = null, ordenamiento = 'fecha_desc', sucu_id } = req.query;
-      
-      let filtroFecha = null;
-      if (req.query.fecha_inicio || req.query.fecha_fin) {
-        filtroFecha = {
-          inicio: req.query.fecha_inicio || null,
-          fin: req.query.fecha_fin || null
-        };
-      }
+      const filtroFecha = parseFiltroFecha(req.query);
 
       return await deudas.getAll(
         parseInt(page), 
@@ -244,8 +250,6 @@ class deudasController {
     const { id } = req.params;
     return deudasController._handleRequest(res, 'delete', req, async () => {
       // Protección: no se puede eliminar si está vinculada a un movimiento
-      const { createClient } = require('../config/supabase');
-      const { supabase } = require('../config/supabase');
       const { data: deudaActual } = await supabase
         .from('deudas')
         .select('movimiento_salida_id')
@@ -265,74 +269,13 @@ class deudasController {
     });
   }
 
-  // Eliminar deudas por movimiento_salida_id
-  static async deleteByMovimientoSalidaId(req, res) {
-    const { movimiento_salida_id } = req.params;
-    if (!movimiento_salida_id) {
-      return res.status(400).json({
-        success: false,
-        message: 'El ID del movimiento de salida es requerido'
-      });
-    }
-
-    return deudasController._handleRequest(res, 'deleteByMovimientoSalidaId', req, async () => {
-      return await deudas.deleteByMovimientoSalidaId(movimiento_salida_id);
-    });
-  }
-
-  // Obtener deudas por rango de fechas
-  static async getByDateRange(req, res) {
-    return deudasController._handleRequest(res, 'getByDateRange', req, async () => {
-      const { fechaInicio, fechaFin, sucu_id } = req.query;
-
-      if (!fechaInicio || !fechaFin) {
-        return {
-          success: false,
-          message: 'Las fechas de inicio y fin son requeridas',
-          status: 400
-        };
-      }
-
-      return await deudas.getByDateRange(fechaInicio, fechaFin, sucu_id);
-    }, {
-      validateSucuId: true
-    });
-  }
-
-  // Actualizar estado de una deuda
-  static async updateEstado(req, res) {
-    const { id } = req.params;
-    const { estado, saldo_pendiente } = req.body;
-
-    if (!estado) {
-      return res.status(400).json({
-        success: false,
-        message: 'El estado es requerido'
-      });
-    }
-
-    const estadosValidos = ['pendiente', 'pagada', 'vencida'];
-    if (!estadosValidos.includes(estado)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Estado no válido. Debe ser: pendiente, pagada o vencida'
-      });
-    }
-
-    return deudasController._handleRequest(res, 'updateEstado', req, async () => {
-      return await deudas.updateEstado(id, estado, saldo_pendiente);
+  // Listar pagos parciales de una deuda
+  static async getPagosParciales(req, res) {
+    return deudasController._handleRequest(res, 'getPagosParciales', req, async () => {
+      const { id } = req.params;
+      return await deudas.getPagosParciales(id);
     }, {
       validateDeudaId: true
-    });
-  }
-
-  // Obtener deudas vencidas
-  static async getDeudasVencidas(req, res) {
-    return deudasController._handleRequest(res, 'getDeudasVencidas', req, async () => {
-      const { sucu_id } = req.query;
-      return await deudas.getDeudasVencidas(sucu_id);
-    }, {
-      validateSucuId: true
     });
   }
 
@@ -367,16 +310,6 @@ class deudasController {
     });
   }
 
-  // Listar pagos parciales de una deuda
-  static async getPagosParciales(req, res) {
-    return deudasController._handleRequest(res, 'getPagosParciales', req, async () => {
-      const { id } = req.params;
-      return await deudas.getPagosParciales(id);
-    }, {
-      validateDeudaId: true
-    });
-  }
-
   // Eliminar un pago parcial
   static async deletePagoParcial(req, res) {
     const { id, pago_id } = req.params;
@@ -389,6 +322,33 @@ class deudasController {
 
     return deudasController._handleRequest(res, 'deletePagoParcial', req, async () => {
       return await deudas.deletePagoParcial(id, pago_id);
+    });
+  }
+
+  // Actualizar estado de una deuda
+  static async updateEstado(req, res) {
+    const { id } = req.params;
+    const { estado, saldo_pendiente } = req.body;
+
+    if (!estado) {
+      return res.status(400).json({
+        success: false,
+        message: 'El estado es requerido'
+      });
+    }
+
+    const estadosValidos = ['pendiente', 'pagada', 'vencida'];
+    if (!estadosValidos.includes(estado)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Estado no válido. Debe ser: pendiente, pagada o vencida'
+      });
+    }
+
+    return deudasController._handleRequest(res, 'updateEstado', req, async () => {
+      return await deudas.updateEstado(id, estado, saldo_pendiente);
+    }, {
+      validateDeudaId: true
     });
   }
 }

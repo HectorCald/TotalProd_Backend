@@ -150,7 +150,7 @@ class movimientosAcopioController {
             personal_id: finalPersonalId
           };
           
-          const gastosModel = require('../models/gastos');
+          const gastosModel = require('../main/pagos/gastos');
           await gastosModel.create(gastoData, finalUserId, req.user?.empresa_id, finalPersonalId, sucu_id);
         } catch (gastoError) {
           console.error('Error al registrar gasto asociado al movimiento de acopio:', gastoError);
@@ -327,7 +327,7 @@ class movimientosAcopioController {
         .eq('movimiento_acopio_entrada_id', id);
 
       if (gastosRelacionados && gastosRelacionados.length > 0) {
-        const gastosModel = require('../models/gastos');
+        const gastosModel = require('../main/pagos/gastos');
         for (const gasto of gastosRelacionados) {
           await gastosModel.delete(gasto.id);
         }

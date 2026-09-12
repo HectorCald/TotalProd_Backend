@@ -1,5 +1,5 @@
 const { supabase, processBatch, retryOperation, validateBatchResults, CONFIG } = require('../config/supabase');
-const deudas = require('./deudas');
+const deudas = require('../main/deudas/deudas');
 const MovimientoLogService = require('../services/movimientoLogService');
 const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
 
@@ -1935,22 +1935,15 @@ class movimientosAlmacen {
 
             // Eliminar deudas asociadas a este movimiento (si las hubiera)
             try {
-                if (movimiento.deuda_id) {
-                    const { error: limpiarDeudaIdError } = await supabase
-                        .from('movimientos_almacen')
-                        .update({ deuda_id: null })
-                        .eq('id', movimientoId);
+                const { data: deudasRelacionadas } = await supabase
+                    .from('deudas')
+                    .select('id')
+                    .eq('movimiento_salida_id', movimientoId);
 
-                    if (limpiarDeudaIdError) {
-                        console.error('Error limpiando deuda_id antes de eliminar deuda:', limpiarDeudaIdError);
-                    }
-                }
-
-                const deleteDeudasResult = await deudas.deleteByMovimientoSalidaId(movimientoId);
-                if (!deleteDeudasResult.success && movimiento.deuda_id) {
-                    const deleteDeudaDirecto = await deudas.delete(movimiento.deuda_id);
-                    if (!deleteDeudaDirecto.success) {
-                        console.warn('⚠️ [ANULAR] No se pudieron eliminar deudas asociadas:', deleteDeudaDirecto.message);
+                if (deudasRelacionadas && deudasRelacionadas.length > 0) {
+                    for (const d of deudasRelacionadas) {
+                        await supabase.from('deuda_pagos_parciales').delete().eq('deuda_id', d.id);
+                        await deudas.delete(d.id);
                     }
                 }
             } catch (e) {
@@ -2095,22 +2088,15 @@ class movimientosAlmacen {
 
             // Eliminar deudas asociadas primero
             try {
-                if (movimiento.deuda_id) {
-                    const { error: limpiarDeudaIdError } = await supabase
-                        .from('movimientos_almacen')
-                        .update({ deuda_id: null })
-                        .eq('id', movimientoId);
+                const { data: deudasRelacionadas } = await supabase
+                    .from('deudas')
+                    .select('id')
+                    .eq('movimiento_salida_id', movimientoId);
 
-                    if (limpiarDeudaIdError) {
-                        console.error('Error limpiando deuda_id antes de eliminar el movimiento:', limpiarDeudaIdError);
-                    }
-                }
-
-                const deleteDeudas = await deudas.deleteByMovimientoSalidaId(movimientoId);
-                if (!deleteDeudas.success && movimiento.deuda_id) {
-                    const deleteDeudaDirecto = await deudas.delete(movimiento.deuda_id);
-                    if (!deleteDeudaDirecto.success) {
-                        console.warn('⚠️ [ELIMINAR] No se pudieron eliminar deudas asociadas:', deleteDeudaDirecto.message);
+                if (deudasRelacionadas && deudasRelacionadas.length > 0) {
+                    for (const d of deudasRelacionadas) {
+                        await supabase.from('deuda_pagos_parciales').delete().eq('deuda_id', d.id);
+                        await deudas.delete(d.id);
                     }
                 }
             } catch (e) {

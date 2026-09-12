@@ -1,6 +1,6 @@
 const movimientosAlmacen = require('../models/movimientosAlmacen');
-const gastosModel = require('../models/gastos');
-const deudasModel = require('../models/deudas');
+const gastosModel = require('../main/pagos/gastos');
+const deudasModel = require('../main/deudas/deudas');
 const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
 
 class movimientosAlmacenController {
@@ -426,7 +426,7 @@ class movimientosAlmacenController {
                         })
                         .eq('id', pedidoAcopio.id);
 
-                    const gastosModel = require('../models/gastos');
+                    const gastosModel = require('../main/pagos/gastos');
                     if (pedidoAcopio.gasto_otros_id) await gastosModel.delete(pedidoAcopio.gasto_otros_id);
                     if (pedidoAcopio.gasto_id) await gastosModel.delete(pedidoAcopio.gasto_id);
                 }
@@ -439,7 +439,7 @@ class movimientosAlmacenController {
                 .eq('movimiento_salida_id', id);
 
             if (deudasRelacionadas && deudasRelacionadas.length > 0) {
-                const deudasModel = require('../models/deudas');
+                const deudasModel = require('../main/deudas/deudas');
                 for (const deuda of deudasRelacionadas) {
                     // Eliminar pagos parciales primero
                     await supabase.from('deuda_pagos_parciales').delete().eq('deuda_id', deuda.id);
@@ -454,7 +454,7 @@ class movimientosAlmacenController {
                 .eq('movimiento_entrada_id', id);
 
             if (gastosRelacionados && gastosRelacionados.length > 0) {
-                const gastosModel = require('../models/gastos');
+                const gastosModel = require('../main/pagos/gastos');
                 for (const gasto of gastosRelacionados) {
                     await gastosModel.delete(gasto.id);
                 }
