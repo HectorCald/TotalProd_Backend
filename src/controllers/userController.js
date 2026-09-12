@@ -355,6 +355,24 @@ class UserController {
       };
     });
   }
+
+  static async enviarEncuestaIA(req, res) {
+    return UserController._handleRequest(res, 'enviarEncuestaIA', async () => {
+      const { userName, userEmail, respuestas } = req.body;
+      const EmailService = require('../services/emailService');
+      const emailService = new EmailService();
+
+      await emailService.sendEncuestaIA({
+        userName,
+        userEmail,
+        respuestas
+      });
+
+      return { enviado: true };
+    }, {
+      successMessage: 'Encuesta enviada exitosamente'
+    });
+  }
 }
 
 module.exports = UserController;
