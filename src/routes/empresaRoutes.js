@@ -18,6 +18,10 @@ router.post('/:id/verificar-codigo', EmpresaController.verificarCodigo);
 // Actualizar tipo de empresa
 router.put('/tipo', EmpresaController.updateTipo);
 
+// Actualizar organigrama de empresa
+router.put('/:id/organigrama', EmpresaController.updateOrganigrama);
+router.put('/organigrama', EmpresaController.updateOrganigrama);
+
 // Obtener empresa por ID
 router.get('/:id', EmpresaController.getById);
 

@@ -6,9 +6,11 @@ class Empresa {
     this.name = data.name;
     this.description = data.description;
     this.propietario_id = data.propietario_id;
+    this.propietario = data.users || data.propietario || null;
     this.logo_tipo = data.logo_tipo;
     this.tipo = data.tipo;
     this.codigo = data.codigo;
+    this.organigrama = data.organigrama || null;
     this.created_at = data.created_at;
   }
 
@@ -57,7 +59,16 @@ class Empresa {
 
       const { data: empresa, error } = await supabase
         .from('empresas')
-        .select('*')
+        .select(`
+          *,
+          users!empresas_propietario_id_fkey (
+            id,
+            first_name,
+            last_name,
+            email,
+            phone
+          )
+        `)
         .eq('id', empresaId)
         .single();
 
@@ -136,6 +147,36 @@ class Empresa {
     } catch (error) {
       console.error('Error en getAllDisponibles:', error);
       throw new Error('No se pudo obtener las empresas disponibles');
+    }
+  }
+
+  // Método estático para actualizar el organigrama de la empresa
+  static async updateOrganigrama(empresaId, organigrama) {
+    try {
+      if (!empresaId) {
+        throw new Error('ID de empresa es requerido');
+      }
+
+      const { data: updatedEmpresa, error } = await supabase
+        .from('empresas')
+        .update({ organigrama: organigrama })
+        .eq('id', empresaId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error al actualizar organigrama de empresa:', error);
+        throw new Error(`Error al actualizar organigrama de empresa: ${error.message}`);
+      }
+
+      if (!updatedEmpresa) {
+        throw new Error('No se pudo actualizar el organigrama de la empresa');
+      }
+
+      return new Empresa(updatedEmpresa);
+    } catch (error) {
+      console.error('Error en updateOrganigrama:', error);
+      throw new Error(`Error al actualizar organigrama de empresa: ${error.message}`);
     }
   }
 }

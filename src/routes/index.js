@@ -29,6 +29,7 @@ const empresaImagenRoutes = require('./empresaImagenRoutes');
 const empresaRoutes = require('./empresaRoutes');
 const historialRoutes = require('./historialRoutes');
 const cargosRoutes = require('./cargosRoutes');
+const planificadorRoutes = require('./planificadorRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -131,5 +132,8 @@ router.use('/empresa-imagen', empresaImagenRoutes);
 
 // Rutas de empresa
 router.use('/empresas', empresaRoutes);
+
+// Rutas del planificador de tareas
+router.use('/planificador', planificadorRoutes);
 
 module.exports = router;

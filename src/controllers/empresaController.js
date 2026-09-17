@@ -75,6 +75,10 @@ class EmpresaController {
             description: empresa.description,
             logo_tipo: empresa.logo_tipo,
             tipo: empresa.tipo,
+            codigo: empresa.codigo,
+            propietario_id: empresa.propietario_id,
+            propietario: empresa.propietario,
+            organigrama: empresa.organigrama,
             created_at: empresa.created_at
           }
         }
@@ -193,6 +197,42 @@ class EmpresaController {
       });
     } catch (error) {
       console.error('Error en verificarCodigo:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Método para actualizar el organigrama de empresa
+  static async updateOrganigrama(req, res) {
+    try {
+      const { id } = req.params;
+      const { empresaId, organigrama } = req.body;
+      const targetEmpresaId = id || empresaId;
+
+      if (!targetEmpresaId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de empresa es requerido'
+        });
+      }
+
+      const updatedEmpresa = await Empresa.updateOrganigrama(targetEmpresaId, organigrama);
+
+      res.status(200).json({
+        success: true,
+        message: 'Organigrama actualizado exitosamente',
+        data: {
+          empresa: {
+            id: updatedEmpresa.id,
+            name: updatedEmpresa.name,
+            organigrama: updatedEmpresa.organigrama
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error en updateOrganigrama:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'

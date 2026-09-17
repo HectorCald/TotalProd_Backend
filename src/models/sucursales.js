@@ -21,7 +21,9 @@ class sucursales {
                         name,
                         propietario_id,
                         tipo,
-                        codigo
+                        codigo,
+                        logo_tipo,
+                        organigrama
                     ),
                     sucursal_precios (
                         precio_id,
@@ -61,7 +63,9 @@ class sucursales {
                             name,
                             propietario_id,
                             tipo,
-                            codigo
+                            codigo,
+                            logo_tipo,
+                            organigrama
                         ),
                         sucursal_precios (
                             precio_id,
@@ -119,7 +123,9 @@ class sucursales {
                         name,
                         propietario_id,
                         tipo,
-                        codigo
+                        codigo,
+                        logo_tipo,
+                        organigrama
                     ),
                     sucursal_precios (
                         precio_id,
@@ -163,7 +169,8 @@ class sucursales {
                         id,
                         name,
                         propietario_id,
-                        codigo
+                        codigo,
+                        logo_tipo
                     )
                 `)
                 .single();
@@ -207,7 +214,8 @@ class sucursales {
                         id,
                         name,
                         propietario_id,
-                        codigo
+                        codigo,
+                        logo_tipo
                     )
                 `)
                 .single();

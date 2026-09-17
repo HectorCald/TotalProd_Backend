@@ -28,7 +28,7 @@ class Personal {
         .from('staff')
         .select(`
           *,
-          branches (id, name, empresas (id, name, logo_tipo, codigo)),
+          branches (id, name, empresas (id, name, logo_tipo, codigo, organigrama)),
           staff_permissions (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
           cargos:position_id (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
         `)
@@ -187,7 +187,7 @@ class Personal {
         .from('staff')
         .select(`
           *,
-          branches (id, name, empresas (id, name, logo_tipo, codigo)),
+          branches (id, name, empresas (id, name, logo_tipo, codigo, organigrama)),
           staff_permissions (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
           cargos:position_id (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
         `)
@@ -263,7 +263,7 @@ class Personal {
         .from('staff')
         .select(`
           *,
-          branches (id, name, empresas (id, name, logo_tipo, codigo)),
+          branches (id, name, empresas (id, name, logo_tipo, codigo, organigrama)),
           staff_permissions (can_create, can_delete, can_update, can_anular, can_replace, can_info, can_sucursales, can_offline),
           cargos:position_id (id, name, cargo_sub_modulo (sub_modulos (id, name, module_id, modules (id, name, clave))))
         `)
@@ -370,6 +370,7 @@ class Personal {
         name: branchData.empresas.name,
         logo_tipo: branchData.empresas.logo_tipo,
         codigo: branchData.empresas.codigo,
+        organigrama: branchData.empresas.organigrama || null,
         plan: personal.plan || null
       } : null
     } : null;
@@ -392,6 +393,41 @@ class Personal {
     const cargoName = cargoData?.name || personal.cargo || '--';
     const userEmail = personal.email || personal.codigo || '--';
 
+    let superiorNombre = null;
+    const organigramaData = sucursal?.empresas?.organigrama;
+    if (organigramaData) {
+      try {
+        const rawTree = typeof organigramaData === 'string'
+          ? JSON.parse(organigramaData)
+          : organigramaData;
+
+        const findSuperior = (nodes, targetId) => {
+          if (!nodes || !Array.isArray(nodes)) return null;
+          for (const node of nodes) {
+            if (node.children && Array.isArray(node.children)) {
+              const hasChild = node.children.some(c => {
+                const cId = c.person?.id || c.person_id;
+                return cId && String(cId) === String(targetId);
+              });
+              if (hasChild) {
+                if (node.is_admin || String(node.person_id).startsWith('admin-')) {
+                  return node.person_name || 'Administrador / Propietario';
+                }
+                return node.person?.nombre_completo || node.person_name || 'Sin nombre';
+              }
+              const nested = findSuperior(node.children, targetId);
+              if (nested) return nested;
+            }
+          }
+          return null;
+        };
+
+        superiorNombre = findSuperior(rawTree, personal.id);
+      } catch (err) {
+        console.error('Error calculando superior en Personal:', err);
+      }
+    }
+
     return {
       ...personal,
       company_id: personal.company_id || personal.empresa_id,
@@ -406,7 +442,11 @@ class Personal {
       cargos: cargoData || null,
       modules: finalModules,
       permisos: permisos,
-      sucursal: sucursal
+      sucursal: sucursal,
+      logo_tipo: sucursal?.empresas?.logo_tipo || null,
+      empresa: sucursal?.empresas || null,
+      reporta_a: superiorNombre || 'No asignado',
+      superior_inmediato: superiorNombre || 'No asignado'
     };
   }
 

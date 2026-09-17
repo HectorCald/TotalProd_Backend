@@ -7,5 +7,6 @@ CREATE TABLE empresas (
     logo_tipo TEXT NULL,
     tipo TEXT NULL,
     codigo TEXT NULL,
+    organigrama JSONB NULL,
     CONSTRAINT empresas_propietario_id_fkey FOREIGN KEY (propietario_id) REFERENCES users (id)
 );

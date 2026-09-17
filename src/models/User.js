@@ -240,6 +240,7 @@ class User {
             logo_tipo,
             tipo,
             codigo,
+            organigrama,
             branches (*)
           )
         `)
@@ -263,6 +264,7 @@ class User {
         user.empresa_id = user.empresas[0].id;
         user.logo_tipo = user.empresas[0].logo_tipo; // Incluir el logo de la empresa
         user.empresa.tipo = user.empresas[0].tipo; // Incluir el tipo de la empresa
+        user.empresa.organigrama = user.empresas[0].organigrama || null;
         user.empresa.plan = null;
 
         delete user.empresas; // Limpiar datos innecesarios
