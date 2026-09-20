@@ -92,7 +92,7 @@ class pricesTypesController {
         const sucursalId = req.query.sucursal_id;
         if (sucursalId) {
           try {
-            const Sucursal = require('../../models/sucursales');
+            const Sucursal = require('../sucursales/sucursales');
             const sucursal = await Sucursal.getById(sucursalId);
             if (sucursal && sucursal.name && !sucursal.name.includes('Casa Matriz')) {
               return await pricesTypes.getBySucursalId(sucursalId);

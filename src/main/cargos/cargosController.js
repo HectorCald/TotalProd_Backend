@@ -1,33 +1,33 @@
-const categoryAlmacen = require('../models/categoryAlmacen');
-const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
+const Cargos = require('./Cargos');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../../utils/permissionsHelper');
 
-class categoryAlmacenController {
+class cargosController {
 
   static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
     const {
       validateEmpresaId = false,
-      validateCategoryId = false,
+      validateCargoId = false,
       checkPermission = null,
       successStatus = 200,
       successMessage = 'Operación exitosa'
     } = options;
 
     try {
-      const empresaId = req.query.empresa_id || req.body.empresa_id;
-
-      if (validateEmpresaId && !empresaId) {
-        return res.status(400).json({
-          success: false,
-          message: 'El ID de la empresa es requerido'
-        });
+      if (validateEmpresaId) {
+        const empresaId = req.query.empresa_id || req.body.empresa_id;
+        if (!empresaId) {
+          return res.status(400).json({
+            success: false,
+            message: 'El ID de la empresa es requerido'
+          });
+        }
       }
-
-      if (validateCategoryId) {
+      if (validateCargoId) {
         const { id } = req.params;
         if (!id) {
           return res.status(400).json({
             success: false,
-            message: 'El ID de la categoría es requerido'
+            message: 'El ID del cargo es requerido'
           });
         }
       }
@@ -48,19 +48,18 @@ class categoryAlmacenController {
             const actionTranslate = { create: 'crear', update: 'editar', delete: 'eliminar' };
             return res.status(403).json({
               success: false,
-              message: `No tienes permisos para ${actionTranslate[checkPermission]} categorías`
+              message: `No tienes permisos para ${actionTranslate[checkPermission]} cargos`
             });
           }
         }
       }
 
       const data = await handlerFn();
-
+      
       const responseBody = {
         success: true,
         message: successMessage
       };
-
       if (data !== undefined) {
         responseBody.data = data;
       }
@@ -68,15 +67,6 @@ class categoryAlmacenController {
       return res.status(successStatus).json(responseBody);
     } catch (error) {
       console.error(`Error en ${actionName}:`, error);
-
-      // Si es un error de validación (nombre duplicado), devolver 400
-      if (error.message === 'Ya existe una categoría con este nombre') {
-        return res.status(400).json({
-          success: false,
-          message: error.message
-        });
-      }
-
       return res.status(500).json({
         success: false,
         message: 'Ocurrió un error inesperado'
@@ -84,30 +74,20 @@ class categoryAlmacenController {
     }
   }
 
-  // Obtener todas las categorías
+  // Obtener todos los cargos
   static async getAll(req, res) {
-    return categoryAlmacenController._handleRequest(res, 'getAll', req, async () => {
+    return cargosController._handleRequest(res, 'getAll', req, async () => {
       const empresaId = req.query.empresa_id;
-
-      // Obtener empresas asociadas si se proporcionan
-      let empresasAsociadasIds = [];
-      if (req.query.empresas_asociadas) {
-        const asociadas = Array.isArray(req.query.empresas_asociadas) 
-          ? req.query.empresas_asociadas 
-          : [req.query.empresas_asociadas];
-        empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
-      }
-
-      return await categoryAlmacen.getAll(empresaId, empresasAsociadasIds);
+      return await Cargos.getAll(empresaId);
     }, {
       validateEmpresaId: true,
-      successMessage: 'Categorías obtenidas exitosamente'
+      successMessage: 'Cargos obtenidos exitosamente'
     });
   }
 
-  // Crear una categoría
+  // Crear un cargo
   static async create(req, res) {
-    const { name, empresa_id } = req.body;
+    const { name, description, modules, empresa_id } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -116,21 +96,23 @@ class categoryAlmacenController {
       });
     }
 
-    return categoryAlmacenController._handleRequest(res, 'create', req, async () => {
-      return await categoryAlmacen.create({
-        name: name.trim()
+    return cargosController._handleRequest(res, 'create', req, async () => {
+      return await Cargos.create({
+        name: name.trim(),
+        description: description ? description.trim() : null,
+        modules: modules || []
       }, empresa_id);
     }, {
       validateEmpresaId: true,
       checkPermission: 'create',
       successStatus: 201,
-      successMessage: 'Categoría creada exitosamente'
+      successMessage: 'Cargo creado exitosamente'
     });
   }
 
-  // Actualizar una categoría
+  // Actualizar un cargo
   static async update(req, res) {
-    const { name } = req.body;
+    const { name, description, modules } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -139,29 +121,31 @@ class categoryAlmacenController {
       });
     }
 
-    return categoryAlmacenController._handleRequest(res, 'update', req, async () => {
+    return cargosController._handleRequest(res, 'update', req, async () => {
       const { id } = req.params;
-      return await categoryAlmacen.update(id, {
-        name: name.trim()
+      return await Cargos.update(id, {
+        name: name.trim(),
+        description: description ? description.trim() : null,
+        modules: modules
       });
     }, {
-      validateCategoryId: true,
+      validateCargoId: true,
       checkPermission: 'update',
-      successMessage: 'Categoría actualizada exitosamente'
+      successMessage: 'Cargo actualizado exitosamente'
     });
   }
 
-  // Eliminar una categoría
+  // Eliminar un cargo
   static async delete(req, res) {
-    return categoryAlmacenController._handleRequest(res, 'delete', req, async () => {
+    return cargosController._handleRequest(res, 'delete', req, async () => {
       const { id } = req.params;
-      await categoryAlmacen.delete(id);
+      await Cargos.delete(id);
     }, {
-      validateCategoryId: true,
+      validateCargoId: true,
       checkPermission: 'delete',
-      successMessage: 'Categoría eliminada exitosamente'
+      successMessage: 'Cargo eliminado exitosamente'
     });
   }
 }
 
-module.exports = categoryAlmacenController;
+module.exports = cargosController;

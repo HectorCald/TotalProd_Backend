@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabase } = require('../../config/supabase');
 
 class ConteosModel {
 	static async create(conteoData) {
@@ -122,7 +122,7 @@ class ConteosModel {
 
 			// Obtener conteo de detalles en PARALELO usando count (solo el número, sin traer datos)
 			const conteoCounts = {};
-			
+
 			// Inicializar todos los conteos con 0
 			conteoIds.forEach(id => {
 				conteoCounts[id] = 0;
@@ -153,7 +153,7 @@ class ConteosModel {
 					id: h.user.id,
 					name: `${h.user.first_name || ''} ${h.user.last_name || ''}`.trim()
 				} : null;
-				
+
 				const personal = h.personal ? {
 					id: h.personal.id,
 					name: `${h.personal.first_name || ''} ${h.personal.last_name || ''}`.trim()
@@ -171,61 +171,6 @@ class ConteosModel {
 			return { success: true, data: resultado };
 		} catch (error) {
 			console.error('[CONTEO MODEL] Error en ConteosModel.getAll:', error);
-			return { success: false, message: 'Error interno del servidor', error };
-		}
-	}
-
-	static async getDetalles(conteoId) {
-		try {
-			if (!conteoId) {
-				return { success: false, message: 'ID del conteo es requerido' };
-			}
-
-			// Primero obtener el conteo para validar que existe
-			const { data: conteo, error: conteoError } = await supabase
-				.from('conteos')
-				.select('id, sucursal_id')
-				.eq('id', conteoId)
-				.single();
-
-			if (conteoError || !conteo) {
-				return { success: false, message: 'Conteo no encontrado', error: conteoError };
-			}
-
-			// Obtener detalles con joins para un conteo específico
-			const { data: detalles, error: detalleError } = await supabase
-				.from('conteo_detalle')
-				.select(`
-					id,
-					conteo_id,
-					sistema,
-					fisico,
-					justificacion,
-					producto_almacen:producto_almacen_id(
-						id,
-						name,
-						grup
-					),
-					producto_acopio:producto_acopio_id(
-						id,
-						name,
-						type_measure:type_measure_id(
-							id,
-							name,
-							code
-						)
-					)
-				`)
-				.eq('conteo_id', conteoId)
-				.order('id', { ascending: true });
-
-			if (detalleError) {
-				return { success: false, message: 'Error al obtener detalles del conteo', error: detalleError };
-			}
-
-			return { success: true, data: detalles || [] };
-		} catch (error) {
-			console.error('[CONTEO MODEL] Error en ConteosModel.getDetalles:', error);
 			return { success: false, message: 'Error interno del servidor', error };
 		}
 	}
@@ -366,97 +311,152 @@ class ConteosModel {
 				}
 			}
 
-		return { success: true, message: 'Stock reemplazado correctamente', data: { actualizados: toUpdate.length, insertados: toInsert.length } };
-	} catch (error) {
-		console.error('Error en ConteosModel.replaceStock:', error);
-		return { success: false, message: 'Error interno del servidor', error };
+			return { success: true, message: 'Stock reemplazado correctamente', data: { actualizados: toUpdate.length, insertados: toInsert.length } };
+		} catch (error) {
+			console.error('Error en ConteosModel.replaceStock:', error);
+			return { success: false, message: 'Error interno del servidor', error };
+		}
 	}
-}
 
-// Reemplazar stock de productos_acopio con el valor "fisico" del conteo (solo para tipo 'acopio')
-static async replaceStockAcopio(conteoId) {
-	try {
-		if (!conteoId) {
-			return { success: false, message: 'ID del conteo es requerido' };
-		}
-
-		// 1) Obtener encabezado de conteo para validar tipo
-		const { data: conteo, error: conteoErr } = await supabase
-			.from('conteos')
-			.select('id, tipo')
-			.eq('id', conteoId)
-			.single();
-
-		if (conteoErr || !conteo) {
-			return { success: false, message: 'Conteo no encontrado' };
-		}
-
-		if ((conteo.tipo || '').toString().trim().toLowerCase() !== 'acopio') {
-			return { success: false, message: 'Reemplazo disponible solo para conteos de acopio' };
-		}
-
-		// 2) Obtener detalles del conteo (producto_acopio_id, fisico)
-		const { data: detalles, error: detErr } = await supabase
-			.from('conteo_detalle')
-			.select('producto_acopio_id, fisico')
-			.eq('conteo_id', conteoId)
-			.not('producto_acopio_id', 'is', null);
-
-		if (detErr) {
-			return { success: false, message: 'Error al obtener detalles del conteo', error: detErr };
-		}
-
-		if (!detalles || detalles.length === 0) {
-			return { success: false, message: 'El conteo no tiene detalles de acopio' };
-		}
-
-		// Normalizar datos de reemplazo con manejo cuidadoso de decimales
-		const productIdToFisico = new Map();
-		for (const d of detalles) {
-			if (!d.producto_acopio_id) continue;
-			const fisico = Number(d.fisico);
-			// Usar parseFloat para mantener precisión decimal
-			productIdToFisico.set(d.producto_acopio_id, Number.isFinite(fisico) ? parseFloat(fisico.toFixed(2)) : 0);
-		}
-
-		const productIds = Array.from(productIdToFisico.keys());
-
-		// 3) Actualizar el campo quantity en products_acopio para cada producto
-		const updateOps = [];
-		for (const productId of productIds) {
-			const fisico = productIdToFisico.get(productId) ?? 0;
-			updateOps.push(
-				supabase
-					.from('products_acopio')
-					.update({ quantity: fisico })
-					.eq('id', productId)
-			);
-		}
-
-		// 4) Ejecutar todas las actualizaciones en paralelo
-		const updateResults = await Promise.allSettled(updateOps);
-		
-		// Verificar si alguna actualización falló
-		for (const result of updateResults) {
-			if (result.status === 'rejected' || result.value?.error) {
-				return { 
-					success: false, 
-					message: 'Error al actualizar stock de productos de acopio', 
-					error: result.value?.error || result.reason 
-				};
+	// Reemplazar stock de productos_acopio con el valor "fisico" del conteo (solo para tipo 'acopio')
+	static async replaceStockAcopio(conteoId) {
+		try {
+			if (!conteoId) {
+				return { success: false, message: 'ID del conteo es requerido' };
 			}
-		}
 
-		return { 
-			success: true, 
-			message: 'Stock de acopio reemplazado correctamente', 
-			data: { actualizados: productIds.length } 
-		};
-	} catch (error) {
-		console.error('Error en ConteosModel.replaceStockAcopio:', error);
-		return { success: false, message: 'Error interno del servidor', error };
+			// 1) Obtener encabezado de conteo para validar tipo
+			const { data: conteo, error: conteoErr } = await supabase
+				.from('conteos')
+				.select('id, tipo')
+				.eq('id', conteoId)
+				.single();
+
+			if (conteoErr || !conteo) {
+				return { success: false, message: 'Conteo no encontrado' };
+			}
+
+			if ((conteo.tipo || '').toString().trim().toLowerCase() !== 'acopio') {
+				return { success: false, message: 'Reemplazo disponible solo para conteos de acopio' };
+			}
+
+			// 2) Obtener detalles del conteo (producto_acopio_id, fisico)
+			const { data: detalles, error: detErr } = await supabase
+				.from('conteo_detalle')
+				.select('producto_acopio_id, fisico')
+				.eq('conteo_id', conteoId)
+				.not('producto_acopio_id', 'is', null);
+
+			if (detErr) {
+				return { success: false, message: 'Error al obtener detalles del conteo', error: detErr };
+			}
+
+			if (!detalles || detalles.length === 0) {
+				return { success: false, message: 'El conteo no tiene detalles de acopio' };
+			}
+
+			// Normalizar datos de reemplazo con manejo cuidadoso de decimales
+			const productIdToFisico = new Map();
+			for (const d of detalles) {
+				if (!d.producto_acopio_id) continue;
+				const fisico = Number(d.fisico);
+				// Usar parseFloat para mantener precisión decimal
+				productIdToFisico.set(d.producto_acopio_id, Number.isFinite(fisico) ? parseFloat(fisico.toFixed(2)) : 0);
+			}
+
+			const productIds = Array.from(productIdToFisico.keys());
+
+			// 3) Actualizar el campo quantity en products_acopio para cada producto
+			const updateOps = [];
+			for (const productId of productIds) {
+				const fisico = productIdToFisico.get(productId) ?? 0;
+				updateOps.push(
+					supabase
+						.from('products_acopio')
+						.update({ quantity: fisico })
+						.eq('id', productId)
+				);
+			}
+
+			// 4) Ejecutar todas las actualizaciones en paralelo
+			const updateResults = await Promise.allSettled(updateOps);
+
+			// Verificar si alguna actualización falló
+			for (const result of updateResults) {
+				if (result.status === 'rejected' || result.value?.error) {
+					return {
+						success: false,
+						message: 'Error al actualizar stock de productos de acopio',
+						error: result.value?.error || result.reason
+					};
+				}
+			}
+
+			return {
+				success: true,
+				message: 'Stock de acopio reemplazado correctamente',
+				data: { actualizados: productIds.length }
+			};
+		} catch (error) {
+			console.error('Error en ConteosModel.replaceStockAcopio:', error);
+			return { success: false, message: 'Error interno del servidor', error };
+		}
 	}
-}
+
+	static async getDetalles(conteoId) {
+		try {
+			if (!conteoId) {
+				return { success: false, message: 'ID del conteo es requerido' };
+			}
+
+			// Primero obtener el conteo para validar que existe
+			const { data: conteo, error: conteoError } = await supabase
+				.from('conteos')
+				.select('id, sucursal_id')
+				.eq('id', conteoId)
+				.single();
+
+			if (conteoError || !conteo) {
+				return { success: false, message: 'Conteo no encontrado', error: conteoError };
+			}
+
+			// Obtener detalles con joins para un conteo específico
+			const { data: detalles, error: detalleError } = await supabase
+				.from('conteo_detalle')
+				.select(`
+					id,
+					conteo_id,
+					sistema,
+					fisico,
+					justificacion,
+					producto_almacen:producto_almacen_id(
+						id,
+						name,
+						grup
+					),
+					producto_acopio:producto_acopio_id(
+						id,
+						name,
+						type_measure:type_measure_id(
+							id,
+							name,
+							code
+						)
+					)
+				`)
+				.eq('conteo_id', conteoId)
+				.order('id', { ascending: true });
+
+			if (detalleError) {
+				return { success: false, message: 'Error al obtener detalles del conteo', error: detalleError };
+			}
+
+			return { success: true, data: detalles || [] };
+		} catch (error) {
+			console.error('[CONTEO MODEL] Error en ConteosModel.getDetalles:', error);
+			return { success: false, message: 'Error interno del servidor', error };
+		}
+	}
 }
 
 module.exports = ConteosModel;

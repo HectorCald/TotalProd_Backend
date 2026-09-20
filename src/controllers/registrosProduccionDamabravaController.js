@@ -154,7 +154,7 @@ class registrosProduccionDamabravaController {
             
             if (!empresaId && finalSucuId) {
                 try {
-                    const sucursales = require('../models/sucursales');
+                    const sucursales = require('../main/sucursales/sucursales');
                     const sucursal = await sucursales.getById(finalSucuId);
                     if (sucursal) {
                         if (sucursal.empresa_id) {

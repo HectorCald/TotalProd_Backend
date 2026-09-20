@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabase } = require('../../config/supabase');
 
 class Empresa {
   constructor(data) {
@@ -12,42 +12,6 @@ class Empresa {
     this.codigo = data.codigo;
     this.organigrama = data.organigrama || null;
     this.created_at = data.created_at;
-  }
-
-  // Método estático para actualizar el tipo de empresa
-  static async updateTipo(empresaId, tipo) {
-    try {
-      if (!empresaId || !tipo) {
-        throw new Error('ID de empresa y tipo son requeridos');
-      }
-
-      // Validar que el tipo sea válido
-      const tiposValidos = ['ventas', 'ventas_produccion'];
-      if (!tiposValidos.includes(tipo)) {
-        throw new Error('Tipo inválido. Debe ser "ventas" o "ventas_produccion"');
-      }
-
-      const { data: updatedEmpresa, error } = await supabase
-        .from('empresas')
-        .update({ tipo: tipo })
-        .eq('id', empresaId)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error al actualizar tipo de empresa:', error);
-        throw new Error(`Error al actualizar tipo de empresa: ${error.message}`);
-      }
-
-      if (!updatedEmpresa) {
-        throw new Error('No se pudo actualizar la empresa');
-      }
-
-      return new Empresa(updatedEmpresa);
-    } catch (error) {
-      console.error('Error en updateTipo:', error);
-      throw new Error(`Error al actualizar tipo de empresa: ${error.message}`);
-    }
   }
 
   // Método estático para obtener empresa por ID

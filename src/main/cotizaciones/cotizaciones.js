@@ -1,21 +1,5 @@
-const { supabase } = require('../config/supabase');
-const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
-
-// Función para generar código aleatorio de 8 caracteres alfanuméricos
-const generarCodigoAleatorio = () => {
-    const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let codigo = '';
-    for (let i = 0; i < 8; i++) {
-        codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
-    }
-    return codigo;
-};
-
-// Función para generar código de cotización
-const generarCodigoCotizacion = () => {
-    const codigoAleatorio = generarCodigoAleatorio();
-    return `CTZ-${codigoAleatorio}`;
-};
+const { supabase } = require('../../config/supabase');
+const { aplicarFiltroFecha } = require('../../utils/fechaRangeHelper');
 
 const COTIZACION_SELECT = `
     id,
@@ -44,8 +28,8 @@ const COTIZACION_SELECT = `
 `;
 
 class cotizaciones {
-    // Crear cotización rápida de golpe (igual que createFast de movimientos)
-    static async createFast(cotizacionData) {
+    // Crear cotización
+    static async create(cotizacionData) {
         try {
             const {
                 user_id, personal_id, sucu_id,
@@ -130,7 +114,7 @@ class cotizaciones {
                 .single();
 
             if (cotizacionError) {
-                console.error('Error en createFast - insertar cotización:', cotizacionError);
+                console.error('Error en create - insertar cotización:', cotizacionError);
                 return { success: false, message: 'Error al crear la cotización', error: cotizacionError };
             }
 
@@ -149,7 +133,7 @@ class cotizaciones {
                     .select('id');
 
                 if (productosError) {
-                    console.error('Error en createFast - insertar detalle:', productosError);
+                    console.error('Error en create - insertar detalle:', productosError);
                     await this.cleanupCotizacion(cotizacion.id);
                     return { success: false, message: 'Error al crear los detalles de la cotización', error: productosError };
                 }
@@ -169,199 +153,7 @@ class cotizaciones {
             };
 
         } catch (error) {
-            console.error('Error en Cotizaciones.createFast:', error);
-            return { success: false, message: 'Error interno del servidor', error };
-        }
-    }
-
-    // Crear una nueva cotización
-    static async create(cotizacionData) {
-        try {
-            const { user_id, personal_id, sucu_id, observaciones, metodo_pago, cliente_id, productos, fecha_vencimiento, agrupado, precio_id, descuento, aumento, porcentaje } = cotizacionData;
-
-            // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
-            const ahora = new Date();
-            const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
-
-            // Obtener el siguiente número de cotización para esta sucursal
-            const { data: ultimaCotizacion, error: errorNumero } = await supabase
-                .from('cotizaciones')
-                .select('numero_cotizacion')
-                .eq('sucu_id', sucu_id)
-                .order('numero_cotizacion', { ascending: false })
-                .limit(1)
-                .single();
-
-            let numeroCotizacion = 1;
-            if (!errorNumero && ultimaCotizacion) {
-                numeroCotizacion = (ultimaCotizacion.numero_cotizacion || 0) + 1;
-            }
-
-            const normalizarDecimal = (valor, decimales = 2) => {
-                const numero = Number(valor);
-                if (!Number.isFinite(numero)) return 0;
-                return Number(numero.toFixed(decimales));
-            };
-
-            const productosNormalizados = (productos || []).map(producto => {
-                const cantidad = Number(producto.cantidad) || 0;
-                const precioUnitario = normalizarDecimal(producto.precio);
-                const subtotalCalculado = normalizarDecimal(precioUnitario * cantidad);
-                const subtotal = producto.subtotal !== undefined && producto.subtotal !== null
-                    ? normalizarDecimal(producto.subtotal)
-                    : subtotalCalculado;
-
-                return {
-                    ...producto,
-                    cantidad,
-                    precioNormalizado: precioUnitario,
-                    subtotalNormalizado: subtotal
-                };
-            });
-
-            const total = normalizarDecimal(
-                productosNormalizados.reduce((sum, producto) => sum + producto.subtotalNormalizado, 0)
-            );
-
-            // Generar código de cotización
-            const codigoCotizacion = generarCodigoCotizacion();
-
-            // Iniciar transacción
-            const insertData = {
-                sucu_id,
-                observaciones: observaciones || null,
-                metodo_pago: metodo_pago || null,
-                cliente_id: cliente_id || null,
-                fecha: ahoraBolivia.toISOString(),
-                estado: 'pendiente',
-                total: total,
-                numero_cotizacion: numeroCotizacion,
-                fecha_vencimiento: fecha_vencimiento || null,
-                agrupado: agrupado || false,
-                precio_id: precio_id || null,
-                codigo: codigoCotizacion,
-                descuento: parseFloat(descuento) || 0,
-                aumento: parseFloat(aumento) || 0,
-                porcentaje: (() => {
-                    const tieneDescuentoAumento = (parseFloat(descuento) || 0) > 0 || (parseFloat(aumento) || 0) > 0;
-                    if (!tieneDescuentoAumento) return null;
-                    return porcentaje === true ? true : (porcentaje === false ? false : null);
-                })()
-            };
-
-            // Solo agregar campos que tienen valor
-            if (user_id && user_id !== null) {
-                insertData.user_id = user_id;
-            }
-            if (personal_id && personal_id !== null) {
-                insertData.personal_id = personal_id;
-            }
-
-            // Insertar cotización
-            const { data: cotizacion, error: cotizacionError } = await supabase
-                .from('cotizaciones')
-                .insert(insertData)
-                .select('id, sucu_id, fecha, estado, total, numero_cotizacion, codigo, observaciones, metodo_pago, cliente_id, fecha_vencimiento, agrupado, precio_id')
-                .single();
-
-            if (cotizacionError) {
-                console.error('Error creando cotización:', cotizacionError);
-                return { success: false, message: 'Error al crear la cotización', error: cotizacionError };
-            }
-
-            // Crear los detalles de productos si existen
-            if (productosNormalizados.length > 0) {
-                // Preparar datos de productos con subtotal explícito
-                const productosData = productosNormalizados.map(producto => ({
-                    cotizacion_id: cotizacion.id,
-                    producto_almacen_id: producto.id,
-                    cantidad: producto.cantidad,
-                    precio_unitario: producto.precioNormalizado,
-                    subtotal: producto.subtotalNormalizado
-                }));
-
-                // Insertar todos los productos en una sola operación
-                const { error: productosError } = await supabase
-                    .from('cotizacion_detalle')
-                    .insert(productosData)
-                    .select('id');
-
-                if (productosError) {
-                    console.error('Error creando detalles de productos:', productosError);
-                    // Limpiar la cotización si falla la inserción de productos
-                    await this.cleanupCotizacion(cotizacion.id);
-                    return { success: false, message: 'Error al crear los detalles de productos', error: productosError };
-                }
-            }
-
-            return { 
-                success: true, 
-                data: {
-                    ...cotizacion,
-                    productos: productosNormalizados.map((producto) => ({
-                        ...producto,
-                        precio: producto.precioNormalizado,
-                        subtotal: producto.subtotalNormalizado
-                    }))
-                }
-            };
-
-        } catch (error) {
             console.error('Error en Cotizaciones.create:', error);
-            return { success: false, message: 'Error interno del servidor', error };
-        }
-    }
-
-    // Obtener una cotización por ID
-    static async getById(cotizacionId) {
-        try {
-            const { data: cotizacion, error } = await supabase
-                .from('cotizaciones')
-                .select(COTIZACION_SELECT)
-                .eq('id', cotizacionId)
-                .single();
-
-            if (error) {
-                console.error('Error obteniendo cotización:', error);
-                return { success: false, message: 'Error al obtener la cotización', error };
-            }
-
-            if (!cotizacion) {
-                return { success: false, message: 'Cotización no encontrada' };
-            }
-
-            // Obtener productos de la cotización por separado
-            const { data: productos, error: productosError } = await supabase
-                .from('cotizacion_detalle')
-                .select(`
-                    id,
-                    cantidad,
-                    precio_unitario,
-                    subtotal,
-                    producto:producto_almacen_id(
-                        id,
-                        name,
-                        description,
-                        grup
-                    )
-                `)
-                .eq('cotizacion_id', cotizacionId);
-
-            if (productosError) {
-                console.error('Error obteniendo productos de la cotización:', productosError);
-                // Continuar sin productos en lugar de fallar
-            }
-
-            return {
-                success: true,
-                data: {
-                    ...cotizacion,
-                    productos: productos || []
-                }
-            };
-
-        } catch (error) {
-            console.error('Error en Cotizaciones.getById:', error);
             return { success: false, message: 'Error interno del servidor', error };
         }
     }
@@ -513,7 +305,7 @@ class cotizaciones {
                     .in('cotizacion_id', batchIds);
 
                 if (productosError) {
-                    console.error(`[CotizacionesModel.getAll] Error obteniendo productos (lote ${Math.floor(i/batchSize) + 1}):`, productosError);
+                    console.error(`[CotizacionesModel.getAll] Error obteniendo productos (lote ${Math.floor(i / batchSize) + 1}):`, productosError);
                     console.error(`[CotizacionesModel.getAll] Cotización IDs del lote:`, batchIds);
                 } else if (productosBatch && Array.isArray(productosBatch)) {
                     productosDetalleAll.push(...productosBatch);
@@ -541,7 +333,7 @@ class cotizaciones {
                     .in('id', batchProductIds);
 
                 if (productosAlmacenError) {
-                    console.error(`[CotizacionesModel.getAll] Error obteniendo productos almacén (lote ${Math.floor(i/productoBatchSize) + 1}):`, productosAlmacenError);
+                    console.error(`[CotizacionesModel.getAll] Error obteniendo productos almacén (lote ${Math.floor(i / productoBatchSize) + 1}):`, productosAlmacenError);
                 } else if (productosAlmacenBatch && Array.isArray(productosAlmacenBatch)) {
                     productosAlmacenBatch.forEach(prod => {
                         productosAlmacenMap.set(prod.id, prod);
@@ -594,6 +386,96 @@ class cotizaciones {
         }
     }
 
+    // Eliminar una cotización
+    static async delete(cotizacionId) {
+        try {
+            // Primero eliminar los detalles de la cotización
+            const { error: detallesError } = await supabase
+                .from('cotizacion_detalle')
+                .delete()
+                .eq('cotizacion_id', cotizacionId);
+
+            if (detallesError) {
+                console.error('Error eliminando detalles de cotización:', detallesError);
+                return { success: false, message: 'Error al eliminar los detalles de la cotización', error: detallesError };
+            }
+
+            // Luego eliminar la cotización
+            const { error: cotizacionError } = await supabase
+                .from('cotizaciones')
+                .delete()
+                .eq('id', cotizacionId);
+
+            if (cotizacionError) {
+                console.error('Error eliminando cotización:', cotizacionError);
+                return { success: false, message: 'Error al eliminar la cotización', error: cotizacionError };
+            }
+
+            return {
+                success: true,
+                data: { id: cotizacionId }
+            };
+
+        } catch (error) {
+            console.error('Error en Cotizaciones.delete:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
+    // Obtener una cotización por ID
+    static async getById(cotizacionId) {
+        try {
+            const { data: cotizacion, error } = await supabase
+                .from('cotizaciones')
+                .select(COTIZACION_SELECT)
+                .eq('id', cotizacionId)
+                .single();
+
+            if (error) {
+                console.error('Error obteniendo cotización:', error);
+                return { success: false, message: 'Error al obtener la cotización', error };
+            }
+
+            if (!cotizacion) {
+                return { success: false, message: 'Cotización no encontrada' };
+            }
+
+            // Obtener productos de la cotización por separado
+            const { data: productos, error: productosError } = await supabase
+                .from('cotizacion_detalle')
+                .select(`
+                    id,
+                    cantidad,
+                    precio_unitario,
+                    subtotal,
+                    producto:producto_almacen_id(
+                        id,
+                        name,
+                        description,
+                        grup
+                    )
+                `)
+                .eq('cotizacion_id', cotizacionId);
+
+            if (productosError) {
+                console.error('Error obteniendo productos de la cotización:', productosError);
+                // Continuar sin productos en lugar de fallar
+            }
+
+            return {
+                success: true,
+                data: {
+                    ...cotizacion,
+                    productos: productos || []
+                }
+            };
+
+        } catch (error) {
+            console.error('Error en Cotizaciones.getById:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
     // Actualizar estado de una cotización
     static async actualizarEstado(cotizacionId, nuevoEstado) {
         try {
@@ -626,42 +508,6 @@ class cotizaciones {
         }
     }
 
-    // Eliminar una cotización
-    static async eliminar(cotizacionId) {
-        try {
-            // Primero eliminar los detalles de la cotización
-            const { error: detallesError } = await supabase
-                .from('cotizacion_detalle')
-                .delete()
-                .eq('cotizacion_id', cotizacionId);
-
-            if (detallesError) {
-                console.error('Error eliminando detalles de cotización:', detallesError);
-                return { success: false, message: 'Error al eliminar los detalles de la cotización', error: detallesError };
-            }
-
-            // Luego eliminar la cotización
-            const { error: cotizacionError } = await supabase
-                .from('cotizaciones')
-                .delete()
-                .eq('id', cotizacionId);
-
-            if (cotizacionError) {
-                console.error('Error eliminando cotización:', cotizacionError);
-                return { success: false, message: 'Error al eliminar la cotización', error: cotizacionError };
-            }
-
-            return {
-                success: true,
-                data: { id: cotizacionId }
-            };
-
-        } catch (error) {
-            console.error('Error en Cotizaciones.eliminar:', error);
-            return { success: false, message: 'Error interno del servidor', error };
-        }
-    }
-
     // Método auxiliar para limpieza de cotizaciones
     static async cleanupCotizacion(cotizacionId) {
         try {
@@ -670,13 +516,13 @@ class cotizaciones {
                 .from('cotizacion_detalle')
                 .delete()
                 .eq('cotizacion_id', cotizacionId);
-            
+
             // Eliminar cotización principal
             await supabase
                 .from('cotizaciones')
                 .delete()
                 .eq('id', cotizacionId);
-                
+
             console.log(`🧹 [CLEANUP] Cotización ${cotizacionId} eliminada correctamente`);
         } catch (error) {
             console.error('Error en limpieza de cotización:', error);

@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabase } = require('../../config/supabase');
 
 class Cargos {
   constructor(data) {
@@ -61,51 +61,6 @@ class Cargos {
     }
   }
 
-  // Obtener un cargo por ID
-  static async getById(id) {
-    try {
-      if (!id) throw new Error('ID del cargo es requerido');
-
-      const { data, error } = await supabase
-        .from('cargos')
-        .select(`
-          *,
-          cargo_sub_modulo (
-            sub_modulo_id,
-            sub_modulos (
-              id,
-              name,
-              module_id,
-              modules (
-                id,
-                name
-              )
-            )
-          )
-        `)
-        .eq('id', id)
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') return null;
-        throw new Error('No se pudo obtener el cargo');
-      }
-
-      const modules = data.cargo_sub_modulo?.map(csm => ({
-        ...csm.sub_modulos,
-        modulos: csm.sub_modulos?.modules
-      })).filter(Boolean) || [];
-
-      return {
-        ...data,
-        modules: modules
-      };
-    } catch (error) {
-      console.error('Error al obtener el cargo por ID:', error);
-      throw new Error('No se pudo obtener el cargo');
-    }
-  }
-
   // Crear un cargo
   static async create(cargoData, empresaId) {
     try {
@@ -159,7 +114,35 @@ class Cargos {
       }
 
       // Devolver cargo completo
-      return await this.getById(newCargo.id);
+      const { data: cargoActualizado } = await supabase
+        .from('cargos')
+        .select(`
+          *,
+          cargo_sub_modulo (
+            sub_modulo_id,
+            sub_modulos (
+              id,
+              name,
+              module_id,
+              modules (
+                id,
+                name
+              )
+            )
+          )
+        `)
+        .eq('id', newCargo.id)
+        .single();
+
+      const modulesFinal = cargoActualizado?.cargo_sub_modulo?.map(csm => ({
+        ...csm.sub_modulos,
+        modulos: csm.sub_modulos?.modules
+      })).filter(Boolean) || [];
+
+      return {
+        ...cargoActualizado,
+        modules: modulesFinal
+      };
     } catch (error) {
       console.error('Error al crear el cargo:', error);
       throw error;
@@ -224,7 +207,35 @@ class Cargos {
         }
       }
 
-      return await this.getById(id);
+      const { data: cargoActualizado } = await supabase
+        .from('cargos')
+        .select(`
+          *,
+          cargo_sub_modulo (
+            sub_modulo_id,
+            sub_modulos (
+              id,
+              name,
+              module_id,
+              modules (
+                id,
+                name
+              )
+            )
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      const modulesFinal = cargoActualizado?.cargo_sub_modulo?.map(csm => ({
+        ...csm.sub_modulos,
+        modulos: csm.sub_modulos?.modules
+      })).filter(Boolean) || [];
+
+      return {
+        ...cargoActualizado,
+        modules: modulesFinal
+      };
     } catch (error) {
       console.error('Error al actualizar el cargo:', error);
       throw error;

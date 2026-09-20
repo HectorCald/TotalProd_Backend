@@ -1,7 +1,7 @@
-const categoryAcopio = require('../models/categoryAcopio');
-const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
+const categoryAlmacen = require('./categoryAlmacen');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../../../utils/permissionsHelper');
 
-class categoryAcopioController {
+class categoryAlmacenController {
 
   static async _handleRequest(res, actionName, req, handlerFn, options = {}) {
     const {
@@ -86,9 +86,19 @@ class categoryAcopioController {
 
   // Obtener todas las categorías
   static async getAll(req, res) {
-    return categoryAcopioController._handleRequest(res, 'getAll', req, async () => {
+    return categoryAlmacenController._handleRequest(res, 'getAll', req, async () => {
       const empresaId = req.query.empresa_id;
-      return await categoryAcopio.getAll(empresaId);
+
+      // Obtener empresas asociadas si se proporcionan
+      let empresasAsociadasIds = [];
+      if (req.query.empresas_asociadas) {
+        const asociadas = Array.isArray(req.query.empresas_asociadas) 
+          ? req.query.empresas_asociadas 
+          : [req.query.empresas_asociadas];
+        empresasAsociadasIds = asociadas.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
+      }
+
+      return await categoryAlmacen.getAll(empresaId, empresasAsociadasIds);
     }, {
       validateEmpresaId: true,
       successMessage: 'Categorías obtenidas exitosamente'
@@ -106,8 +116,8 @@ class categoryAcopioController {
       });
     }
 
-    return categoryAcopioController._handleRequest(res, 'create', req, async () => {
-      return await categoryAcopio.create({
+    return categoryAlmacenController._handleRequest(res, 'create', req, async () => {
+      return await categoryAlmacen.create({
         name: name.trim()
       }, empresa_id);
     }, {
@@ -129,9 +139,9 @@ class categoryAcopioController {
       });
     }
 
-    return categoryAcopioController._handleRequest(res, 'update', req, async () => {
+    return categoryAlmacenController._handleRequest(res, 'update', req, async () => {
       const { id } = req.params;
-      return await categoryAcopio.update(id, {
+      return await categoryAlmacen.update(id, {
         name: name.trim()
       });
     }, {
@@ -143,9 +153,9 @@ class categoryAcopioController {
 
   // Eliminar una categoría
   static async delete(req, res) {
-    return categoryAcopioController._handleRequest(res, 'delete', req, async () => {
+    return categoryAlmacenController._handleRequest(res, 'delete', req, async () => {
       const { id } = req.params;
-      await categoryAcopio.delete(id);
+      await categoryAlmacen.delete(id);
     }, {
       validateCategoryId: true,
       checkPermission: 'delete',
@@ -154,4 +164,4 @@ class categoryAcopioController {
   }
 }
 
-module.exports = categoryAcopioController;
+module.exports = categoryAlmacenController;

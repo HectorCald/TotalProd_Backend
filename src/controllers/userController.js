@@ -373,6 +373,190 @@ class UserController {
       successMessage: 'Encuesta enviada exitosamente'
     });
   }
+
+  // Solicitar reset de contraseña
+  static async requestPasswordReset(req, res) {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email es requerido'
+        });
+      }
+
+      const user = await User.getByEmail(email);
+      if (!user) {
+        const domainMatch = email.match(/@([^.]+)\./);
+        if (domainMatch) {
+          const domain = domainMatch[1].toLowerCase();
+          const { supabase } = require('../config/supabase');
+          const { data: empresas } = await supabase.from('empresas').select('name');
+          
+          if (empresas && empresas.length > 0) {
+            const isEmployeeDomain = empresas.some(emp => {
+              const normalizedName = (emp.name || '').toLowerCase().replace(/\s+/g, '');
+              return normalizedName === domain;
+            });
+            
+            if (isEmployeeDomain) {
+              return res.status(400).json({
+                success: false,
+                message: 'No es posible restablecer la contraseña de un empleado. Por favor, contacta con el administrador del sistema.'
+              });
+            }
+          }
+        }
+
+        return res.status(404).json({
+          success: false,
+          message: 'Usuario no encontrado con ese email'
+        });
+      }
+
+      const passwordReset = await User.createPasswordReset(user.id);
+
+      try {
+        const EmailService = require('../services/emailService');
+        const emailService = new EmailService();
+        const userName = `${user.firstName || 'Usuario'} ${user.lastName || ''}`.trim();
+
+        await emailService.sendPasswordResetCode(
+          email,
+          passwordReset.plain_token,
+          userName
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: 'Código de verificación enviado a tu email',
+          data: {
+            email,
+            expiresAt: passwordReset.expiration
+          }
+        });
+      } catch (emailError) {
+        console.error('❌ Error al enviar email:', emailError);
+        return res.status(200).json({
+          success: true,
+          message: 'Código de reset generado (email falló)',
+          data: {
+            token: passwordReset.plain_token,
+            expiresAt: passwordReset.expiration
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error en requestPasswordReset:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Verificar token de reset
+  static async verifyResetToken(req, res) {
+    try {
+      const { token } = req.body;
+
+      if (!token) {
+        return res.status(400).json({
+          success: false,
+          message: 'Token es requerido'
+        });
+      }
+
+      const passwordReset = await User.verifyResetToken(token);
+      if (!passwordReset) {
+        return res.status(400).json({
+          success: false,
+          message: 'Token inválido o expirado'
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Token válido',
+        data: {
+          userId: passwordReset.user_id,
+          token: passwordReset.plain_token,
+          expiresAt: passwordReset.expiration
+        }
+      });
+    } catch (error) {
+      console.error('Error en verifyResetToken:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Resetear contraseña
+  static async resetPassword(req, res) {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'Token y nueva contraseña son requeridos'
+        });
+      }
+
+      if (newPassword.length < 8) {
+        return res.status(400).json({
+          success: false,
+          message: 'La contraseña debe tener al menos 8 caracteres'
+        });
+      }
+
+      const passwordReset = await User.verifyResetToken(token);
+      if (!passwordReset) {
+        return res.status(400).json({
+          success: false,
+          message: 'Token inválido o expirado'
+        });
+      }
+
+      const saltRounds = 10;
+      const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+      const { supabase } = require('../config/supabase');
+      const { data: updatedUser, error } = await supabase
+        .from('users')
+        .update({ password: hashedPassword })
+        .eq('id', passwordReset.user_id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error al actualizar contraseña:', error);
+        throw new Error('No se pudo actualizar la contraseña');
+      }
+
+      await User.markResetTokenAsUsed(token);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Contraseña actualizada exitosamente',
+        data: {
+          user: {
+            id: updatedUser.id,
+            email: updatedUser.email
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error en resetPassword:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
 }
 
 module.exports = UserController;

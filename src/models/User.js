@@ -399,6 +399,110 @@ class User {
       throw error;
     }
   }
+
+  // Métodos para reset de contraseña
+  static async createPasswordReset(userId) {
+    const plainToken = Math.floor(100000 + Math.random() * 900000).toString();
+    const saltRounds = 10;
+    const hashedToken = await bcrypt.hash(plainToken, saltRounds);
+
+    const expiration = new Date();
+    expiration.setHours(expiration.getHours() + 1);
+
+    const { data: insertedReset, error } = await supabase
+      .from('password_resets')
+      .upsert([{
+        user_id: userId,
+        token: hashedToken,
+        expiration: expiration.toISOString(),
+        used: false
+      }], { 
+        onConflict: 'user_id',
+        ignoreDuplicates: false 
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error al crear reset de contraseña:', error);
+      throw new Error(`Error al crear reset de contraseña: ${error.message}`);
+    }
+
+    return {
+      ...insertedReset,
+      plain_token: plainToken
+    };
+  }
+
+  static async verifyResetToken(plainToken) {
+    const { data: resets, error } = await supabase
+      .from('password_resets')
+      .select('*')
+      .eq('used', false);
+
+    if (error) {
+      console.error('Error al buscar resets:', error);
+      throw new Error('No se pudo buscar los resets');
+    }
+
+    let validReset = null;
+    for (const reset of (resets || [])) {
+      const isValid = await bcrypt.compare(plainToken, reset.token);
+      if (isValid) {
+        validReset = reset;
+        break;
+      }
+    }
+
+    if (!validReset) return null;
+
+    if (new Date() > new Date(validReset.expiration)) {
+      return null;
+    }
+
+    return {
+      ...validReset,
+      plain_token: plainToken
+    };
+  }
+
+  static async markResetTokenAsUsed(plainToken) {
+    const reset = await this.verifyResetToken(plainToken);
+    if (!reset) {
+      throw new Error('Token no válido para marcar como usado');
+    }
+
+    const { data: updatedReset, error } = await supabase
+      .from('password_resets')
+      .update({ used: true })
+      .eq('user_id', reset.user_id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error al marcar token como usado:', error);
+      throw new Error('No se pudo marcar el token como usado');
+    }
+
+    return updatedReset;
+  }
+
+  static async cleanExpiredResetTokens() {
+    const ahora = new Date();
+    const ahoraBolivia = new Date(ahora.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
+
+    const { error } = await supabase
+      .from('password_resets')
+      .delete()
+      .lt('expiration', ahoraBolivia.toISOString());
+
+    if (error) {
+      console.error('Error al limpiar tokens expirados:', error);
+      throw new Error('No se pudieron limpiar los tokens expirados');
+    }
+
+    return true;
+  }
 }
 
 module.exports = User;

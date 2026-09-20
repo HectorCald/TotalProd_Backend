@@ -1,5 +1,5 @@
-const ConteosModel = require('../models/conteos');
-const { checkDeletePermission, checkReplacePermission } = require('../utils/permissionsHelper');
+const ConteosModel = require('./conteos');
+const { checkDeletePermission, checkReplacePermission } = require('../../utils/permissionsHelper');
 
 class ConteosController {
 

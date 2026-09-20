@@ -1,21 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const userRoutes = require('./userRoutes');
-const passwordResetRoutes = require('./passwordResetRoutes');
 const clientRoutes = require('../main/clientes/clientRoutes');
 const proveedorRoutes = require('../main/proveedores/proveedoresRoutes');
 const productsAcopioRoutes = require('./productsAcopioRoutes');
 const productsAlmacenRoutes = require('./productsAlmacenRoutes');
 const typeMeasureRoutes = require('./typeMeasureRoutes');
-const categoryAcopioRoutes = require('./categoryAcopioRoutes');
-const categoryAlmacenRoutes = require('./categoryAlmacenRoutes');
+const categoryAcopioRoutes = require('../main/categorias/acopio/categoryAcopioRoutes');
+const categoryAlmacenRoutes = require('../main/categorias/almacen/categoryAlmacenRoutes');
 const pricesTypesRoutes = require('../main/precios/pricesTypesRoutes');
 const movimientosAcopioRoutes = require('./movimientosAcopioRoutes');
 const movimientosAlmacenRoutes = require('./movimientosAlmacenRoutes');
 const pedidosAcopioRoutes = require('./pedidosAcopioRoutes');
 const pedidosAlmacenRoutes = require('./pedidosAlmacenRoutes');
 const modulesRoutes = require('./modulesRoutes');
-const sucursalesRoutes = require('./sucursalesRoutes');
+const sucursalesRoutes = require('../main/sucursales/sucursalesRoutes');
 const personalRoutes = require('../main/personal/personalRoutes');
 const gastosRoutes = require('../main/pagos/gastosRoutes');
 const deudasRoutes = require('../main/deudas/deudasRoutes');
@@ -23,12 +22,10 @@ const registrosProduccionDamabravaRoutes = require('./registrosProduccionDamabra
 const reglasProduccionDamabravaRoutes = require('./reglasProduccionDamabravaRoutes');
 const pagosDamabravaRoutes = require('./pagosDamabravaRoutes');
 const permissionsRoutes = require('./permissionsRoutes');
-const conteosRoutes = require('./conteosRoutes');
-const cotizacionesRoutes = require('./cotizacionesRoutes');
-const empresaImagenRoutes = require('./empresaImagenRoutes');
-const empresaRoutes = require('./empresaRoutes');
-const historialRoutes = require('./historialRoutes');
-const cargosRoutes = require('./cargosRoutes');
+const conteosRoutes = require('../main/conteos/conteosRoutes');
+const cotizacionesRoutes = require('../main/cotizaciones/cotizacionesRoutes');
+const empresaRoutes = require('../main/empresa/empresaRoutes');
+const cargosRoutes = require('../main/cargos/cargosRoutes');
 const planificadorRoutes = require('./planificadorRoutes');
 
 // Ruta principal
@@ -51,7 +48,6 @@ router.get('/status', (req, res) => {
 
 // Rutas de usuarios
 router.use('/users', userRoutes);
-router.use('/passwordReset', passwordResetRoutes);
 
 // Rutas de clientes
 router.use('/clients', clientRoutes);
@@ -105,9 +101,6 @@ router.use('/personal', personalRoutes);
 // Rutas de gastos
 router.use('/gastos', gastosRoutes);
 
-// Rutas de historial
-router.use('/historial', historialRoutes);
-
 // Rutas de deudas
 router.use('/deudas', deudasRoutes);
 
@@ -126,9 +119,6 @@ router.use('/conteos', conteosRoutes);
 // Rutas de cotizaciones
 router.use('/cotizaciones', cotizacionesRoutes);
 
-
-// Rutas de imágenes de empresa
-router.use('/empresa-imagen', empresaImagenRoutes);
 
 // Rutas de empresa
 router.use('/empresas', empresaRoutes);

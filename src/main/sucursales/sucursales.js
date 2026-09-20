@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabase } = require('../../config/supabase');
 
 class sucursales {
     // Obtener todas las sucursales de una empresa y "Casa Matriz" de empresas asociadas
@@ -42,7 +42,7 @@ class sucursales {
                 const precios = (sucursal.sucursal_precios || [])
                     .map(sp => sp.prices_types)
                     .filter(Boolean);
-                
+
                 return {
                     ...sucursal,
                     precios: precios
@@ -84,10 +84,10 @@ class sucursales {
                         const precios = (sucursal.sucursal_precios || [])
                             .map(sp => sp.prices_types)
                             .filter(Boolean);
-                        
+
                         const nombreEmpresa = sucursal.empresas?.name || '';
                         const nombreVisual = nombreEmpresa ? `Casa Matriz (${nombreEmpresa})` : 'Casa Matriz';
-                        
+
                         return {
                             ...sucursal,
                             name: nombreVisual,
@@ -103,6 +103,115 @@ class sucursales {
         } catch (error) {
             console.error('Error en sucursales.getAll:', error);
             throw new Error('No se pudo obtener las sucursales');
+        }
+    }
+
+    static async create(sucursalData, precios = []) {
+        try {
+            const { data, error } = await supabase
+                .from('branches')
+                .insert([sucursalData])
+                .select(`
+                    id,
+                    name,
+                    almacen_sucursal_id,
+                    total_pedidos,
+                    created_at,
+                    empresas!inner (
+                        id,
+                        name,
+                        propietario_id,
+                        codigo,
+                        logo_tipo
+                    )
+                `)
+                .single();
+
+            if (error) throw error;
+
+            if (precios && Array.isArray(precios) && precios.length > 0 && data.id) {
+                await this.syncPreciosSucursal(data.id, precios);
+            }
+
+            return await this.getById(data.id);
+        } catch (error) {
+            console.error('Error al crear sucursal:', error);
+            throw new Error('No se pudo crear la sucursal');
+        }
+    }
+
+    static async update(id, sucursalData, precios = null) {
+        try {
+            if (!id) throw new Error('ID de sucursal es requerido');
+
+            const { data, error } = await supabase
+                .from('branches')
+                .update(sucursalData)
+                .eq('id', id)
+                .select(`
+                    id,
+                    name,
+                    almacen_sucursal_id,
+                    total_pedidos,
+                    created_at,
+                    empresas!inner (
+                        id,
+                        name,
+                        propietario_id,
+                        codigo,
+                        logo_tipo
+                    )
+                `)
+                .single();
+
+            if (error) throw error;
+
+            if (precios !== null && Array.isArray(precios) && data.id) {
+                await this.syncPreciosSucursal(data.id, precios);
+            }
+
+            return await this.getById(id);
+        } catch (error) {
+            console.error('Error al actualizar sucursal:', error);
+            throw new Error('No se pudo actualizar la sucursal');
+        }
+    }
+
+    static async delete(id) {
+        try {
+            if (!id) throw new Error('ID de sucursal es requerido');
+
+            const sucursalExistente = await this.getById(id);
+            if (!sucursalExistente) {
+                throw new Error('La sucursal no existe');
+            }
+
+            const { data: movimientosAcopio } = await supabase.from('movimientos_acopio').select('id').eq('sucu_id', id).limit(1);
+            const { data: movimientosAlmacen } = await supabase.from('movimientos_almacen').select('id').eq('sucu_id', id).limit(1);
+            const { data: pedidosAcopio } = await supabase.from('pedidos_acopio').select('id').eq('sucu_id', id).limit(1);
+            const { data: pedidosAlmacen } = await supabase.from('pedidos_almacen').select('id').eq('sucursal_id', id).limit(1);
+            const { data: personal } = await supabase.from('staff').select('id').or(`branch_id.eq.${id},sucursal_id.eq.${id}`).limit(1);
+
+            if (movimientosAcopio && movimientosAcopio.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene movimientos de acopio asociados');
+            if (movimientosAlmacen && movimientosAlmacen.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene movimientos de almacén asociados');
+            if (pedidosAcopio && pedidosAcopio.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene pedidos de acopio asociados');
+            if (pedidosAlmacen && pedidosAlmacen.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene pedidos de almacén asociados');
+            if (personal && personal.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene personal asociado');
+
+            const { error } = await supabase
+                .from('branches')
+                .delete()
+                .eq('id', id);
+
+            if (error) {
+                if (error.code === '23503') throw new Error('No se puede eliminar la sucursal porque tiene registros relacionados en otras tablas');
+                throw new Error(`Error de base de datos: ${error.message}`);
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error al eliminar sucursal:', error);
+            throw error;
         }
     }
 
@@ -154,128 +263,6 @@ class sucursales {
         }
     }
 
-    static async create(sucursalData, precios = []) {
-        try {
-            const { data, error } = await supabase
-                .from('branches')
-                .insert([sucursalData])
-                .select(`
-                    id,
-                    name,
-                    almacen_sucursal_id,
-                    total_pedidos,
-                    created_at,
-                    empresas!inner (
-                        id,
-                        name,
-                        propietario_id,
-                        codigo,
-                        logo_tipo
-                    )
-                `)
-                .single();
-
-            if (error) throw error;
-
-            if (precios && Array.isArray(precios) && precios.length > 0 && data.id) {
-                await this.syncPreciosSucursal(data.id, precios);
-            }
-
-            let preciosActualizados = [];
-            if (data.id) {
-                preciosActualizados = await this.getPreciosBySucursalId(data.id);
-            }
-
-            return {
-                ...data,
-                precios: preciosActualizados
-            };
-        } catch (error) {
-            console.error('Error al crear sucursal:', error);
-            throw new Error('No se pudo crear la sucursal');
-        }
-    }
-
-    static async update(id, sucursalData, precios = null) {
-        try {
-            if (!id) throw new Error('ID de sucursal es requerido');
-
-            const { data, error } = await supabase
-                .from('branches')
-                .update(sucursalData)
-                .eq('id', id)
-                .select(`
-                    id,
-                    name,
-                    almacen_sucursal_id,
-                    total_pedidos,
-                    created_at,
-                    empresas!inner (
-                        id,
-                        name,
-                        propietario_id,
-                        codigo,
-                        logo_tipo
-                    )
-                `)
-                .single();
-
-            if (error) throw error;
-
-            if (precios !== null && Array.isArray(precios) && data.id) {
-                await this.syncPreciosSucursal(data.id, precios);
-            }
-
-            const preciosActualizados = await this.getPreciosBySucursalId(data.id);
-
-            return {
-                ...data,
-                precios: preciosActualizados
-            };
-        } catch (error) {
-            console.error('Error al actualizar sucursal:', error);
-            throw new Error('No se pudo actualizar la sucursal');
-        }
-    }
-
-    static async delete(id) {
-        try {
-            if (!id) throw new Error('ID de sucursal es requerido');
-
-            const sucursalExistente = await this.getById(id);
-            if (!sucursalExistente) {
-                throw new Error('La sucursal no existe');
-            }
-
-            const { data: movimientosAcopio } = await supabase.from('movimientos_acopio').select('id').eq('sucu_id', id).limit(1);
-            const { data: movimientosAlmacen } = await supabase.from('movimientos_almacen').select('id').eq('sucu_id', id).limit(1);
-            const { data: pedidosAcopio } = await supabase.from('pedidos_acopio').select('id').eq('sucu_id', id).limit(1);
-            const { data: pedidosAlmacen } = await supabase.from('pedidos_almacen').select('id').eq('sucursal_id', id).limit(1);
-            const { data: personal } = await supabase.from('staff').select('id').or(`branch_id.eq.${id},sucursal_id.eq.${id}`).limit(1);
-
-            if (movimientosAcopio && movimientosAcopio.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene movimientos de acopio asociados');
-            if (movimientosAlmacen && movimientosAlmacen.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene movimientos de almacén asociados');
-            if (pedidosAcopio && pedidosAcopio.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene pedidos de acopio asociados');
-            if (pedidosAlmacen && pedidosAlmacen.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene pedidos de almacén asociados');
-            if (personal && personal.length > 0) throw new Error('No se puede eliminar la sucursal porque tiene personal asociado');
-
-            const { error } = await supabase
-                .from('branches')
-                .delete()
-                .eq('id', id);
-
-            if (error) {
-                if (error.code === '23503') throw new Error('No se puede eliminar la sucursal porque tiene registros relacionados en otras tablas');
-                throw new Error(`Error de base de datos: ${error.message}`);
-            }
-
-            return true;
-        } catch (error) {
-            console.error('Error al eliminar sucursal:', error);
-            throw error;
-        }
-    }
-
     static async syncPreciosSucursal(sucursalId, nuevosPreciosIds) {
         try {
             const { data: preciosActuales, error: errorActuales } = await supabase
@@ -318,31 +305,6 @@ class sucursales {
         } catch (error) {
             console.error('Error en syncPreciosSucursal:', error);
             throw new Error('Error al sincronizar precios');
-        }
-    }
-
-    static async getPreciosBySucursalId(sucursalId) {
-        try {
-            if (!sucursalId) throw new Error('ID de sucursal es requerido');
-
-            const { data, error } = await supabase
-                .from('sucursal_precios')
-                .select(`
-                    precio_id,
-                    prices_types:precio_id (
-                        id,
-                        name,
-                        description
-                    )
-                `)
-                .eq('sucursal_id', sucursalId);
-
-            if (error) throw error;
-
-            return (data || []).map(item => item.prices_types).filter(Boolean);
-        } catch (error) {
-            console.error('Error en getPreciosBySucursalId:', error);
-            throw new Error('Error al obtener los precios de la sucursal');
         }
     }
 }

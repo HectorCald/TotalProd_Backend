@@ -12,6 +12,12 @@ router.post('/getUserByEmail', UserController.getUserByEmail); // Verificar si e
 router.post('/verifyPassword', UserController.verifyCurrentPassword); // Verificar contraseña actual
 router.post('/changePassword', UserController.changePassword); // Cambiar contraseña
 router.post('/encuesta-ia', UserController.enviarEncuestaIA); // Enviar encuesta de IA
+
+// Rutas para reset de contraseña
+router.post('/password-reset/request', UserController.requestPasswordReset);
+router.post('/password-reset/verify', UserController.verifyResetToken);
+router.post('/password-reset/reset', UserController.resetPassword);
+
 router.get('/:id', UserController.getCurrentUser); // Obtener usuario por ID
 router.put('/config', requireAuth, UserController.updateConfig); // Actualizar configuracion usuario y empresa
 

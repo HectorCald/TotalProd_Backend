@@ -1,49 +1,6 @@
-const Empresa = require('../models/Empresa');
+const Empresa = require('./Empresa');
 
 class EmpresaController {
-  // Método para actualizar el tipo de empresa
-  static async updateTipo(req, res) {
-    try {
-      const { empresaId, tipo } = req.body;
-
-      if (!empresaId || !tipo) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID de empresa y tipo son requeridos'
-        });
-      }
-
-      // Validar que el tipo sea válido
-      const tiposValidos = ['ventas', 'ventas_produccion'];
-      if (!tiposValidos.includes(tipo)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Tipo inválido. Debe ser "ventas" o "ventas_produccion"'
-        });
-      }
-
-      const updatedEmpresa = await Empresa.updateTipo(empresaId, tipo);
-
-      res.status(200).json({
-        success: true,
-        message: 'Tipo de empresa actualizado exitosamente',
-        data: {
-          empresa: {
-            id: updatedEmpresa.id,
-            name: updatedEmpresa.name,
-            tipo: updatedEmpresa.tipo
-          }
-        }
-      });
-    } catch (error) {
-      console.error('Error en updateTipo:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error interno del servidor'
-      });
-    }
-  }
-
   // Método para obtener empresa por ID
   static async getById(req, res) {
     try {
@@ -234,6 +191,42 @@ class EmpresaController {
     } catch (error) {
       console.error('Error en updateOrganigrama:', error);
       res.status(500).json({
+        success: false,
+        message: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener imagen / logo de empresa
+  static async getImage(req, res) {
+    try {
+      const id = req.params.id || req.query.empresa_id;
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de empresa es requerido'
+        });
+      }
+
+      const empresa = await Empresa.getById(id);
+      if (!empresa) {
+        return res.status(404).json({
+          success: false,
+          message: 'Empresa no encontrada'
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          secure_url: empresa.logo_tipo,
+          url: empresa.logo_tipo,
+          imagen_url: empresa.logo_tipo
+        }
+      });
+    } catch (error) {
+      console.error('Error en getImage:', error);
+      return res.status(500).json({
         success: false,
         message: error.message || 'Error interno del servidor'
       });

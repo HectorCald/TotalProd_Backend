@@ -1,6 +1,6 @@
-const { supabase } = require('../config/supabase');
+const { supabase } = require('../../../config/supabase');
 
-class categoryAcopio {
+class categoryAlmacen {
 
   // Constructor para crear una categoría
   constructor(data) {
@@ -9,17 +9,23 @@ class categoryAcopio {
     this.created_at = data.created_at;
   }
 
-  // Método para obtener todas las categorías de una empresa
-  static async getAll(empresaId) {
+  // Método para obtener todas las categorías de una empresa y empresas asociadas
+  static async getAll(empresaId, empresasAsociadasIds = []) {
     try {
       if (!empresaId) {
         throw new Error('ID de la empresa es requerido');
       }
 
+      // Construir array de IDs de empresas (empresa actual + asociadas)
+      const empresaIds = [empresaId];
+      if (Array.isArray(empresasAsociadasIds) && empresasAsociadasIds.length > 0) {
+        empresaIds.push(...empresasAsociadasIds);
+      }
+
       const { data, error } = await supabase
-        .from('category_acopio')
+        .from('category_almacen')
         .select('*')
-        .eq('empresa_id', empresaId)
+        .in('empresa_id', empresaIds)
         .order('name', { ascending: true });
 
       if (error) {
@@ -49,7 +55,7 @@ class categoryAcopio {
       }
 
       let query = supabase
-        .from('category_acopio')
+        .from('category_almacen')
         .select('id')
         .eq('empresa_id', empresaId)
         .ilike('name', name.trim());
@@ -92,7 +98,7 @@ class categoryAcopio {
       };
 
       const { data, error } = await supabase
-        .from('category_acopio')
+        .from('category_almacen')
         .insert([dbData])
         .select();
 
@@ -121,7 +127,7 @@ class categoryAcopio {
 
       // Primero obtener la empresa_id de la categoría actual
       const { data: currentCategory, error: fetchError } = await supabase
-        .from('category_acopio')
+        .from('category_almacen')
         .select('empresa_id')
         .eq('id', id)
         .single();
@@ -137,7 +143,7 @@ class categoryAcopio {
       }
 
       const { data, error } = await supabase
-        .from('category_acopio')
+        .from('category_almacen')
         .update(categoryData)
         .eq('id', id)
         .select();
@@ -167,7 +173,7 @@ class categoryAcopio {
 
       // Primero verificar si la categoría tiene productos asignados
       const { data: products, error: productsError } = await supabase
-        .from('products_acopio')
+        .from('products_almacen')
         .select('id')
         .eq('category_id', id)
         .limit(1);
@@ -183,7 +189,7 @@ class categoryAcopio {
 
       // Si no tiene productos, proceder con la eliminación
       const { error } = await supabase
-        .from('category_acopio')
+        .from('category_almacen')
         .delete()
         .eq('id', id);
 
@@ -200,4 +206,4 @@ class categoryAcopio {
   }
 }
 
-module.exports = categoryAcopio;
+module.exports = categoryAlmacen;
