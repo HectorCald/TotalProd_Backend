@@ -39,7 +39,7 @@ class Personal {
       
       let plan = null;
       try {
-        const User = require('./User');
+        const User = require('../../models/User');
         plan = await User.getPlanByEmpresaId(empresaId);
       } catch (err) {
         console.error('Error al obtener plan en getAll de Personal:', err);

@@ -1,4 +1,4 @@
-const Cargos = require('./Cargos');
+const Cargos = require('./cargos');
 const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../../utils/permissionsHelper');
 
 class cargosController {

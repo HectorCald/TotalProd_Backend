@@ -1,4 +1,4 @@
-const Empresa = require('./Empresa');
+const Empresa = require('./empresa');
 
 class EmpresaController {
   // Método para obtener empresa por ID
