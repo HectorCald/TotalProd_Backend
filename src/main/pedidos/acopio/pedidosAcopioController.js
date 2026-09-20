@@ -1,6 +1,6 @@
-const pedidosAcopio = require('../models/pedidosAcopio');
-const gastosModel = require('../main/pagos/gastos');
-const { checkDeletePermission, checkAnularPermission } = require('../utils/permissionsHelper');
+const pedidosAcopio = require('./pedidosAcopio');
+const gastosModel = require('../../pagos/gastos');
+const { checkDeletePermission, checkAnularPermission } = require('../../../utils/permissionsHelper');
 
 class pedidosAcopioController {
 
@@ -74,9 +74,8 @@ class pedidosAcopioController {
           if (!hasPermission) {
             return res.status(403).json({
               success: false,
-              message: `No tienes permisos para ${
-                checkPermission === 'delete' ? 'eliminar' : 'anular entregas de'
-              } pedidos`
+              message: `No tienes permisos para ${checkPermission === 'delete' ? 'eliminar' : 'anular entregas de'
+                } pedidos`
             });
           }
         }
@@ -109,6 +108,31 @@ class pedidosAcopioController {
         message: 'Ocurrió un error inesperado'
       });
     }
+  }
+
+  // Obtener todos los pedidos de la empresa
+  static async getAll(req, res) {
+    return pedidosAcopioController._handleRequest(res, 'getAll', req, async () => {
+      const { empresa_id } = req.query;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const searchQuery = req.query.search || null;
+      const estado = req.query.estado || null;
+      const ordenamiento = req.query.ordenamiento || 'fecha_desc';
+      const responsableId = req.query.responsable_id || null;
+
+      let filtroFecha = null;
+      if (req.query.fecha_inicio || req.query.fecha_fin) {
+        filtroFecha = {
+          inicio: req.query.fecha_inicio || null,
+          fin: req.query.fecha_fin || null
+        };
+      }
+
+      return await pedidosAcopio.getAll(empresa_id, page, limit, searchQuery, estado, ordenamiento, responsableId, filtroFecha);
+    }, {
+      validateEmpresaId: true
+    });
   }
 
   // Crear un pedido
@@ -153,28 +177,15 @@ class pedidosAcopioController {
     });
   }
 
-  // Obtener todos los pedidos de la empresa
-  static async getAll(req, res) {
-    return pedidosAcopioController._handleRequest(res, 'getAll', req, async () => {
-      const { empresa_id } = req.query;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const searchQuery = req.query.search || null;
-      const estado = req.query.estado || null;
-      const ordenamiento = req.query.ordenamiento || 'fecha_desc';
-      const responsableId = req.query.responsable_id || null;
-      
-      let filtroFecha = null;
-      if (req.query.fecha_inicio || req.query.fecha_fin) {
-        filtroFecha = {
-          inicio: req.query.fecha_inicio || null,
-          fin: req.query.fecha_fin || null
-        };
-      }
-
-      return await pedidosAcopio.getAll(empresa_id, page, limit, searchQuery, estado, ordenamiento, responsableId, filtroFecha);
+  // Eliminar pedido
+  static async delete(req, res) {
+    return pedidosAcopioController._handleRequest(res, 'delete', req, async () => {
+      const { id } = req.params;
+      const userId = req.user.id;
+      return await pedidosAcopio.delete(id, userId);
     }, {
-      validateEmpresaId: true
+      validatePedidoId: true,
+      checkPermission: 'delete'
     });
   }
 
@@ -200,9 +211,9 @@ class pedidosAcopioController {
 
     const estadosPermitidos = ['Pendiente', 'Entregado', 'Completado'];
     if (!estadosPermitidos.includes(estado)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Estado no válido. Estados permitidos: Pendiente, Entregado, Completado, Cancelado' 
+      return res.status(400).json({
+        success: false,
+        message: 'Estado no válido. Estados permitidos: Pendiente, Entregado, Completado, Cancelado'
       });
     }
 
@@ -214,45 +225,21 @@ class pedidosAcopioController {
     });
   }
 
-  // Verificar si un producto está en pedidos
-  static async verificarProductoEnPedidos(req, res) {
-    const { productoId } = req.params;
-    if (!productoId) {
-      return res.status(400).json({ success: false, message: 'ID del producto es requerido' });
-    }
-
-    return pedidosAcopioController._handleRequest(res, 'verificarProductoEnPedidos', req, async () => {
-      return await pedidosAcopio.verificarProductoEnPedidos(productoId);
-    });
-  }
-
-  // Eliminar pedido
-  static async eliminar(req, res) {
-    return pedidosAcopioController._handleRequest(res, 'eliminar', req, async () => {
-      const { id } = req.params;
-      const userId = req.user.id;
-      return await pedidosAcopio.eliminar(id, userId);
-    }, {
-      validatePedidoId: true,
-      checkPermission: 'delete'
-    });
-  }
-
   // Entregar pedido
   static async entregar(req, res) {
     const { id } = req.params;
-    const { 
-      cantidadEntregada, 
-      unidadEntregada, 
-      cantidadUD, 
-      unidadUD, 
-      proveedor_id, 
-      costo, 
+    const {
+      cantidadEntregada,
+      unidadEntregada,
+      cantidadUD,
+      unidadUD,
+      proveedor_id,
+      costo,
       transporte_otros,
-      metodo_pago, 
-      estado_entrega, 
+      metodo_pago,
+      estado_entrega,
       observaciones,
-      entregado_por 
+      entregado_por
     } = req.body;
 
     if (!cantidadEntregada || cantidadEntregada <= 0) {
@@ -283,11 +270,11 @@ class pedidosAcopioController {
       const userId = req.user.id;
       const userType = req.user.type;
       const userName = req.user.name ||
-                      (req.user.first_name && req.user.last_name ?
-                        `${req.user.first_name} ${req.user.last_name}` :
-                        req.user.first_name ||
-                        req.user.email ||
-                        'Usuario');
+        (req.user.first_name && req.user.last_name ?
+          `${req.user.first_name} ${req.user.last_name}` :
+          req.user.first_name ||
+          req.user.email ||
+          'Usuario');
 
       const finalUserId = userType === 'employee' ? null : userId;
       const finalPersonalId = userType === 'employee' ? userId : null;
@@ -297,7 +284,7 @@ class pedidosAcopioController {
       }
 
       // ── Obtener info del pedido para el concepto del gasto ───────────────
-      const { supabase } = require('../config/supabase');
+      const { supabase } = require('../../../config/supabase');
       const { data: pedidoInfo } = await supabase
         .from('pedidos_acopio')
         .select('sucu_id, producto_acopio:producto_acopio_id(name)')
@@ -388,16 +375,6 @@ class pedidosAcopioController {
     });
   }
 
-  // Obtener solicitantes únicos
-  static async getSolicitantesUnicos(req, res) {
-    return pedidosAcopioController._handleRequest(res, 'getSolicitantesUnicos', req, async () => {
-      const { empresa_id } = req.query;
-      return await pedidosAcopio.getSolicitantesUnicos(empresa_id);
-    }, {
-      validateEmpresaId: true
-    });
-  }
-
   // Anular entrega de pedido
   static async anularEntrega(req, res) {
     return pedidosAcopioController._handleRequest(res, 'anularEntrega', req, async () => {
@@ -416,6 +393,16 @@ class pedidosAcopioController {
     }, {
       validatePedidoId: true,
       checkPermission: 'anular'
+    });
+  }
+
+  // Obtener solicitantes únicos
+  static async getSolicitantesUnicos(req, res) {
+    return pedidosAcopioController._handleRequest(res, 'getSolicitantesUnicos', req, async () => {
+      const { empresa_id } = req.query;
+      return await pedidosAcopio.getSolicitantesUnicos(empresa_id);
+    }, {
+      validateEmpresaId: true
     });
   }
 }

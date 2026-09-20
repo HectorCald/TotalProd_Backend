@@ -1372,11 +1372,26 @@ class productsAlmacen {
     }
   }
 
-  // Eliminar un producto
   static async delete(id) {
     try {
       if (!id) {
         throw new Error('ID del producto es requerido');
+      }
+
+      // 0. Verificar si el producto tiene pedidos existentes antes de eliminar dependencias
+      const { data: pedidosDetalle, error: errorPedidos } = await supabase
+        .from('pedido_almacen_detalle')
+        .select('id')
+        .eq('producto_almacen_id', id)
+        .limit(1);
+
+      if (errorPedidos) {
+        console.error('Error al verificar pedidos del producto:', errorPedidos);
+        throw new Error('No se pudo verificar si el producto tiene pedidos asociados');
+      }
+
+      if (pedidosDetalle && pedidosDetalle.length > 0) {
+        throw new Error('No se puede eliminar este producto porque está siendo utilizado en pedidos existentes. Primero elimine o modifique los pedidos que contienen este producto.');
       }
 
       // 1. Obtener las recetas del producto para eliminar sus detalles
