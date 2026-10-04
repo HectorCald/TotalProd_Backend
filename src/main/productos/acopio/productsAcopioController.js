@@ -1,5 +1,5 @@
-const productsAcopio = require('../models/productsAcopio');
-const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
+const productsAcopio = require('./productsAcopio');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../../../utils/permissionsHelper');
 
 class productsAcopioController {
 

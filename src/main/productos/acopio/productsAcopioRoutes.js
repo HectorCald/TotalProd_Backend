@@ -1,6 +1,6 @@
 const express = require('express');
-const productsAcopioController = require('../controllers/productsAcopioController');
-const { requireAuth } = require('../middleware/auth');
+const productsAcopioController = require('./productsAcopioController');
+const { requireAuth } = require('../../../middleware/auth');
 
 const router = express.Router();
 

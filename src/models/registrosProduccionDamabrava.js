@@ -1,6 +1,6 @@
 const { supabase } = require('../config/supabase');
-const productsAlmacen = require('./productsAlmacen');
-const movimientosAlmacen = require('./movimientosAlmacen');
+const productsAlmacen = require('../main/productos/almacen/productsAlmacen');
+const movimientosAlmacen = require('../main/movimientos/almacen/movimientosAlmacen');
 const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
 
 const enrichRegistroConProducto = async (registro) => {
@@ -91,8 +91,8 @@ class registrosProduccionDamabrava {
                         if (receta && receta.recetas_detalle && receta.recetas_detalle.length > 0) {
 
                             // Usar la función existente de movimientosAlmacen
-                            console.log("==> Model.create llamando a restarIngredientes...");
-                            const resultadoIngredientes = await movimientosAlmacen.restarIngredientes(
+                            console.log("==> Model.create llamando a restarIngredientesProduccion...");
+                            const resultadoIngredientes = await movimientosAlmacen.restarIngredientesProduccion(
                                 producto,
                                 parseFloat(terminados),
                                 receta.recetas_detalle,
@@ -639,7 +639,7 @@ class registrosProduccionDamabrava {
                     } else if (diferencia > 0) {
                         // VERIFICÓ MÁS: Restar ingredientes de la diferencia
                         console.log('🔍 [VERIFICAR PRODUCCIÓN] Verificó MÁS, restando ingredientes de:', diferencia);
-                        const resultadoRestar = await movimientosAlmacen.restarIngredientes(
+                        const resultadoRestar = await movimientosAlmacen.restarIngredientesProduccion(
                             registro.producto_almacen,
                             diferencia,
                             receta.recetas_detalle,
@@ -840,7 +840,7 @@ class registrosProduccionDamabrava {
                     if (diferencia < 0) {
                         // VERIFICÓ MENOS: Revertir devolución (restar de vuelta)
                         console.log('🔍 [ANULAR VERIFICACIÓN] Verificó MENOS, revirtiendo devolución (restando):', Math.abs(diferencia));
-                        const resultadoRevertir = await movimientosAlmacen.restarIngredientes(
+                        const resultadoRevertir = await movimientosAlmacen.restarIngredientesProduccion(
                             registro.producto_almacen,
                             Math.abs(diferencia),
                             receta.recetas_detalle,

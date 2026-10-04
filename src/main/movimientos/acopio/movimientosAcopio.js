@@ -1,39 +1,5 @@
-const { supabase } = require('../config/supabase');
-const { aplicarFiltroFecha } = require('../utils/fechaRangeHelper');
-
-// Función helper para normalizar texto (quitar acentos)
-const normalizeText = (text) => {
-    if (!text) return '';
-    return text
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
-        .trim();
-};
-
-// Función para generar código aleatorio estructurado (3 letras y 3 números)
-const generarCodigoAleatorioEstructurado = () => {
-    const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const numeros = '0123456789';
-    let codigo = '';
-    for (let i = 0; i < 3; i++) {
-        codigo += letras.charAt(Math.floor(Math.random() * letras.length));
-    }
-    for (let i = 0; i < 3; i++) {
-        codigo += numeros.charAt(Math.floor(Math.random() * numeros.length));
-    }
-    return codigo;
-};
-
-// Función para generar código de movimiento
-const generarCodigoMovimiento = (type) => {
-    let prefijo = 'MAE';
-    if (type === 'salida' || type === 'consumo_receta') {
-        prefijo = 'MAS';
-    }
-    const codigoAleatorio = generarCodigoAleatorioEstructurado();
-    return `${prefijo}-${codigoAleatorio}`;
-};
+const { supabase } = require('../../../config/supabase');
+const { aplicarFiltroFecha } = require('../../../utils/fechaRangeHelper');
 
 class movimientosAcopio {
   // Crear un movimiento
@@ -55,17 +21,29 @@ class movimientosAcopio {
         throw new Error('ID del usuario o personal es requerido');
       }
 
-
       if (!movimientoData.sucu_id) {
         throw new Error('ID de la sucursal es requerido');
       }
 
-      // Crear timestamp en zona horaria de Bolivia (GMT-4) - CORREGIDO
-      const ahora = new Date();
-      const ahoraBolivia = ahora; // Usar directamente la hora local del sistema
-
       // Generar código único para el movimiento
-      const codigoMovimiento = generarCodigoMovimiento(movimientoData.type);
+      const prefix = (movimientoData.type === 'salida' || movimientoData.type === 'consumo_receta') ? 'MAS-' : 'MAE-';
+      const genAlfanumerico = () => {
+        const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const nums = '0123456789';
+        const l = () => letras[Math.floor(Math.random() * letras.length)];
+        const n = () => nums[Math.floor(Math.random() * nums.length)];
+        return `${l()}${l()}${l()}${n()}${n()}${n()}`;
+      };
+      const codigoMovimiento = `${prefix}${genAlfanumerico()}`;
+
+      let fechaMovimientoISO = new Date().toISOString();
+      if (movimientoData.date || movimientoData.fecha) {
+        const fechaInput = movimientoData.date || movimientoData.fecha;
+        const parsed = new Date(fechaInput);
+        if (!isNaN(parsed.getTime())) {
+          fechaMovimientoISO = parsed.toISOString();
+        }
+      }
 
       const dbData = {
         product_id: movimientoData.product_id,
@@ -73,25 +51,19 @@ class movimientosAcopio {
         type: movimientoData.type,
         observations: movimientoData.observations || null,
         cliente_id: movimientoData.cliente_id || null,
-        proveedor_id: null, // Forzado a null según indicación
-        costo: null,        // Forzado a null según indicación
-        metodo_pago: null,  // Forzado a null según indicación
-        gasto_id: null,     // Forzado a null según indicación
+        proveedor_id: movimientoData.proveedor_id || null,
+        costo: movimientoData.costo ? parseFloat(movimientoData.costo) : null,
+        metodo_pago: movimientoData.metodo_pago || null,
+        gasto_id: movimientoData.gasto_id || null,
         quantity: movimientoData.quantity,
         restar_ingredientes: movimientoData.restar_ingredientes || false,
-        date: ahoraBolivia.toISOString(), // Usar timestamp en zona horaria de Bolivia
+        date: fechaMovimientoISO,
         codigo: codigoMovimiento,
         movimiento_entrada_id: movimientoData.movimiento_entrada_id || null
       };
 
-      // Solo incluir user_id o personal_id si no son null
-      if (userId && userId !== null) {
-        dbData.user_id = userId;
-      }
-      if (personalId && personalId !== null) {
-        dbData.personal_id = personalId;
-      }
-
+      if (userId) dbData.user_id = userId;
+      if (personalId) dbData.personal_id = personalId;
 
       // Primero obtener el producto actual para actualizar su cantidad
       const { data: productoActual, error: errorProducto } = await supabase
@@ -122,8 +94,7 @@ class movimientosAcopio {
           throw new Error('No hay suficiente cantidad en stock para esta salida');
         }
       } else if (movimientoData.type === 'consumo_receta') {
-        // Para consumo de receta, no actualizar el stock (ya se actualizó manualmente)
-        nuevaCantidad = cantidadActual; // Mantener el stock actual
+        nuevaCantidad = cantidadActual;
       } else {
         throw new Error('Tipo de movimiento inválido');
       }
@@ -176,138 +147,6 @@ class movimientosAcopio {
       return movimiento;
     } catch (error) {
       console.error('Error al crear el movimiento:', error);
-      throw error;
-    }
-  }
-
-  // Obtener movimientos por producto
-  static async getByProduct(productId, sucuId, limit = 10) {
-    try {
-      if (!productId) {
-        throw new Error('ID del producto es requerido');
-      }
-
-      if (!sucuId) {
-        throw new Error('ID de la sucursal es requerido');
-      }
-
-      const { data: movimientos, error } = await supabase
-        .from('movimientos_acopio')
-        .select(`
-          *,
-          product:product_id (
-            id,
-            name,
-            description,
-            quantity,
-            type_measure:type_measure_id (
-              id,
-              name,
-              code
-            )
-          ),
-          proveedor:proveedor_id (
-            id,
-            name,
-            total_orders
-          ),
-          cliente:cliente_id (
-            id,
-            name,
-            total_orders
-          )
-        `)
-        .eq('product_id', productId)
-        .eq('sucu_id', sucuId)
-        .order('date', { ascending: false })
-        .limit(limit);
-
-      if (error) {
-        console.error('Error de Supabase:', error);
-        throw new Error('No se pudo obtener los movimientos');
-      }
-
-      if (!movimientos || movimientos.length === 0) {
-        return [];
-      }
-
-      const userIds = Array.from(new Set(movimientos.map(m => m.user_id).filter(Boolean)));
-      const personalIds = Array.from(new Set(movimientos.map(m => m.personal_id).filter(Boolean)));
-
-      const usersMap = new Map();
-      if (userIds.length > 0) {
-        const { data: usersData, error: usersError } = await supabase
-          .from('users')
-          .select('id, first_name, last_name')
-          .in('id', userIds);
-
-        if (usersError) {
-          console.warn('Error obteniendo usuarios para movimientos de acopio:', usersError);
-        } else if (usersData) {
-          usersData.forEach(user => {
-            usersMap.set(user.id, {
-              id: user.id,
-              name: `${user.first_name || ''} ${user.last_name || ''}`.trim()
-            });
-          });
-        }
-      }
-
-      const personalMap = new Map();
-      if (personalIds.length > 0) {
-        const { data: personalData, error: personalError } = await supabase
-          .from('personal')
-          .select('id, first_name, last_name')
-          .in('id', personalIds);
-
-        if (personalError) {
-          console.warn('Error obteniendo personal para movimientos de acopio:', personalError);
-        } else if (personalData) {
-          personalData.forEach(persona => {
-            personalMap.set(persona.id, {
-              id: persona.id,
-              name: `${persona.first_name || ''} ${persona.last_name || ''}`.trim()
-            });
-          });
-        }
-      }
-
-      const movimientoIds = movimientos.map(mov => mov.id);
-
-      let pedidosMap = new Map();
-      if (movimientoIds.length > 0) {
-        const { data: pedidosRelacionados, error: pedidosError } = await supabase
-          .from('pedidos_acopio')
-          .select('movimiento_entrada_id')
-          .in('movimiento_entrada_id', movimientoIds);
-
-        if (pedidosError) {
-          console.warn('Error obteniendo pedidos de acopio relacionados:', pedidosError);
-        } else if (pedidosRelacionados) {
-          pedidosMap = pedidosRelacionados.reduce((map, pedido) => {
-            if (pedido.movimiento_entrada_id) {
-              map.set(pedido.movimiento_entrada_id, true);
-            }
-            return map;
-          }, new Map());
-        }
-      }
-
-      const movimientosFormateados = movimientos.map(movimiento => {
-        const user = movimiento.user_id ? (usersMap.get(movimiento.user_id) || null) : null;
-        const personal = movimiento.personal_id ? (personalMap.get(movimiento.personal_id) || null) : null;
-
-        return {
-          ...movimiento,
-          user,
-          personal,
-          tiene_pedido_relacionado: pedidosMap.get(movimiento.id) || false
-        };
-      });
-
-      return movimientosFormateados;
-    } catch (error) {
-      console.error('Error al obtener movimientos por producto:', error);
       throw error;
     }
   }
@@ -370,50 +209,44 @@ class movimientosAcopio {
         throw new Error('Movimiento no encontrado');
       }
 
-      // Obtener información del usuario o personal
       let user = null;
       let personal = null;
 
-      // Si tiene user_id, obtener el usuario
       if (data.user_id) {
-        const { data: userData, error: userError } = await supabase
+        const { data: userData } = await supabase
           .from('users')
           .select('id, first_name, last_name')
           .eq('id', data.user_id)
           .single();
-        
-        if (!userError && userData) {
+
+        if (userData) {
           user = {
             id: userData.id,
-            name: `${userData.first_name} ${userData.last_name}`.trim()
+            name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim()
           };
         }
       }
 
-      // Si tiene personal_id, obtener el personal
       if (data.personal_id) {
-        const { data: personalData, error: personalError } = await supabase
+        const { data: personalData } = await supabase
           .from('personal')
           .select('id, first_name, last_name')
           .eq('id', data.personal_id)
           .single();
-        
-        if (!personalError && personalData) {
+
+        if (personalData) {
           personal = {
             id: personalData.id,
-            name: `${personalData.first_name} ${personalData.last_name}`.trim()
+            name: `${personalData.first_name || ''} ${personalData.last_name || ''}`.trim()
           };
         }
       }
 
-      // Agregar la información del usuario/personal al movimiento
-      const movimientoCompleto = {
+      return {
         ...data,
         user,
         personal
       };
-
-      return movimientoCompleto;
     } catch (error) {
       console.error('Error al obtener movimiento por ID:', error);
       throw error;
@@ -423,7 +256,6 @@ class movimientosAcopio {
   // Obtener todos los movimientos
   static async getAll(sucuId, page = 1, limit = 10, tipo = null, estado = null, ordenamiento = 'fecha_desc', search = null, clienteId = null, filtroFecha = null) {
     try {
-      const tStart = Date.now();
       if (!sucuId) {
         throw new Error('ID de la sucursal es requerido');
       }
@@ -466,22 +298,30 @@ class movimientosAcopio {
         `, { count: 'estimated' })
         .eq('sucu_id', sucuId);
 
-      // Aplicar filtro de tipo si se especifica
-      if (tipo) {
-        query = query.eq('type', tipo);
-      }
-
-      // Aplicar filtro de estado si se proporciona
-      if (estado) {
-        query = query.eq('estado', estado);
-      }
-
+      if (tipo) query = query.eq('type', tipo);
+      if (estado) query = query.eq('estado', estado);
       if (clienteId) {
-        const clienteFilter = String(clienteId).toLowerCase();
-        query = query.eq('cliente_id', clienteFilter);
+        query = query.eq('cliente_id', String(clienteId).toLowerCase());
       }
 
-      // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local)
+      // Filtrar por nombre de producto a nivel de base de datos
+      if (search && search.trim() !== '') {
+        const { data: prodMatches } = await supabase
+          .from('products_acopio')
+          .select('id')
+          .ilike('name', `%${search.trim()}%`);
+
+        const matchedIds = (prodMatches || []).map(p => p.id);
+        if (matchedIds.length === 0) {
+          return {
+            success: true,
+            data: [],
+            pagination: { currentPage: page, totalPages: 0, totalItems: 0, hasNextPage: false }
+          };
+        }
+        query = query.in('product_id', matchedIds);
+      }
+
       query = aplicarFiltroFecha(query, 'date', filtroFecha);
 
       // Aplicar ordenamiento
@@ -521,194 +361,107 @@ class movimientosAcopio {
         throw new Error('No se pudo obtener los movimientos');
       }
 
-      // Hidratación: resolver usuarios/personal en lote para evitar N+1 y evitar embeds (RLS sensibles)
-      const tHydrateStart = Date.now();
       const userIds = Array.from(new Set((data || []).map(m => m.user_id).filter(Boolean)));
       const personalIds = Array.from(new Set((data || []).map(m => m.personal_id).filter(Boolean)));
 
-      const usersMap = new Map();
+      const userMap = new Map();
       if (userIds.length > 0) {
-        const { data: usersData, error: usersError } = await supabase
+        const { data: usersData } = await supabase
           .from('users')
           .select('id, first_name, last_name')
           .in('id', userIds);
-        if (!usersError && usersData) {
-          usersData.forEach(u => {
-            usersMap.set(u.id, { id: u.id, name: `${u.first_name || ''} ${u.last_name || ''}`.trim() });
+        (usersData || []).forEach(u => {
+          userMap.set(u.id, {
+            id: u.id,
+            name: `${u.first_name || ''} ${u.last_name || ''}`.trim()
           });
-        }
+        });
       }
 
       const personalMap = new Map();
       if (personalIds.length > 0) {
-        const { data: persData, error: persError } = await supabase
+        const { data: personalData } = await supabase
           .from('personal')
           .select('id, first_name, last_name')
           .in('id', personalIds);
-        if (!persError && persData) {
-          persData.forEach(p => {
-            personalMap.set(p.id, { id: p.id, name: `${p.first_name || ''} ${p.last_name || ''}`.trim() });
+        (personalData || []).forEach(p => {
+          personalMap.set(p.id, {
+            id: p.id,
+            name: `${p.first_name || ''} ${p.last_name || ''}`.trim()
           });
-        }
-      }
-
-      let dataFiltrada = data || [];
-      if (search && search.trim() !== '') {
-        const normalizedSearchTerm = normalizeText(search);
-        dataFiltrada = dataFiltrada.filter(m => {
-          const productName = normalizeText(m.product?.name || '');
-          return productName.includes(normalizedSearchTerm);
         });
       }
 
-      const movimientosConNombres = (dataFiltrada || []).map(mov => ({
+      const movimientosConNombres = (data || []).map(mov => ({
         ...mov,
-        user: mov.user_id ? (usersMap.get(mov.user_id) || null) : null,
-        personal: mov.personal_id ? (personalMap.get(mov.personal_id) || null) : null
+        user: mov.user_id ? userMap.get(mov.user_id) || null : null,
+        personal: mov.personal_id ? personalMap.get(mov.personal_id) || null : null
       }));
-      const tHydrateMs = Date.now() - tHydrateStart;
-      const tTotalMs = Date.now() - tStart;
 
-      const result = {
+      return {
         success: true,
         message: 'Movimientos obtenidos exitosamente',
         data: movimientosConNombres,
         pagination: {
           currentPage: page,
-          totalPages: Math.ceil(((search ? movimientosConNombres.length : count) || 0) / limit),
-          totalItems: search ? movimientosConNombres.length : count,
-          hasNextPage: search ? false : page < Math.ceil(count / limit)
+          totalPages: Math.ceil((count || 0) / limit),
+          totalItems: count || 0,
+          hasNextPage: page < Math.ceil((count || 0) / limit)
         }
       };
-      return result;
     } catch (error) {
       console.error('Error al obtener los movimientos:', error);
       throw new Error('No se pudo obtener los movimientos');
     }
   }
 
-  // Obtener movimientos por cliente
-  static async getByCliente(clienteId, sucuId, page = 1, limit = 20) {
+  // Obtener todos los movimientos sin límite (para reportes y balance)
+  static async getAllSinLimite(sucuId, tipo = null, filtroFecha = null, estado = null) {
     try {
-      if (!clienteId) {
-        throw new Error('ID del cliente es requerido');
-      }
-
       if (!sucuId) {
         throw new Error('ID de la sucursal es requerido');
       }
 
-      // Normalizar el UUID a minúsculas para evitar problemas de case
-      const normalizedClienteId = clienteId.toLowerCase();
-      const offset = (page - 1) * limit;
-
-      const { data: movimientos, error } = await supabase
+      let query = supabase
         .from('movimientos_acopio')
         .select(`
-          *,
+          id,
+          date,
+          type,
+          estado,
+          costo,
+          quantity,
+          metodo_pago,
           product:product_id (
             id,
             name,
-            description,
-            quantity,
+            costo_unitario,
             type_measure:type_measure_id (
               id,
               name,
               code
             )
-          ),
-          cliente:cliente_id (
-            id,
-            name
           )
-        `, { count: 'estimated' })
-        .eq('cliente_id', normalizedClienteId)
-        .eq('sucu_id', sucuId)
-        .order('date', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (error) {
-        throw new Error(`Error al obtener movimientos: ${error.message}`);
-      }
-
-      const { count, error: countError } = await supabase
-        .from('movimientos_acopio')
-        .select('*', { count: 'estimated', head: true })
-        .eq('cliente_id', normalizedClienteId)
+        `)
         .eq('sucu_id', sucuId);
 
-      if (countError) {
-        throw new Error(`Error al contar movimientos: ${countError.message}`);
-      }
+      if (tipo) query = query.eq('type', tipo);
+      if (estado) query = query.eq('estado', estado);
 
-      return movimientos || [];
+      query = aplicarFiltroFecha(query, 'date', filtroFecha);
+      query = query.order('date', { ascending: false });
 
-    } catch (error) {
-      console.error('Error en movimientosAcopio.getByCliente:', error);
-      throw error;
-    }
-  }
-
-  // Obtener movimientos por proveedor
-  static async getByProveedor(proveedorId, sucuId, page = 1, limit = 20) {
-    try {
-      if (!proveedorId) {
-        throw new Error('ID del proveedor es requerido');
-      }
-
-      if (!sucuId) {
-        throw new Error('ID de la sucursal es requerido');
-      }
-
-      const offset = (page - 1) * limit;
-
-      // Normalizar el UUID a minúsculas para evitar problemas de case
-      const normalizedProveedorId = proveedorId.toLowerCase();
-
-      const { data: movimientos, error } = await supabase
-        .from('movimientos_acopio')
-        .select(`
-          *,
-          product:product_id (
-            id,
-            name,
-            description,
-            quantity,
-            type_measure:type_measure_id (
-              id,
-              name,
-              code
-            )
-          ),
-          proveedor:proveedor_id (
-            id,
-            name
-          )
-        `, { count: 'estimated' })
-        .eq('proveedor_id', normalizedProveedorId)
-        .eq('sucu_id', sucuId)
-        .order('date', { ascending: false })
-        .range(offset, offset + limit - 1);
+      const { data, error } = await query;
 
       if (error) {
-        throw new Error(`Error al obtener movimientos: ${error.message}`);
+        console.error('Error al obtener movimientos de acopio sin límite:', error);
+        return { success: false, message: 'Error al obtener movimientos sin límite', error };
       }
 
-      const { count, error: countError } = await supabase
-        .from('movimientos_acopio')
-        .select('*', { count: 'estimated', head: true })
-        .eq('proveedor_id', normalizedProveedorId)
-        .eq('sucu_id', sucuId);
-
-      if (countError) {
-        throw new Error(`Error al contar movimientos: ${countError.message}`);
-      }
-
-      return movimientos || [];
-
+      return { success: true, data: data || [] };
     } catch (error) {
-      console.error('Error en movimientosAcopio.getByProveedor:', error);
-      throw error;
+      console.error('Error en movimientosAcopio.getAllSinLimite:', error);
+      return { success: false, message: error.message || 'Error interno del servidor' };
     }
   }
 
@@ -795,7 +548,7 @@ class movimientosAcopio {
   }
 
   // Método para restar ingredientes del stock cuando se hace una entrada con receta
-  static async restarIngredientes(productoPrincipal, cantidadEntrada, ingredientes, empresaId, cantidadesPersonalizadas = null, sucuId = null, userId = null, personalId = null, movimientoEntradaId = null) {
+  static async restarIngredientesReceta(productoPrincipal, cantidadEntrada, ingredientes, empresaId, cantidadesPersonalizadas = null, sucuId = null, userId = null, personalId = null, movimientoEntradaId = null) {
     try {
       // Preparar datos de ingredientes válidos
       const ingredientesValidos = ingredientes.filter(ingrediente => 
@@ -914,7 +667,7 @@ class movimientosAcopio {
         conStockInsuficiente: ingredientesConStockInsuficiente.length
       };
     } catch (error) {
-      console.error('Error en restarIngredientes:', error);
+      console.error('Error en restarIngredientesReceta:', error);
       throw new Error('Error al restar ingredientes del stock');
     }
   }
@@ -1194,7 +947,7 @@ class movimientosAcopio {
   }
 
   // Eliminar un movimiento
-  static async eliminar(movimientoId) {
+  static async delete(movimientoId) {
     try {
       // Verificar que el movimiento existe
       const { data: movimiento, error: movimientoError } = await supabase

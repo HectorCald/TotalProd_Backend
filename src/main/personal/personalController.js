@@ -100,6 +100,17 @@ class PersonalController {
     });
   }
 
+  // Obtener personal activo con datos mínimos para el organigrama
+  static async getForOrganigrama(req, res) {
+    return PersonalController._handleRequest(res, 'getForOrganigrama', req, async () => {
+      const empresaId = req.query.company_id || req.query.empresa_id;
+      return await Personal.getForOrganigrama(empresaId);
+    }, {
+      validateEmpresaId: true,
+      successMessage: 'Personal del organigrama obtenido exitosamente'
+    });
+  }
+
   // Crear personal
   static async create(req, res) {
     return PersonalController._handleRequest(res, 'create', req, async () => {

@@ -55,6 +55,46 @@ class Personal {
     }
   }
 
+  // Método para obtener solo los datos necesarios del personal activo para el organigrama
+  static async getForOrganigrama(empresaId) {
+    try {
+      if (!empresaId) throw new Error('ID de la empresa es requerido');
+
+      const query = supabase
+        .from('staff')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          is_active,
+          branches (name),
+          cargos:position_id (name)
+        `)
+        .eq('company_id', empresaId)
+        .eq('is_active', true)
+        .order('first_name', { ascending: true });
+
+      const data = await this._executeQuery(query, 'No se pudo obtener el personal del organigrama');
+
+      return (data || []).map(p => ({
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        email: p.email || '',
+        codigo: p.email || '',
+        phone: p.phone || '',
+        is_active: p.is_active,
+        cargo: p.cargos?.name || '--',
+        sucursal: p.branches?.name || ''
+      }));
+    } catch (error) {
+      console.error('Error al obtener el personal del organigrama:', error);
+      throw new Error('No se pudo obtener el personal del organigrama');
+    }
+  }
+
   // Método para crear personal
   static async create(personalData) {
     try {

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const productsAlmacenController = require('../controllers/productsAlmacenController');
-const { requireAuth } = require('../middleware/auth');
+const productsAlmacenController = require('./productsAlmacenController');
+const { requireAuth } = require('../../../middleware/auth');
 
 // Aplicar middleware de autenticación a todas las rutas
 router.use(requireAuth);
@@ -15,8 +15,6 @@ router.get('/for-production', productsAlmacenController.getAllForProduction);
 // GET /api/products-almacen/conteo-data - Obtener productos para conteo
 router.get('/conteo-data', productsAlmacenController.getProductsForConteo);
 
-// GET /api/products-almacen/by-ids - Obtener múltiples productos por IDs con recetas
-router.get('/by-ids', productsAlmacenController.getByIds);
 
 // GET /api/products-almacen/by-ids-fast - Obtener múltiples productos por IDs de forma rápida
 router.get('/by-ids-fast', productsAlmacenController.getByIdsFast);

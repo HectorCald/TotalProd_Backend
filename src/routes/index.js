@@ -3,14 +3,14 @@ const router = express.Router();
 const userRoutes = require('./userRoutes');
 const clientRoutes = require('../main/clientes/clientRoutes');
 const proveedorRoutes = require('../main/proveedores/proveedoresRoutes');
-const productsAcopioRoutes = require('./productsAcopioRoutes');
-const productsAlmacenRoutes = require('./productsAlmacenRoutes');
+const productsAcopioRoutes = require('../main/productos/acopio/productsAcopioRoutes');
+const productsAlmacenRoutes = require('../main/productos/almacen/productsAlmacenRoutes');
 const typeMeasureRoutes = require('./typeMeasureRoutes');
 const categoryAcopioRoutes = require('../main/categorias/acopio/categoryAcopioRoutes');
 const categoryAlmacenRoutes = require('../main/categorias/almacen/categoryAlmacenRoutes');
 const pricesTypesRoutes = require('../main/precios/pricesTypesRoutes');
-const movimientosAcopioRoutes = require('./movimientosAcopioRoutes');
-const movimientosAlmacenRoutes = require('./movimientosAlmacenRoutes');
+const movimientosAcopioRoutes = require('../main/movimientos/acopio/movimientosAcopioRoutes');
+const movimientosAlmacenRoutes = require('../main/movimientos/almacen/movimientosAlmacenRoutes');
 const pedidosAcopioRoutes = require('../main/pedidos/acopio/pedidosAcopioRoutes');
 const pedidosAlmacenRoutes = require('../main/pedidos/almacen/pedidosAlmacenRoutes');
 const modulesRoutes = require('./modulesRoutes');
@@ -26,7 +26,6 @@ const conteosRoutes = require('../main/conteos/conteosRoutes');
 const cotizacionesRoutes = require('../main/cotizaciones/cotizacionesRoutes');
 const empresaRoutes = require('../main/empresa/empresaRoutes');
 const cargosRoutes = require('../main/cargos/cargosRoutes');
-const planificadorRoutes = require('./planificadorRoutes');
 
 // Ruta principal
 router.get('/', (req, res) => {
@@ -123,7 +122,5 @@ router.use('/cotizaciones', cotizacionesRoutes);
 // Rutas de empresa
 router.use('/empresas', empresaRoutes);
 
-// Rutas del planificador de tareas
-router.use('/planificador', planificadorRoutes);
 
 module.exports = router;

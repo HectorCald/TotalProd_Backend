@@ -135,7 +135,33 @@ class UserController {
 
   // Método para login de usuario
   static async login(req, res) {
-    const { email, password } = req.body;
+    const { email, password, newEmployee } = req.body;
+
+    if (newEmployee) {
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email es requerido'
+        });
+      }
+
+      return UserController._handleRequest(res, 'loginNewEmployee', async () => {
+        const Personal = require('../main/personal/Personal');
+        const personal = await Personal.getByEmail(email);
+
+        if (!personal) {
+          throw new ControllerError('Correo de empleado no válido', 401);
+        }
+        if (!personal.is_active) {
+          throw new ControllerError('Su cuenta está inactiva. Contacte al administrador.', 401);
+        }
+        if (personal.password) {
+          throw new ControllerError('Este empleado ya tiene una contraseña establecida. Desmarca la opción de empleado nuevo e ingresa tu contraseña.', 401);
+        }
+
+        throw new ControllerError('No tiene contraseña establecida', 401, { personal });
+      });
+    }
 
     if (!email || !password) {
       return res.status(400).json({
@@ -167,10 +193,6 @@ class UserController {
             message: 'Login exitoso',
             data: employeeResult.data
           };
-        } else if (employeeResult.message === 'No tiene contraseña establecida') {
-          // Obtener los datos del empleado para poder mandarlos al frontend
-          const personal = await Personal.getByEmail(email);
-          throw new ControllerError(employeeResult.message, 401, { personal });
         } else if (employeeResult.message && employeeResult.message.includes('inactiva')) {
           throw new ControllerError(employeeResult.message, 401);
         }
@@ -328,6 +350,10 @@ class UserController {
       } else if (removeLogo === true || removeLogo === 'true') {
         finalEmpresaData.logo_tipo = null;
       }
+
+      // El tipo de empresa es inmutable y no debe ser modificado ni actualizado
+      delete finalEmpresaData.tipo;
+      delete finalEmpresaData.tipo_empresa;
 
       const result = await User.updateConfig(userId, empresaId, userData, finalEmpresaData);
 

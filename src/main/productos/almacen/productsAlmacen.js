@@ -1,5 +1,5 @@
-const { supabase } = require('../config/supabase');
-const { calculateProductsSizes, logProductsSizes } = require('../utils/dataSizeHelper');
+const { supabase } = require('../../../config/supabase');
+const { calculateProductsSizes, logProductsSizes } = require('../../../utils/dataSizeHelper');
 
 class productsAlmacen {
 

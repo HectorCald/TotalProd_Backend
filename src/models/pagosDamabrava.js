@@ -1,5 +1,5 @@
 const { supabase } = require('../config/supabase');
-const productsAlmacen = require('./productsAlmacen');
+const productsAlmacen = require('../main/productos/almacen/productsAlmacen');
 const registrosProduccionDamabrava = require('./registrosProduccionDamabrava');
 
 class pagosDamabrava {

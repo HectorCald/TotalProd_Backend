@@ -1,5 +1,5 @@
-const productsAlmacen = require('../models/productsAlmacen');
-const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../utils/permissionsHelper');
+const productsAlmacen = require('./productsAlmacen');
+const { checkDeletePermission, checkUpdatePermission, checkCreatePermission } = require('../../../utils/permissionsHelper');
 
 class productsAlmacenController {
 
@@ -173,31 +173,6 @@ class productsAlmacenController {
       validateSucuId: true,
       validateProductId: true,
       successMessage: 'Producto obtenido correctamente'
-    });
-  }
-
-  // Obtener múltiples productos por IDs con recetas
-  static async getByIds(req, res) {
-    return productsAlmacenController._handleRequest(res, 'getByIds', req, async () => {
-      const empresaId = req.query.empresa_id;
-      let ids = req.query.ids || req.query['ids[]'];
-      
-      if (!ids) throw new Error('Los IDs de productos son requeridos');
-      
-      if (typeof ids === 'string') {
-        if (ids.includes(',')) ids = ids.split(',').map(id => id.trim());
-        else ids = [ids];
-      }
-      
-      if (!Array.isArray(ids)) ids = [ids];
-      ids = ids.filter(id => id && id !== 'null' && id !== 'undefined' && String(id).trim() !== '');
-      
-      if (ids.length === 0) throw new Error('Los IDs de productos son requeridos');
-
-      return await productsAlmacen.getByIds(ids, empresaId);
-    }, {
-      validateEmpresaId: true,
-      successMessage: 'Productos obtenidos correctamente'
     });
   }
 

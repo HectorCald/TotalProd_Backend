@@ -12,6 +12,7 @@ router.use(requireAuth);
 
 // Rutas que requieren autenticación
 router.get('/', PersonalController.getAll);
+router.get('/organigrama', PersonalController.getForOrganigrama);
 router.post('/', PersonalController.create);
 router.put('/:id', PersonalController.update);
 router.delete('/:id', PersonalController.delete);
