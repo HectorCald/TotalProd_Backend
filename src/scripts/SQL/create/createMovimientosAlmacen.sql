@@ -23,6 +23,7 @@ CREATE TABLE movimientos_almacen (
     ubicacion POINT NULL,
     porcentaje BOOLEAN NULL,
     codigo TEXT NULL,
+    total NUMERIC NULL
     CONSTRAINT movimientos_almacen_cliente_id_fkey
         FOREIGN KEY (cliente_id) REFERENCES clients (id),
     CONSTRAINT movimientos_almacen_proveedor_id_fkey
