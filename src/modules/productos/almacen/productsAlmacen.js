@@ -14,6 +14,35 @@ class productsAlmacen {
     this.grup = data.grup;
   }
 
+  // Helper para normalizar precios provenientes de objeto o array
+  static _normalizePrices(pricesInput) {
+    if (!pricesInput) return [];
+    if (Array.isArray(pricesInput)) {
+      return pricesInput
+        .map(p => {
+          const price_id = p.price_id || p.price_type_id || p.prices_types?.id;
+          const rawVal = p.valor !== undefined ? p.valor : (p.price !== undefined ? p.price : p.value);
+          const valor = (rawVal !== null && rawVal !== undefined && rawVal !== '')
+            ? parseFloat(String(rawVal).replace(',', '.'))
+            : 0;
+          return { price_id, valor: isNaN(valor) ? 0 : valor };
+        })
+        .filter(p => p.price_id);
+    }
+    if (typeof pricesInput === 'object') {
+      return Object.entries(pricesInput)
+        .filter(([_, valor]) => valor !== null && valor !== undefined && valor !== '')
+        .map(([priceTypeId, valor]) => {
+          const parsed = parseFloat(String(valor).replace(',', '.'));
+          return {
+            price_id: priceTypeId,
+            valor: isNaN(parsed) ? 0 : parsed
+          };
+        });
+    }
+    return [];
+  }
+
   // Método para obtener un producto por ID con recetas y stock de sucursal
   static async getById(id, sucuId = null) {
     try {
@@ -289,6 +318,7 @@ class productsAlmacen {
           price_product (
             id,
             valor,
+            price_id,
             prices_types:price_id (
               id,
               name
@@ -646,11 +676,13 @@ class productsAlmacen {
       }
 
       // Preparar operación de precios
-      if (productData.prices && Object.keys(productData.prices).length > 0) {
-        const priceInserts = Object.entries(productData.prices).map(([priceTypeId, valor]) => ({
+      const rawPrices = productData.prices || productData.precios;
+      const normalizedPrices = productsAlmacen._normalizePrices(rawPrices);
+      if (normalizedPrices.length > 0) {
+        const priceInserts = normalizedPrices.map(({ price_id, valor }) => ({
           producto_almacen_id: productId,
-          price_id: priceTypeId,
-          valor: valor || 0
+          price_id,
+          valor
         }));
 
         parallelOperations.push(
@@ -889,31 +921,28 @@ class productsAlmacen {
       }
 
       // Preparar operación de precios
-      if (productData.prices && Object.keys(productData.prices).length > 0) {
-        const preciosArray = [];
-        for (const [priceTypeId, valor] of Object.entries(productData.prices)) {
-          if (valor && valor !== '') {
-            preciosArray.push({
-              producto_almacen_id: productId,
-              price_id: priceTypeId,
-              valor: parseFloat(valor) || 0
-            });
-          }
-        }
-
-        if (preciosArray.length > 0) {
-          parallelOperations.push(
-            (async () => {
-              await supabase
-                .from('price_product')
-                .delete()
-                .eq('producto_almacen_id', productId);
+      const rawPrices = productData.prices || productData.precios;
+      if (rawPrices && (Array.isArray(rawPrices) ? rawPrices.length > 0 : Object.keys(rawPrices).length > 0)) {
+        const normalizedPrices = productsAlmacen._normalizePrices(rawPrices);
+        parallelOperations.push(
+          (async () => {
+            await supabase
+              .from('price_product')
+              .delete()
+              .eq('producto_almacen_id', productId);
+            if (normalizedPrices.length > 0) {
+              const preciosArray = normalizedPrices.map(({ price_id, valor }) => ({
+                producto_almacen_id: productId,
+                price_id,
+                valor
+              }));
               return await supabase
                 .from('price_product')
                 .insert(preciosArray);
-            })()
-          );
-        }
+            }
+            return { data: [] };
+          })()
+        );
       }
 
       // Preparar operación de categorías N:M (delete + insert)
@@ -1136,8 +1165,13 @@ class productsAlmacen {
 
             // Preparar datos de actualización
             const updateData = {};
+            const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
             if (name !== undefined && name !== null && name !== '') updateData.name = name;
             if (codigo_barras !== undefined && codigo_barras !== null) updateData.codigo_barras = codigo_barras;
+            if (productoData.description !== undefined) updateData.description = productoData.description || null;
+            if (productoData.stock_minimo !== undefined) updateData.stock_minimo = optionalNum(productoData.stock_minimo);
+            if (productoData.grup !== undefined) updateData.grup = optionalNum(productoData.grup);
+            if (productoData.costo_produccion !== undefined) updateData.costo_produccion = optionalNum(productoData.costo_produccion);
 
             // Actualizar producto principal si hay cambios
             if (Object.keys(updateData).length > 0) {
@@ -1173,7 +1207,8 @@ class productsAlmacen {
             }
 
             // Actualizar precios si se proporcionan
-            if (precios && Object.keys(precios).length > 0) {
+            const rawPrices = productoData.prices || productoData.precios;
+            if (rawPrices && (Array.isArray(rawPrices) ? rawPrices.length > 0 : Object.keys(rawPrices).length > 0)) {
               // Eliminar precios existentes
               await supabase
                 .from('price_product')
@@ -1181,15 +1216,14 @@ class productsAlmacen {
                 .eq('producto_almacen_id', id);
 
               // Insertar nuevos precios
-              const preciosArray = Object.entries(precios)
-                .filter(([_, valor]) => valor !== null && valor !== undefined && valor !== '')
-                .map(([priceTypeId, valor]) => ({
+              const normalizedPrices = productsAlmacen._normalizePrices(rawPrices);
+              if (normalizedPrices.length > 0) {
+                const preciosArray = normalizedPrices.map(({ price_id, valor }) => ({
                   producto_almacen_id: id,
-                  price_id: priceTypeId,
-                  valor: parseFloat(valor) || 0
+                  price_id,
+                  valor
                 }));
 
-              if (preciosArray.length > 0) {
                 const { error: preciosError } = await supabase
                   .from('price_product')
                   .insert(preciosArray);
@@ -1277,12 +1311,18 @@ class productsAlmacen {
             }
 
             // Crear el producto principal
+            const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
             const { data: product, error: productError } = await supabase
               .from('products_almacen')
               .insert([{
                 name: name.trim(),
+                description: productoData.description || null,
                 codigo_barras: codigo_barras || null,
-                empresa_id: empresaId
+                category_id: productoData.category_id || null,
+                empresa_id: empresaId,
+                grup: optionalNum(productoData.grup),
+                stock_minimo: optionalNum(productoData.stock_minimo),
+                costo_produccion: optionalNum(productoData.costo_produccion)
               }])
               .select();
 
@@ -1295,6 +1335,18 @@ class productsAlmacen {
             }
 
             const productId = product[0].id;
+
+            // Relacionar categorías N:M
+            const categoryIds = productoData.category_ids || (productoData.category_id ? [productoData.category_id] : []);
+            if (Array.isArray(categoryIds) && categoryIds.length > 0) {
+              const catInserts = categoryIds.filter(Boolean).map(catId => ({
+                producto_id: productId,
+                categoria_id: catId
+              }));
+              if (catInserts.length > 0) {
+                await supabase.from('producto_categoria').insert(catInserts);
+              }
+            }
 
             // Crear stock en sucursal si se especifica sucuId
             if (sucuId) {
@@ -1316,24 +1368,22 @@ class productsAlmacen {
             }
 
             // Crear precios si se proporcionan
-            if (precios && Object.keys(precios).length > 0) {
-              const preciosArray = Object.entries(precios)
-                .filter(([_, valor]) => valor !== null && valor !== undefined && valor !== '')
-                .map(([priceTypeId, valor]) => ({
-                  producto_almacen_id: productId,
-                  price_id: priceTypeId,
-                  valor: parseFloat(valor) || 0
-                }));
+            const rawPrices = productoData.prices || productoData.precios;
+            const normalizedPrices = productsAlmacen._normalizePrices(rawPrices);
+            if (normalizedPrices.length > 0) {
+              const preciosArray = normalizedPrices.map(({ price_id, valor }) => ({
+                producto_almacen_id: productId,
+                price_id,
+                valor
+              }));
 
-              if (preciosArray.length > 0) {
-                const { error: preciosError } = await supabase
-                  .from('price_product')
-                  .insert(preciosArray);
+              const { error: preciosError } = await supabase
+                .from('price_product')
+                .insert(preciosArray);
 
-                if (preciosError) {
-                  console.error('Error creando precios:', preciosError);
-                  // No lanzar error aquí, solo log
-                }
+              if (preciosError) {
+                console.error('Error creando precios:', preciosError);
+                // No lanzar error aquí, solo log
               }
             }
 

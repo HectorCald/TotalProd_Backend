@@ -140,11 +140,15 @@ class movimientosAlmacen {
         try {
             let query = supabase
                 .from('movimientos_almacen')
-                .select('id, fecha, metodo_pago, type, estado, descuento, aumento, porcentaje, agrupado')
+                .select('id, fecha, metodo_pago, total, type, estado')
                 .eq('sucu_id', sucuId);
 
             if (tipo) query = query.eq('type', tipo);
-            if (estado) query = query.eq('estado', estado);
+            if (estado) {
+                query = query.eq('estado', estado);
+            } else {
+                query = query.neq('estado', 'anulado');
+            }
 
             query = aplicarFiltroFecha(query, 'fecha', filtroFecha);
             query = query.order('fecha', { ascending: false });
@@ -153,59 +157,20 @@ class movimientosAlmacen {
             if (error) return { success: false, message: 'Error al obtener movimientos sin limite', error };
             if (!movimientos || movimientos.length === 0) return { success: true, data: [] };
 
-            const movimientoIds = movimientos.map(m => m.id);
-
-            let todosLosProductos = [];
-            const chunkSize = 50;
-            const promesas = [];
-            for (let i = 0; i < movimientoIds.length; i += chunkSize) {
-                const chunkIds = movimientoIds.slice(i, i + chunkSize);
-                promesas.push(
-                    supabase
-                        .from('movimiento_almacen_producto')
-                        .select('movimiento_almacen_id, precio_unitario, cantidad, producto:producto_almacen_id(costo_produccion, grup)')
-                        .in('movimiento_almacen_id', chunkIds)
-                );
-            }
-            const resultados = await Promise.all(promesas);
-            for (const { data } of resultados) {
-                if (data) todosLosProductos.push(...data);
-            }
-
             const resultadoOptimizado = movimientos.map(mov => {
-                const movProductos = todosLosProductos.filter(p => p.movimiento_almacen_id === mov.id);
-
-                const calculateSpecialPrice = (precioBase, grup, esAgrupado, esVenta) => {
-                    const precioCrudo = esAgrupado ? (Number(precioBase) * Number(grup || 1)) : Number(precioBase);
-                    return precioCrudo;
-                };
-
-                const calculateSubtotal = (cantidad, precioBase, grup, esAgrupado, esVenta) => {
-                    const precio = calculateSpecialPrice(precioBase, grup, esAgrupado, esVenta);
-                    const precioUnitarioFinal = esAgrupado ? (precio / Number(grup || 1)) : precio;
-                    return precioUnitarioFinal * Number(cantidad || 0);
-                };
-
-                const total = movProductos.reduce((sum, p) => {
-                    const esAgrupado = !!mov.agrupado;
-                    const esVenta = mov.type === 'salida' || mov.tipo === 'salida';
-                    const grup = p.producto?.grup;
-                    const prodSubtotal = calculateSubtotal(p.cantidad, p.precio_unitario, grup, esAgrupado, esVenta);
-                    return sum + (prodSubtotal || 0);
-                }, 0);
-                const costo_produccion_total = movProductos.reduce((sum, p) => sum + ((parseFloat(p.producto?.costo_produccion) || 0) * (parseFloat(p.cantidad) || 0)), 0);
-
+                let totalVal = mov.total;
+                if (typeof totalVal === 'string') {
+                    totalVal = parseFloat(totalVal.replace(',', '.')) || 0;
+                } else {
+                    totalVal = parseFloat(totalVal) || 0;
+                }
                 return {
                     id: mov.id,
                     fecha: mov.fecha,
                     metodo_pago: mov.metodo_pago,
+                    total: totalVal,
                     type: mov.type,
-                    estado: mov.estado,
-                    descuento: mov.descuento,
-                    aumento: mov.aumento,
-                    porcentaje: mov.porcentaje,
-                    total: total,
-                    costo_produccion: costo_produccion_total
+                    estado: mov.estado
                 };
             });
 

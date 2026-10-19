@@ -203,7 +203,7 @@ class productsAlmacenController {
 
   // Crear un producto
   static async create(req, res) {
-    const { name, description, stock, codigo_barras, category_id, category_ids, grup, stock_minimo, costo_produccion, prices, receta, empresa_id, sucu_id } = req.body;
+    const { name, description, stock, codigo_barras, category_id, category_ids, grup, stock_minimo, costo_produccion, prices, precios, receta, empresa_id, sucu_id } = req.body;
 
     if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'El nombre es obligatorio' });
     if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
@@ -222,7 +222,7 @@ class productsAlmacenController {
         grup: optionalNum(grup),
         stock_minimo: optionalNum(stock_minimo),
         costo_produccion: optionalNum(costo_produccion),
-        prices: prices || {},
+        prices: prices || precios || {},
         receta: receta || null
       }, empresa_id, sucu_id);
     }, {
@@ -236,7 +236,7 @@ class productsAlmacenController {
 
   // Actualizar un producto
   static async update(req, res) {
-    const { name, description, stock, codigo_barras, category_id, category_ids, grup, stock_minimo, costo_produccion, prices, receta, sucu_id } = req.body;
+    const { name, description, stock, codigo_barras, category_id, category_ids, grup, stock_minimo, costo_produccion, prices, precios, receta, sucu_id } = req.body;
 
     if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'El nombre es obligatorio' });
     if (stock === undefined || stock === null || isNaN(stock) || parseInt(stock) < 0) {
@@ -256,7 +256,7 @@ class productsAlmacenController {
         grup: optionalNum(grup),
         stock_minimo: optionalNum(stock_minimo),
         costo_produccion: optionalNum(costo_produccion),
-        prices: prices || {},
+        prices: prices || precios || {},
         receta: receta || null
       }, sucu_id);
     }, {
@@ -283,12 +283,12 @@ class productsAlmacenController {
   static async bulkUpdate(req, res) {
     return productsAlmacenController._handleRequest(res, 'bulkUpdate', req, async () => {
       const { productosData, empresa_id, sucu_id } = req.body;
-      const empresaId = req.user?.empresa_id || empresa_id;
-      const sucuId = req.user?.sucu_id || sucu_id;
+      const empresaId = req.user?.empresa_id || empresa_id || req.query.empresa_id;
+      const sucuId = req.user?.sucu_id || sucu_id || req.query.sucu_id;
 
       if (!productosData || !Array.isArray(productosData)) throw new Error('Se requieren los datos de los productos');
       const resultado = await productsAlmacen.bulkUpdate(productosData, empresaId, sucuId);
-      return resultado.data; // El middleware de handleRequest pondrá successMessage, pero si quieres usar el que retorna `resultado.message` tendrás que ajustarlo
+      return resultado.data;
     }, {
       validateEmpresaId: true,
       successMessage: 'Productos actualizados correctamente'
@@ -299,8 +299,8 @@ class productsAlmacenController {
   static async bulkCreate(req, res) {
     return productsAlmacenController._handleRequest(res, 'bulkCreate', req, async () => {
       const { productosData, empresa_id, sucu_id } = req.body;
-      const empresaId = req.user?.empresa_id || empresa_id;
-      const sucuId = req.user?.sucu_id || sucu_id;
+      const empresaId = req.user?.empresa_id || empresa_id || req.query.empresa_id;
+      const sucuId = req.user?.sucu_id || sucu_id || req.query.sucu_id;
 
       if (!productosData || !Array.isArray(productosData)) throw new Error('Se requieren los datos de los productos');
       const resultado = await productsAlmacen.bulkCreate(productosData, empresaId, sucuId);

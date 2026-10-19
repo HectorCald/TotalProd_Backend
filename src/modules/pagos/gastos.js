@@ -4,56 +4,38 @@ const { normalizeSearchTokens } = require('../../utils/searchHelper');
 
 class gastos {
 
-    // Obtener todos los gastos sin límite
+    // Obtener todos los gastos sin límite (Optimizado para reportes/balance)
     static async getAllSinLimite(sucuId, filtroFecha = null) {
         try {
             if (!sucuId) return { success: false, message: 'No hay sucursal seleccionada' };
             let query = supabase
                 .from('gastos')
-                .select(`
-                    id,
-                    valor,
-                    concepto,
-                    metodo_pago,
-                    fecha_gasto,
-                    proveedor:proveedor_id (
-                        id,
-                        name
-                    ),
-                    user:user_id (
-                        id,
-                        first_name,
-                        last_name
-                    ),
-                    personal:personal_id (
-                        id,
-                        first_name,
-                        last_name
-                    )
-                `)
+                .select('id, valor, metodo_pago, fecha_gasto')
                 .eq('sucu_id', sucuId);
 
-            query = aplicarFiltroFecha(query, 'fecha_gasto', filtroFecha);
+            query = aplicarFiltroFecha(query, 'fecha_gasto', filtroFecha, 'date');
+            query = query.order('fecha_gasto', { ascending: false });
 
             const { data, error } = await query;
-            if (error) throw new Error('Error al obtener los gastos sin límite');
+            if (error) {
+                console.error('Error al obtener los gastos sin límite:', error);
+                return { success: false, message: 'Error al obtener los gastos sin límite', error };
+            }
+            if (!data || data.length === 0) return { success: true, data: [] };
 
-            // Procesar los datos para agregar el campo name a user y personal (igual que getAll)
-            const processedData = (data || []).map(gasto => {
-                const processedGasto = { ...gasto };
-                if (gasto.user) {
-                    processedGasto.user = {
-                        ...gasto.user,
-                        name: `${gasto.user.first_name} ${gasto.user.last_name}`.trim()
-                    };
+            const processedData = data.map(gasto => {
+                let valor = gasto.valor;
+                if (typeof valor === 'string') {
+                    valor = parseFloat(valor.replace(',', '.')) || 0;
+                } else {
+                    valor = parseFloat(valor) || 0;
                 }
-                if (gasto.personal) {
-                    processedGasto.personal = {
-                        ...gasto.personal,
-                        name: `${gasto.personal.first_name} ${gasto.personal.last_name}`.trim()
-                    };
-                }
-                return processedGasto;
+                return {
+                    id: gasto.id,
+                    valor,
+                    metodo_pago: gasto.metodo_pago,
+                    fecha_gasto: gasto.fecha_gasto
+                };
             });
 
             return { success: true, data: processedData };
@@ -119,8 +101,8 @@ class gastos {
                 query = query.eq('proveedor_id', proveedorId);
             }
 
-            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local)
-            query = aplicarFiltroFecha(query, 'fecha_gasto', filtroFecha);
+            // Aplicar filtro de fecha si se proporciona (columna tipo DATE)
+            query = aplicarFiltroFecha(query, 'fecha_gasto', filtroFecha, 'date');
 
             // Aplicar ordenamiento
             switch (ordenamiento) {

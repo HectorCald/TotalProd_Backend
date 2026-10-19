@@ -17,7 +17,7 @@ class deudasController {
 
     try {
       if (validateSucuId) {
-        const sucuId = req.query.sucu_id || req.body.sucu_id || req.user?.sucu_id;
+        const sucuId = req.headers['x-sucu-id'] || req.query.sucu_id || req.body.sucu_id || req.user?.sucu_id;
         if (!sucuId) {
           return res.status(400).json({
             success: false,
@@ -91,8 +91,11 @@ class deudasController {
   // Obtener todas las deudas sin límite
   static async getAllSinLimite(req, res) {
     return deudasController._handleRequest(res, 'getAllSinLimite', req, async () => {
-      const { sucu_id } = req.query;
-      const filtroFecha = parseFiltroFecha(req.query);
+      const sucu_id = req.headers['x-sucu-id'] || req.query.sucu_id;
+      const { fecha_inicio, fecha_fin, inicio, fin } = req.query;
+      const filtroFecha = (fecha_inicio || fecha_fin || inicio || fin)
+        ? { inicio: fecha_inicio || inicio || null, fin: fecha_fin || fin || null }
+        : parseFiltroFecha(req.query);
       return await deudas.getAllSinLimite(sucu_id, filtroFecha);
     }, {
       validateSucuId: true

@@ -93,9 +93,9 @@ class movimientosAlmacenController {
     static async getAllSinLimite(req, res) {
         return movimientosAlmacenController._handleRequest(res, 'getAllSinLimite', req, async () => {
             const sucu_id = req.headers['x-sucu-id'] || req.query.sucu_id;
-            const { tipo, estado, fecha_inicio, fecha_fin } = req.query;
-            const filtroFecha = (fecha_inicio || fecha_fin)
-                ? { inicio: fecha_inicio || null, fin: fecha_fin || null }
+            const { tipo, estado, fecha_inicio, fecha_fin, inicio, fin } = req.query;
+            const filtroFecha = (fecha_inicio || fecha_fin || inicio || fin)
+                ? { inicio: fecha_inicio || inicio || null, fin: fecha_fin || fin || null }
                 : null;
 
             return await movimientosAlmacen.getAllSinLimite(sucu_id, tipo, filtroFecha, estado);

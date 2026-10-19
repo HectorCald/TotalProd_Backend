@@ -94,63 +94,45 @@ class deudas {
         }
     }
 
-    // Obtener todas las deudas sin límite
+    // Obtener todas las deudas sin límite (Optimizado para reportes/balance)
     static async getAllSinLimite(sucuId, filtroFecha = null) {
         try {
             if (!sucuId) return { success: false, message: 'No hay sucursal seleccionada' };
             let query = supabase
                 .from('deudas')
-                .select(`
-                    id,
-                    monto_total,
-                    saldo_pendiente,
-                    concepto,
-                    estado,
-                    fecha_deuda,
-                    fecha_vencimiento,
-                    movimiento_salida_id,
-                    cliente:cliente_id (
-                        id,
-                        name
-                    ),
-                    user:user_id (
-                        id,
-                        first_name,
-                        last_name
-                    ),
-                    personal:personal_id (
-                        id,
-                        first_name,
-                        last_name
-                    ),
-                    sucursal:sucu_id (
-                        id,
-                        name
-                    )
-                `)
+                .select('id, saldo_pendiente, monto_total, fecha_deuda, estado')
                 .eq('sucu_id', sucuId);
 
-            query = aplicarFiltroFecha(query, 'fecha_deuda', filtroFecha);
+            query = aplicarFiltroFecha(query, 'fecha_deuda', filtroFecha, 'date');
+            query = query.order('fecha_deuda', { ascending: false });
 
             const { data, error } = await query;
-            if (error) throw new Error('Error al obtener las deudas sin límite');
+            if (error) {
+                console.error('Error al obtener las deudas sin límite:', error);
+                return { success: false, message: 'Error al obtener las deudas sin límite', error };
+            }
+            if (!data || data.length === 0) return { success: true, data: [] };
 
-            // Procesar los datos para agregar el campo name a user y personal
-            const processedData = (data || []).map(deuda => {
-                const processedDeuda = { ...deuda };
-                if (deuda.user) {
-                    processedDeuda.user = {
-                        ...deuda.user,
-                        name: `${deuda.user.first_name} ${deuda.user.last_name}`.trim()
-                    };
+            const processedData = data.map(deuda => {
+                let saldo = deuda.saldo_pendiente;
+                if (typeof saldo === 'string') {
+                    saldo = parseFloat(saldo.replace(',', '.')) || 0;
+                } else {
+                    saldo = parseFloat(saldo) || 0;
                 }
-                if (deuda.personal) {
-                    processedDeuda.personal = {
-                        ...deuda.personal,
-                        name: `${deuda.personal.first_name} ${deuda.personal.last_name}`.trim()
-                    };
+                let total = deuda.monto_total;
+                if (typeof total === 'string') {
+                    total = parseFloat(total.replace(',', '.')) || 0;
+                } else {
+                    total = parseFloat(total) || 0;
                 }
-                return processedDeuda;
+                return {
+                    id: deuda.id,
+                    saldo_pendiente: saldo,
+                    monto_total: total,
+                    fecha_deuda: deuda.fecha_deuda,
+                    estado: deuda.estado
+                };
             });
 
             return { success: true, data: processedData };
@@ -227,8 +209,8 @@ class deudas {
                 }
             }
 
-            // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local)
-            query = aplicarFiltroFecha(query, 'fecha_deuda', filtroFecha);
+            // Aplicar filtro de fecha si se proporciona (columna tipo DATE)
+            query = aplicarFiltroFecha(query, 'fecha_deuda', filtroFecha, 'date');
 
             // Aplicar ordenamiento
             switch (ordenamiento) {
