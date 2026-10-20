@@ -420,9 +420,7 @@ class productsAcopio {
       }
 
       // Verificar si se está cambiando la unidad de medida
-      const isChangingMeasure = currentProduct.type_measure_id !== productData.type_measure_id;
-
-      if (isChangingMeasure) {
+      if (currentProduct.type_measure_id !== productData.type_measure_id) {
         // Verificar si el producto tiene movimientos
         const hasMovements = await this.hasMovements(id);
         if (hasMovements) {
@@ -430,19 +428,17 @@ class productsAcopio {
         }
       }
 
-      // Preparar datos para la base de datos
-      const dbData = {
-        name: productData.name,
-        description: productData.description || null,
-        quantity: productData.quantity !== undefined ? productData.quantity : 0,
-        type_measure_id: productData.type_measure_id || null,
-        category_id: productData.category_id || null,
-        stock_minimo: productData.stock_minimo || 0
-      };
-
+      // 1. Actualizar el producto principal
       const { data, error } = await supabase
         .from('products_acopio')
-        .update(dbData)
+        .update({
+          name: productData.name,
+          description: productData.description || null,
+          quantity: productData.quantity,
+          type_measure_id: productData.type_measure_id,
+          category_id: productData.category_id || null,
+          stock_minimo: productData.stock_minimo || 0
+        })
         .eq('id', id)
         .select();
 
@@ -522,6 +518,65 @@ class productsAcopio {
       console.error('Error al actualizar el producto:', error);
       throw error;
     }
+  }
+
+  // Actualizar múltiples productos en lote (solo los campos enviados)
+  static async bulkUpdate(productosData, empresaId) {
+    if (!empresaId) throw new Error('ID de la empresa es requerido');
+    if (!Array.isArray(productosData) || productosData.length === 0) {
+      throw new Error('Array de productos es requerido');
+    }
+
+    const resultados = { actualizados: 0, errores: [], total: productosData.length };
+    const BATCH_SIZE = 10;
+
+    for (let i = 0; i < productosData.length; i += BATCH_SIZE) {
+      const batch = productosData.slice(i, i + BATCH_SIZE);
+      await Promise.allSettled(batch.map(async (p) => {
+        try {
+          if (!p.id) throw new Error('ID del producto es requerido');
+
+          const dbData = {};
+          if (p.name !== undefined) {
+            if (!p.name || !String(p.name).trim()) throw new Error('El nombre no puede estar vacío');
+            dbData.name = String(p.name).trim();
+          }
+          if (p.description !== undefined) dbData.description = p.description ? String(p.description).trim() : null;
+          if (p.quantity !== undefined) dbData.quantity = p.quantity;
+          if (p.stock_minimo !== undefined) dbData.stock_minimo = p.stock_minimo || 0;
+          if (p.category_id !== undefined) dbData.category_id = p.category_id || null;
+
+          if (p.type_measure_id !== undefined) {
+            const { data: current, error: currentError } = await supabase
+              .from('products_acopio')
+              .select('type_measure_id')
+              .eq('id', p.id)
+              .single();
+            if (currentError) throw new Error('No se pudo obtener el producto actual');
+            if (current.type_measure_id !== p.type_measure_id) {
+              const hasMovements = await this.hasMovements(p.id);
+              if (hasMovements) throw new Error('No se puede cambiar la unidad de medida porque el producto tiene movimientos registrados');
+            }
+            dbData.type_measure_id = p.type_measure_id || null;
+          }
+
+          if (Object.keys(dbData).length > 0) {
+            const { error } = await supabase
+              .from('products_acopio')
+              .update(dbData)
+              .eq('id', p.id)
+              .eq('empresa_id', empresaId);
+            if (error) throw new Error(error.message);
+          }
+
+          resultados.actualizados++;
+        } catch (err) {
+          resultados.errores.push(`Producto ${p.name || p.id || 'desconocido'}: ${err.message}`);
+        }
+      }));
+    }
+
+    return resultados;
   }
 
 
@@ -626,7 +681,95 @@ class productsAcopio {
     }
   }
 
-  
+  // Actualizar múltiples productos en lote (solo campos enviados)
+  static async bulkUpdate(productosData, empresaId) {
+    try {
+      if (!empresaId) {
+        throw new Error('ID de la empresa es requerido');
+      }
+
+      if (!Array.isArray(productosData) || productosData.length === 0) {
+        throw new Error('Array de productos es requerido');
+      }
+
+      const resultados = {
+        actualizados: 0,
+        errores: [],
+        total: productosData.length
+      };
+
+      const BATCH_SIZE = 10;
+      const batches = [];
+      for (let i = 0; i < productosData.length; i += BATCH_SIZE) {
+        batches.push(productosData.slice(i, i + BATCH_SIZE));
+      }
+
+      for (const batch of batches) {
+        const batchPromises = batch.map(async (productoData) => {
+          try {
+            const { id, name } = productoData;
+            if (!id) {
+              throw new Error('ID del producto es requerido');
+            }
+
+            const updateData = {};
+            const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
+
+            if (name !== undefined) {
+              if (!name || !String(name).trim()) throw new Error('El nombre no puede estar vacío');
+              updateData.name = String(name).trim();
+            }
+            if (productoData.description !== undefined) {
+              updateData.description = productoData.description || null;
+            }
+            if (productoData.quantity !== undefined) {
+              updateData.quantity = (productoData.quantity != null && productoData.quantity !== '') ? Number(productoData.quantity) : 0;
+            }
+            if (productoData.stock_minimo !== undefined) {
+              updateData.stock_minimo = optionalNum(productoData.stock_minimo) ?? 0;
+            }
+            if (productoData.category_id !== undefined) {
+              updateData.category_id = productoData.category_id || null;
+            }
+            if (productoData.type_measure_id !== undefined) {
+              updateData.type_measure_id = productoData.type_measure_id || null;
+            }
+
+            if (Object.keys(updateData).length > 0) {
+              const { error } = await supabase
+                .from('products_acopio')
+                .update(updateData)
+                .eq('id', id)
+                .eq('empresa_id', empresaId);
+
+              if (error) {
+                throw new Error(`Error actualizando producto ${id}: ${error.message}`);
+              }
+            }
+
+            resultados.actualizados++;
+            return { success: true, id, name: productoData.name };
+          } catch (error) {
+            const errorMsg = `Producto ${productoData.id || 'desconocido'}: ${error.message}`;
+            resultados.errores.push(errorMsg);
+            console.error('Error en producto individual MP:', errorMsg);
+            return { success: false, id: productoData.id, error: errorMsg };
+          }
+        });
+
+        await Promise.allSettled(batchPromises);
+      }
+
+      return {
+        success: true,
+        data: resultados,
+        message: `Actualización completada: ${resultados.actualizados}/${resultados.total} productos actualizados`
+      };
+    } catch (error) {
+      console.error('Error en bulkUpdate MP:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = productsAcopio;

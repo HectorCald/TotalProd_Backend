@@ -847,53 +847,32 @@ class productsAlmacen {
       // Numéricos opcionales: vacío/null → null en DB (consistencia con create)
       const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
 
-      const updateData = {
-        name: productData.name,
-        description: productData.description || null,
-        codigo_barras: productData.codigo_barras || null,
-        category_id: productData.category_id || null,
-        grup: optionalNum(productData.grup),
-        stock_minimo: optionalNum(productData.stock_minimo),
-        costo_produccion: optionalNum(productData.costo_produccion)
-      };
-
       // Actualizar el producto principal
       const tProductStart = Date.now();
       const { data, error } = await supabase
         .from('products_almacen')
-        .update(updateData)
+        .update({
+          name: productData.name,
+          description: productData.description || null,
+          codigo_barras: productData.codigo_barras || null,
+          category_id: productData.category_id || null,
+          grup: optionalNum(productData.grup),
+          stock_minimo: optionalNum(productData.stock_minimo),
+          costo_produccion: optionalNum(productData.costo_produccion)
+        })
         .eq('id', id)
         .select();
-      const tProductMs = Date.now() - tProductStart;
-      console.log(`⏱️ [UPDATE PRODUCT] Actualizar producto principal: ${tProductMs}ms`);
 
-      if (error) {
-        throw new Error('No se pudo actualizar el producto');
-      }
-
-      if (!data || data.length === 0) {
+      if (error || !data || data.length === 0) {
         throw new Error('No se pudo actualizar el producto');
       }
 
       const productId = data[0].id;
+      const tProductMs = Date.now() - tProductStart;
+      console.log(`⏱️ [UPDATE PRODUCT] Actualizar producto principal: ${tProductMs}ms`);
 
       // Migrar category_id legacy a producto_categoria si existe
-      if (data[0].category_id && productData.category_ids) {
-        // Verificar si ya existe en la tabla intermedia
-        const { data: existingPc } = await supabase
-          .from('producto_categoria')
-          .select('id')
-          .eq('producto_id', productId)
-          .eq('categoria_id', data[0].category_id);
-        
-        if (!existingPc || existingPc.length === 0) {
-          // Migrar: agregar la categoría legacy a la tabla intermedia si no está ya en category_ids
-          if (!productData.category_ids.includes(data[0].category_id)) {
-            // Solo migrar si no está incluida en las nuevas categorías
-            // (si ya está, se insertará con las demás)
-          }
-        }
-        
+      if (productData.category_id && productData.category_ids) {
         // Limpiar category_id legacy del producto
         await supabase
           .from('products_almacen')
@@ -924,13 +903,17 @@ class productsAlmacen {
       const rawPrices = productData.prices || productData.precios;
       if (rawPrices && (Array.isArray(rawPrices) ? rawPrices.length > 0 : Object.keys(rawPrices).length > 0)) {
         const normalizedPrices = productsAlmacen._normalizePrices(rawPrices);
-        parallelOperations.push(
-          (async () => {
-            await supabase
-              .from('price_product')
-              .delete()
-              .eq('producto_almacen_id', productId);
-            if (normalizedPrices.length > 0) {
+        if (normalizedPrices.length > 0) {
+          const updatingPriceIds = normalizedPrices.map(p => p.price_id);
+          parallelOperations.push(
+            (async () => {
+              // Eliminar únicamente los tipos de precio que se están actualizando
+              await supabase
+                .from('price_product')
+                .delete()
+                .eq('producto_almacen_id', productId)
+                .in('price_id', updatingPriceIds);
+
               const preciosArray = normalizedPrices.map(({ price_id, valor }) => ({
                 producto_almacen_id: productId,
                 price_id,
@@ -939,10 +922,9 @@ class productsAlmacen {
               return await supabase
                 .from('price_product')
                 .insert(preciosArray);
-            }
-            return { data: [] };
-          })()
-        );
+            })()
+          );
+        }
       }
 
       // Preparar operación de categorías N:M (delete + insert)
@@ -1157,17 +1139,20 @@ class productsAlmacen {
       for (const batch of batches) {
         const batchPromises = batch.map(async (productoData) => {
           try {
-            const { id, name, codigo_barras, precios, stock } = productoData;
+            const { id, name, codigo_barras, stock } = productoData;
             
             if (!id) {
               throw new Error('ID del producto es requerido');
             }
 
-            // Preparar datos de actualización
+            // Preparar datos de actualización (solo los campos enviados)
             const updateData = {};
             const optionalNum = (v) => (v != null && v !== '') ? Number(v) : null;
-            if (name !== undefined && name !== null && name !== '') updateData.name = name;
-            if (codigo_barras !== undefined && codigo_barras !== null) updateData.codigo_barras = codigo_barras;
+            if (name !== undefined) {
+              if (!name || !String(name).trim()) throw new Error('El nombre no puede estar vacío');
+              updateData.name = String(name).trim();
+            }
+            if (codigo_barras !== undefined) updateData.codigo_barras = codigo_barras ? String(codigo_barras).trim() : null;
             if (productoData.description !== undefined) updateData.description = productoData.description || null;
             if (productoData.stock_minimo !== undefined) updateData.stock_minimo = optionalNum(productoData.stock_minimo);
             if (productoData.grup !== undefined) updateData.grup = optionalNum(productoData.grup);
@@ -1206,18 +1191,12 @@ class productsAlmacen {
               }
             }
 
-            // Actualizar precios si se proporcionan
+            // Actualizar precios solo de los tipos enviados
             const rawPrices = productoData.prices || productoData.precios;
             if (rawPrices && (Array.isArray(rawPrices) ? rawPrices.length > 0 : Object.keys(rawPrices).length > 0)) {
-              // Eliminar precios existentes
-              await supabase
-                .from('price_product')
-                .delete()
-                .eq('producto_almacen_id', id);
-
-              // Insertar nuevos precios
               const normalizedPrices = productsAlmacen._normalizePrices(rawPrices);
               if (normalizedPrices.length > 0) {
+                const priceIds = normalizedPrices.map(p => p.price_id);
                 const preciosArray = normalizedPrices.map(({ price_id, valor }) => ({
                   producto_almacen_id: id,
                   price_id,
@@ -1226,10 +1205,39 @@ class productsAlmacen {
 
                 const { error: preciosError } = await supabase
                   .from('price_product')
-                  .insert(preciosArray);
+                  .upsert(preciosArray, { onConflict: 'producto_almacen_id,price_id' });
 
                 if (preciosError) {
-                  throw new Error(`Error actualizando precios del producto ${id}: ${preciosError.message}`);
+                  // Fallback: eliminar solo esos tipos de precio e insertar
+                  await supabase
+                    .from('price_product')
+                    .delete()
+                    .eq('producto_almacen_id', id)
+                    .in('price_id', priceIds);
+                  const { error: insertError } = await supabase
+                    .from('price_product')
+                    .insert(preciosArray);
+                  if (insertError) {
+                    throw new Error(`Error actualizando precios del producto ${id}: ${insertError.message}`);
+                  }
+                }
+              }
+            }
+
+            // Actualizar categorías solo si se envían
+            if (Array.isArray(productoData.category_ids)) {
+              await supabase
+                .from('producto_categoria')
+                .delete()
+                .eq('producto_id', id);
+              const catInserts = productoData.category_ids.filter(Boolean).map(catId => ({
+                producto_id: id,
+                categoria_id: catId
+              }));
+              if (catInserts.length > 0) {
+                const { error: catError } = await supabase.from('producto_categoria').insert(catInserts);
+                if (catError) {
+                  throw new Error(`Error actualizando categorías del producto ${id}: ${catError.message}`);
                 }
               }
             }

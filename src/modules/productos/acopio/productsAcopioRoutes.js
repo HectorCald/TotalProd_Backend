@@ -28,6 +28,9 @@ router.get('/:id/has-movements', productsAcopioController.hasMovements);
 // Ruta para crear un producto de acopio
 router.post('/', productsAcopioController.create);
 
+// Ruta para actualizar múltiples productos en lote (solo campos enviados)
+router.put('/bulk-update', productsAcopioController.bulkUpdate);
+
 // Ruta para actualizar un producto de acopio
 router.put('/:id', productsAcopioController.update);
 

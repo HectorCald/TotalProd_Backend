@@ -291,6 +291,7 @@ class productsAlmacenController {
       return resultado.data;
     }, {
       validateEmpresaId: true,
+      checkPermission: 'update',
       successMessage: 'Productos actualizados correctamente'
     });
   }

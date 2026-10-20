@@ -254,6 +254,21 @@ class productsAcopioController {
     });
   }
 
+  // Actualizar múltiples productos en lote (solo los campos enviados)
+  static async bulkUpdate(req, res) {
+    return productsAcopioController._handleRequest(res, 'bulkUpdate', req, async () => {
+      const { productosData, empresa_id } = req.body;
+      const empresaId = req.user?.empresa_id || empresa_id || req.query.empresa_id;
+      if (!Array.isArray(productosData) || productosData.length === 0) {
+        return { success: false, message: 'Se requieren los datos de los productos' };
+      }
+      return await productsAcopio.bulkUpdate(productosData, empresaId);
+    }, {
+      validateEmpresaId: true,
+      checkPermission: 'update'
+    });
+  }
+
   // Obtener un producto por ID
   static async getById(req, res) {
     return productsAcopioController._handleRequest(res, 'getById', req, async () => {
