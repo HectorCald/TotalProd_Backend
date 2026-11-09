@@ -390,14 +390,71 @@ class movimientosAlmacen {
                 total
             } = movimientoData;
 
+            const formatPoint = (loc) => {
+                if (!loc) return null;
+                if (typeof loc === 'object') {
+                    const lat = Number(loc.x ?? loc.lat);
+                    const lng = Number(loc.y ?? loc.lng);
+                    if (
+                        (loc.x !== undefined || loc.lat !== undefined) &&
+                        (loc.y !== undefined || loc.lng !== undefined) &&
+                        !Number.isNaN(lat) &&
+                        !Number.isNaN(lng) &&
+                        (lat !== 0 || lng !== 0)
+                    ) {
+                        return `(${lat},${lng})`;
+                    }
+                    return null;
+                }
+                const raw = String(loc).trim();
+                if (!raw || raw === 'null' || raw === 'undefined') return null;
+                const clean = raw.replace(/[()]/g, '');
+                const parts = clean.split(',').map((p) => p.trim());
+                if (parts.length === 2 && parts[0] !== '' && parts[1] !== '') {
+                    const lat = Number(parts[0]);
+                    const lng = Number(parts[1]);
+                    if (!Number.isNaN(lat) && !Number.isNaN(lng) && (lat !== 0 || lng !== 0)) {
+                        return `(${lat},${lng})`;
+                    }
+                }
+                return null;
+            };
+
+            const ubicacionFormateada = formatPoint(ubicacion);
+
+            // Validación estricta para ventas (salidas): no permitir registrar movimiento sin ubicación GPS válida
+            if (type === 'salida' && !ubicacionFormateada) {
+                return {
+                    success: false,
+                    message: 'Error de ubicación: no es posible registrar la venta sin ubicación GPS. Activa tu ubicación para continuar.'
+                };
+            }
+
             let numeroOrdenFinal = null;
 
             if (type === 'salida' && cliente_id) {
-                const { data: cliente } = await supabase.from('clients').select('name, total_orders').eq('id', cliente_id).single();
-                if (cliente) {
-                    numeroOrdenFinal = (cliente.total_orders || 0) + 1;
-                    await supabase.from('clients').update({ total_orders: numeroOrdenFinal }).eq('id', cliente_id);
+                const { data: cliente } = await supabase
+                    .from('clients')
+                    .select('name, total_orders, location')
+                    .eq('id', cliente_id)
+                    .single();
+
+                if (!cliente) {
+                    return {
+                        success: false,
+                        message: 'El cliente seleccionado no existe.'
+                    };
                 }
+
+                if (!formatPoint(cliente.location)) {
+                    return {
+                        success: false,
+                        message: 'Error de ubicación: el cliente seleccionado no tiene ubicación GPS registrada. Activa tu ubicación para continuar.'
+                    };
+                }
+
+                numeroOrdenFinal = (cliente.total_orders || 0) + 1;
+                await supabase.from('clients').update({ total_orders: numeroOrdenFinal }).eq('id', cliente_id);
             } else if (type === 'entrada' && proveedor_id) {
                 const { data: proveedor } = await supabase.from('suppliers').select('name, total_orders').eq('id', proveedor_id).single();
                 if (proveedor) {
@@ -428,24 +485,6 @@ class movimientosAlmacen {
                 }
             }
 
-            const formatPoint = (loc) => {
-                if (!loc) return null;
-                if (typeof loc === 'object') {
-                    const lat = loc.x ?? loc.lat;
-                    const lng = loc.y ?? loc.lng;
-                    if (lat !== undefined && lng !== undefined) {
-                        return `(${lat},${lng})`;
-                    }
-                    return null;
-                }
-                const clean = String(loc).trim().replace(/[()]/g, '');
-                const parts = clean.split(',').map((p) => p.trim());
-                if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
-                    return `(${parts[0]},${parts[1]})`;
-                }
-                return String(loc);
-            };
-
             const insertData = {
                 sucu_id,
                 type,
@@ -467,7 +506,7 @@ class movimientosAlmacen {
                 restar_ingredientes: !!restar_ingredientes,
                 produccion_damabrava_id: produccion_damabrava_id || null,
                 observaciones: observaciones || null,
-                ubicacion: formatPoint(ubicacion),
+                ubicacion: ubicacionFormateada,
                 total: total !== undefined && total !== null ? (parseFloat(total) || 0) : 0
             };
 
