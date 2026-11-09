@@ -189,6 +189,53 @@ class movimientosAlmacen {
         }
     }
 
+    // Obtener movimientos sin límite para Ruta Comercial (solo campos necesarios y ubicación GPS)
+    static async getAllSinLimiteRuta(sucuId, filtroFecha = null, tipo = 'salida', estado = null) {
+        try {
+            let query = supabase
+                .from('movimientos_almacen')
+                .select('id, total, concepto, codigo, ubicacion, cliente_id, fecha')
+                .eq('sucu_id', sucuId)
+                .eq('type', tipo || 'salida');
+
+            if (estado) {
+                query = query.eq('estado', estado);
+            } else {
+                query = query.neq('estado', 'anulado');
+            }
+
+            query = aplicarFiltroFecha(query, 'fecha', filtroFecha);
+            query = query.order('fecha', { ascending: false });
+
+            const { data: movimientos, error } = await query;
+            if (error) return { success: false, message: 'Error al obtener movimientos de ruta sin limite', error };
+            if (!movimientos || movimientos.length === 0) return { success: true, data: [] };
+
+            const resultado = movimientos.map(mov => {
+                let totalVal = mov.total;
+                if (typeof totalVal === 'string') {
+                    totalVal = parseFloat(totalVal.replace(',', '.')) || 0;
+                } else {
+                    totalVal = parseFloat(totalVal) || 0;
+                }
+                return {
+                    id: mov.id,
+                    total: totalVal,
+                    concepto: mov.concepto || null,
+                    codigo: mov.codigo || null,
+                    ubicacion: mov.ubicacion || null,
+                    cliente_id: mov.cliente_id || null,
+                    fecha: mov.fecha || null
+                };
+            });
+
+            return { success: true, data: resultado };
+        } catch (error) {
+            console.error('Error en MovimientosAlmacen.getAllSinLimiteRuta:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
     // Obtener los 10 productos más vendidos en un rango de fechas
     static async getTopProductosVendidos(sucuId, filtroFecha = null, estado = 'finalizado') {
         try {

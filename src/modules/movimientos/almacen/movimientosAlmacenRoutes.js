@@ -12,6 +12,9 @@ router.get('/', (req, res) => movimientosAlmacenController.getAll(req, res));
 // 2. Obtener todos los movimientos sin límite (para reportes y balance)
 router.get('/sin-limite', (req, res) => movimientosAlmacenController.getAllSinLimite(req, res));
 
+// 2b. Obtener movimientos sin límite para Ruta Comercial (campos mínimos con GPS)
+router.get('/sin-limite-ruta', (req, res) => movimientosAlmacenController.getAllSinLimiteRuta(req, res));
+
 // Obtener top 10 productos más vendidos (para balance)
 router.get('/top-productos-vendidos', (req, res) => movimientosAlmacenController.getTopProductosVendidos(req, res));
 
