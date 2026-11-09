@@ -94,17 +94,91 @@ class deudas {
         }
     }
 
-    // Obtener todas las deudas sin límite (Optimizado para reportes/balance)
-    static async getAllSinLimite(sucuId, filtroFecha = null) {
+    // Obtener todas las deudas sin límite (Optimizado para reportes/balance y exportación)
+    static async getAllSinLimite(sucuId, filtroFecha = null, search = '', estado = null, clienteId = null, ordenamiento = 'fecha_desc') {
         try {
             if (!sucuId) return { success: false, message: 'No hay sucursal seleccionada' };
             let query = supabase
                 .from('deudas')
-                .select('id, saldo_pendiente, monto_total, fecha_deuda, estado')
+                .select(`
+                    *,
+                    cliente:cliente_id (
+                        id,
+                        name
+                    ),
+                    user:user_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    sucursal:sucu_id (
+                        id,
+                        name
+                    ),
+                    sucursal_destino:destino_sucursal_id (
+                        id,
+                        name,
+                        empresas (
+                            id,
+                            name
+                        )
+                    )
+                `)
                 .eq('sucu_id', sucuId);
 
+            if (search && search.trim() !== '') {
+                query = query.or(`concepto.ilike.%${search}%,estado.ilike.%${search}%`);
+            }
+
+            if (estado) {
+                query = query.eq('estado', estado);
+            }
+
+            if (clienteId) {
+                if (typeof clienteId === 'string' && clienteId.includes(',')) {
+                    query = query.in('cliente_id', clienteId.split(',').filter(Boolean));
+                } else if (Array.isArray(clienteId)) {
+                    query = query.in('cliente_id', clienteId);
+                } else {
+                    query = query.eq('cliente_id', clienteId);
+                }
+            }
+
             query = aplicarFiltroFecha(query, 'fecha_deuda', filtroFecha, 'date');
-            query = query.order('fecha_deuda', { ascending: false });
+
+            switch (ordenamiento) {
+                case 'fecha_desc':
+                    query = query.order('fecha_deuda', { ascending: false });
+                    break;
+                case 'fecha_asc':
+                    query = query.order('fecha_deuda', { ascending: true });
+                    break;
+                case 'vencimiento_desc':
+                    query = query.order('fecha_vencimiento', { ascending: false });
+                    break;
+                case 'vencimiento_asc':
+                    query = query.order('fecha_vencimiento', { ascending: true });
+                    break;
+                case 'monto_desc':
+                    query = query.order('monto_total', { ascending: false });
+                    break;
+                case 'monto_asc':
+                    query = query.order('monto_total', { ascending: true });
+                    break;
+                case 'concepto_asc':
+                    query = query.order('concepto', { ascending: true });
+                    break;
+                case 'concepto_desc':
+                    query = query.order('concepto', { ascending: false });
+                    break;
+                default:
+                    query = query.order('fecha_deuda', { ascending: false });
+            }
 
             const { data, error } = await query;
             if (error) {
@@ -126,13 +200,27 @@ class deudas {
                 } else {
                     total = parseFloat(total) || 0;
                 }
-                return {
-                    id: deuda.id,
+                const processedDeuda = {
+                    ...deuda,
                     saldo_pendiente: saldo,
-                    monto_total: total,
-                    fecha_deuda: deuda.fecha_deuda,
-                    estado: deuda.estado
+                    monto_total: total
                 };
+
+                if (deuda.user) {
+                    processedDeuda.user = {
+                        ...deuda.user,
+                        name: `${deuda.user.first_name || ''} ${deuda.user.last_name || ''}`.trim()
+                    };
+                }
+
+                if (deuda.personal) {
+                    processedDeuda.personal = {
+                        ...deuda.personal,
+                        name: `${deuda.personal.first_name || ''} ${deuda.personal.last_name || ''}`.trim()
+                    };
+                }
+
+                return processedDeuda;
             });
 
             return { success: true, data: processedData };

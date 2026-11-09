@@ -102,6 +102,19 @@ class movimientosAlmacenController {
         }, { validateSucuId: true, passRawResult: true });
     }
 
+    // Obtener top 10 productos más vendidos
+    static async getTopProductosVendidos(req, res) {
+        return movimientosAlmacenController._handleRequest(res, 'getTopProductosVendidos', req, async () => {
+            const sucu_id = req.headers['x-sucu-id'] || req.query.sucu_id;
+            const { estado, fecha_inicio, fecha_fin, inicio, fin } = req.query;
+            const filtroFecha = (fecha_inicio || fecha_fin || inicio || fin)
+                ? { inicio: fecha_inicio || inicio || null, fin: fecha_fin || fin || null }
+                : null;
+
+            return await movimientosAlmacen.getTopProductosVendidos(sucu_id, filtroFecha, estado || 'finalizado');
+        }, { validateSucuId: true, passRawResult: true });
+    }
+
     // Obtener movimiento por ID
     static async getById(req, res) {
         return movimientosAlmacenController._handleRequest(res, 'getById', req, async () => {

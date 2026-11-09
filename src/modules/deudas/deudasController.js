@@ -92,11 +92,11 @@ class deudasController {
   static async getAllSinLimite(req, res) {
     return deudasController._handleRequest(res, 'getAllSinLimite', req, async () => {
       const sucu_id = req.headers['x-sucu-id'] || req.query.sucu_id;
-      const { fecha_inicio, fecha_fin, inicio, fin } = req.query;
+      const { fecha_inicio, fecha_fin, inicio, fin, search = '', estado = null, cliente_id = null, ordenamiento = 'fecha_desc' } = req.query;
       const filtroFecha = (fecha_inicio || fecha_fin || inicio || fin)
         ? { inicio: fecha_inicio || inicio || null, fin: fecha_fin || fin || null }
         : parseFiltroFecha(req.query);
-      return await deudas.getAllSinLimite(sucu_id, filtroFecha);
+      return await deudas.getAllSinLimite(sucu_id, filtroFecha, search, estado, cliente_id, ordenamiento);
     }, {
       validateSucuId: true
     });

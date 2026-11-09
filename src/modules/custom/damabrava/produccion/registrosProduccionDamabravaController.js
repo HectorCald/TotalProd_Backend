@@ -293,6 +293,38 @@ class registrosProduccionDamabravaController {
         });
     }
 
+    // Obtener todos los registros de producción sin límite según filtros
+    static async getAllSinLimite(req, res) {
+        return registrosProduccionDamabravaController._handleRequest(res, 'getAllSinLimite', req, async () => {
+            const estado = req.query.estado || null;
+            const ordenamiento = req.query.ordenamiento || 'fecha_desc';
+            const search = req.query.search || '';
+            const responsable_id = req.query.responsable_id || null;
+            const responsable_tipo = req.query.responsable_tipo || null;
+            const fecha_inicio = req.query.fecha_inicio || null;
+            const fecha_fin = req.query.fecha_fin || null;
+
+            const result = await registrosProduccionDamabrava.getAllSinLimite(
+                estado,
+                ordenamiento,
+                search,
+                responsable_id,
+                responsable_tipo,
+                fecha_inicio,
+                fecha_fin
+            );
+
+            if (!result.success) {
+                return result;
+            }
+
+            return {
+                success: true,
+                data: result.data
+            };
+        });
+    }
+
     // Eliminar un registro de producción
     static async delete(req, res) {
         return registrosProduccionDamabravaController._handleRequest(res, 'delete', req, async () => {

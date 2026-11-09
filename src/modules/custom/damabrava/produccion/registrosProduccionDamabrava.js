@@ -365,6 +365,117 @@ class registrosProduccionDamabrava {
         }
     }
 
+    // Obtener todos los registros de producción sin límite según filtros
+    static async getAllSinLimite(
+        estado = null,
+        ordenamiento = 'fecha_desc',
+        search = '',
+        responsableId = null,
+        responsableTipo = null,
+        fechaInicio = null,
+        fechaFin = null
+    ) {
+        try {
+            let query = supabase
+                .from('registros_produccion_damabrava')
+                .select(`
+                    *,
+                    producto_almacen:producto_almacen_id(
+                        id,
+                        name,
+                        description,
+                        grup
+                    ),
+                    sucursal:sucursal_id(
+                        id,
+                        name
+                    ),
+                    user:user_id(
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id(
+                        id,
+                        first_name,
+                        last_name
+                    )
+                `);
+
+            if (search && search.trim() !== '') {
+                const term = `%${search.trim()}%`;
+
+                const { data: prodMatches } = await supabase.from('products_almacen').select('id').ilike('name', term);
+                const prodIds = (prodMatches || []).map(p => p.id);
+
+                const { data: userMatches } = await supabase.from('users').select('id').or(`first_name.ilike.${term},last_name.ilike.${term}`);
+                const userIds = (userMatches || []).map(u => u.id);
+
+                let { data: persMatches } = await supabase.from('staff').select('id').or(`first_name.ilike.${term},last_name.ilike.${term}`);
+                if (!persMatches || persMatches.length === 0) {
+                    const { data: fallbackMatches } = await supabase.from('personal').select('id').or(`first_name.ilike.${term},last_name.ilike.${term}`);
+                    persMatches = fallbackMatches;
+                }
+                const persIds = (persMatches || []).map(p => p.id);
+
+                const orConditions = [];
+                if (prodIds.length > 0) orConditions.push(`producto_almacen_id.in.(${prodIds.join(',')})`);
+                if (userIds.length > 0) orConditions.push(`user_id.in.(${userIds.join(',')})`);
+                if (persIds.length > 0) orConditions.push(`personal_id.in.(${persIds.join(',')})`);
+
+                if (!isNaN(search)) {
+                    orConditions.push(`lote.eq.${search}`);
+                }
+
+                if (orConditions.length > 0) {
+                    query = query.or(orConditions.join(','));
+                } else {
+                    return { success: true, data: [] };
+                }
+            }
+
+            if (estado) {
+                query = query.eq('estado', estado);
+            }
+
+            if (responsableId && responsableTipo) {
+                if (responsableTipo === 'personal') {
+                    query = query.eq('personal_id', responsableId);
+                } else if (responsableTipo === 'usuario') {
+                    query = query.eq('user_id', responsableId);
+                }
+            }
+
+            query = aplicarFiltroFecha(query, 'fecha', { inicio: fechaInicio, fin: fechaFin });
+
+            const ascending = ordenamiento === 'fecha_asc';
+            query = query.order('fecha', { ascending });
+
+            const { data: registros, error } = await query;
+
+            if (error) {
+                return { success: false, message: 'Error al obtener registros de producción', error };
+            }
+
+            if (!registros || registros.length === 0) {
+                return { success: true, data: [] };
+            }
+
+            const registrosConUsuarios = registros.map(registro => ({
+                ...registro,
+                user: registro.user ? { id: registro.user.id, name: `${registro.user.first_name} ${registro.user.last_name}`.trim() } : null,
+                personal: registro.personal ? { id: registro.personal.id, name: `${registro.personal.first_name} ${registro.personal.last_name}`.trim() } : null
+            }));
+
+            return {
+                success: true,
+                data: registrosConUsuarios
+            };
+        } catch (error) {
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
     // Obtener un registro de producción por ID
     static async getById(id) {
         try {

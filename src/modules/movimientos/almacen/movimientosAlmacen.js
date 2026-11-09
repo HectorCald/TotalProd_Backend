@@ -75,9 +75,17 @@ class movimientosAlmacen {
                 query = query.eq('estado', estado);
             }
 
-            // Aplicar filtro de cliente si se proporciona
+            // Aplicar filtro de cliente si se proporciona (soporta un ID o múltiples separados por coma)
             if (clienteId) {
-                query = query.eq('cliente_id', clienteId);
+                const clienteIds = String(clienteId)
+                    .split(',')
+                    .map(id => id.trim())
+                    .filter(Boolean);
+                if (clienteIds.length > 1) {
+                    query = query.in('cliente_id', clienteIds);
+                } else if (clienteIds.length === 1) {
+                    query = query.eq('cliente_id', clienteIds[0]);
+                }
             }
 
             // Aplicar filtro de fecha si se proporciona (incluyendo el día completo en zona horaria local)
@@ -177,6 +185,88 @@ class movimientosAlmacen {
             return { success: true, data: resultadoOptimizado };
         } catch (error) {
             console.error('Error en MovimientosAlmacen.getAllSinLimite:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
+    // Obtener los 10 productos más vendidos en un rango de fechas
+    static async getTopProductosVendidos(sucuId, filtroFecha = null, estado = 'finalizado') {
+        try {
+            let query = supabase
+                .from('movimientos_almacen')
+                .select('id')
+                .eq('sucu_id', sucuId)
+                .eq('type', 'salida');
+
+            if (estado) {
+                query = query.eq('estado', estado);
+            } else {
+                query = query.neq('estado', 'anulado');
+            }
+
+            query = aplicarFiltroFecha(query, 'fecha', filtroFecha);
+
+            const { data: movimientos, error: movError } = await query;
+            if (movError) return { success: false, message: 'Error al obtener movimientos', error: movError };
+            if (!movimientos || movimientos.length === 0) return { success: true, data: [] };
+
+            const movimientoIds = movimientos.map(m => m.id);
+
+            const chunkSize = 200;
+            const chunks = [];
+            for (let i = 0; i < movimientoIds.length; i += chunkSize) {
+                chunks.push(movimientoIds.slice(i, i + chunkSize));
+            }
+
+            const chunkResults = await Promise.all(
+                chunks.map(chunk =>
+                    supabase
+                        .from('movimiento_almacen_producto')
+                        .select('producto_almacen_id, cantidad')
+                        .in('movimiento_almacen_id', chunk)
+                )
+            );
+
+            const cantidadesPorProducto = new Map();
+            for (const { data: detalles, error: detError } of chunkResults) {
+                if (detError) {
+                    return { success: false, message: 'Error al obtener productos de movimientos', error: detError };
+                }
+                for (const item of (detalles || [])) {
+                    const prodId = item.producto_almacen_id;
+                    const cant = Number(item.cantidad) || 0;
+                    cantidadesPorProducto.set(prodId, (cantidadesPorProducto.get(prodId) || 0) + cant);
+                }
+            }
+
+            if (cantidadesPorProducto.size === 0) return { success: true, data: [] };
+
+            const top10Entries = Array.from(cantidadesPorProducto.entries())
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            const top10Ids = top10Entries.map(([prodId]) => prodId);
+
+            const { data: productosData, error: prodError } = await supabase
+                .from('products_almacen')
+                .select('id, name')
+                .in('id', top10Ids);
+
+            if (prodError) {
+                return { success: false, message: 'Error al obtener información de productos', error: prodError };
+            }
+
+            const nombresMap = new Map((productosData || []).map(p => [p.id, p.name]));
+
+            const resultado = top10Entries.map(([prodId, cantidad]) => ({
+                id: prodId,
+                name: nombresMap.get(prodId) || 'Producto desconocido',
+                cantidad
+            }));
+
+            return { success: true, data: resultado };
+        } catch (error) {
+            console.error('Error en MovimientosAlmacen.getTopProductosVendidos:', error);
             return { success: false, message: 'Error interno del servidor', error };
         }
     }
@@ -338,6 +428,24 @@ class movimientosAlmacen {
                 }
             }
 
+            const formatPoint = (loc) => {
+                if (!loc) return null;
+                if (typeof loc === 'object') {
+                    const lat = loc.x ?? loc.lat;
+                    const lng = loc.y ?? loc.lng;
+                    if (lat !== undefined && lng !== undefined) {
+                        return `(${lat},${lng})`;
+                    }
+                    return null;
+                }
+                const clean = String(loc).trim().replace(/[()]/g, '');
+                const parts = clean.split(',').map((p) => p.trim());
+                if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+                    return `(${parts[0]},${parts[1]})`;
+                }
+                return String(loc);
+            };
+
             const insertData = {
                 sucu_id,
                 type,
@@ -359,7 +467,7 @@ class movimientosAlmacen {
                 restar_ingredientes: !!restar_ingredientes,
                 produccion_damabrava_id: produccion_damabrava_id || null,
                 observaciones: observaciones || null,
-                ubicacion: ubicacion || null,
+                ubicacion: formatPoint(ubicacion),
                 total: total !== undefined && total !== null ? (parseFloat(total) || 0) : 0
             };
 

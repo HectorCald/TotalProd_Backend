@@ -4,17 +4,76 @@ const { normalizeSearchTokens } = require('../../utils/searchHelper');
 
 class gastos {
 
-    // Obtener todos los gastos sin límite (Optimizado para reportes/balance)
-    static async getAllSinLimite(sucuId, filtroFecha = null) {
+    // Obtener todos los gastos sin límite (Optimizado para reportes/balance y exportación)
+    static async getAllSinLimite(sucuId, filtroFecha = null, search = '', metodoPago = null, proveedorId = null, ordenamiento = 'fecha_desc') {
         try {
             if (!sucuId) return { success: false, message: 'No hay sucursal seleccionada' };
             let query = supabase
                 .from('gastos')
-                .select('id, valor, metodo_pago, fecha_gasto')
+                .select(`
+                    *,
+                    proveedor:proveedor_id (
+                        id,
+                        name
+                    ),
+                    user:user_id (
+                        id,
+                        first_name,
+                        last_name
+                    ),
+                    personal:personal_id (
+                        id,
+                        first_name,
+                        last_name
+                    )
+                `)
                 .eq('sucu_id', sucuId);
 
+            const searchTokens = normalizeSearchTokens(search);
+            if (searchTokens.length > 0) {
+                const orFilters = searchTokens.flatMap(token => ([
+                    `concepto.ilike.%${token}%`,
+                    `metodo_pago.ilike.%${token}%`
+                ]));
+                query = query.or(orFilters.join(','));
+            }
+
+            if (metodoPago) {
+                query = query.eq('metodo_pago', metodoPago);
+            }
+
+            if (proveedorId) {
+                if (String(proveedorId).includes(',')) {
+                    query = query.in('proveedor_id', String(proveedorId).split(',').filter(Boolean));
+                } else {
+                    query = query.eq('proveedor_id', proveedorId);
+                }
+            }
+
             query = aplicarFiltroFecha(query, 'fecha_gasto', filtroFecha, 'date');
-            query = query.order('fecha_gasto', { ascending: false });
+
+            switch (ordenamiento) {
+                case 'fecha_desc':
+                    query = query.order('fecha_gasto', { ascending: false });
+                    break;
+                case 'fecha_asc':
+                    query = query.order('fecha_gasto', { ascending: true });
+                    break;
+                case 'valor_desc':
+                    query = query.order('valor', { ascending: false });
+                    break;
+                case 'valor_asc':
+                    query = query.order('valor', { ascending: true });
+                    break;
+                case 'concepto_asc':
+                    query = query.order('concepto', { ascending: true });
+                    break;
+                case 'concepto_desc':
+                    query = query.order('concepto', { ascending: false });
+                    break;
+                default:
+                    query = query.order('fecha_gasto', { ascending: false });
+            }
 
             const { data, error } = await query;
             if (error) {
@@ -30,12 +89,26 @@ class gastos {
                 } else {
                     valor = parseFloat(valor) || 0;
                 }
-                return {
-                    id: gasto.id,
-                    valor,
-                    metodo_pago: gasto.metodo_pago,
-                    fecha_gasto: gasto.fecha_gasto
+                const processedGasto = {
+                    ...gasto,
+                    valor
                 };
+
+                if (gasto.user) {
+                    processedGasto.user = {
+                        ...gasto.user,
+                        name: `${gasto.user.first_name || ''} ${gasto.user.last_name || ''}`.trim()
+                    };
+                }
+
+                if (gasto.personal) {
+                    processedGasto.personal = {
+                        ...gasto.personal,
+                        name: `${gasto.personal.first_name || ''} ${gasto.personal.last_name || ''}`.trim()
+                    };
+                }
+
+                return processedGasto;
             });
 
             return { success: true, data: processedData };

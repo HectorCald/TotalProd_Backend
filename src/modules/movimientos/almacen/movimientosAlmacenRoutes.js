@@ -12,6 +12,9 @@ router.get('/', (req, res) => movimientosAlmacenController.getAll(req, res));
 // 2. Obtener todos los movimientos sin límite (para reportes y balance)
 router.get('/sin-limite', (req, res) => movimientosAlmacenController.getAllSinLimite(req, res));
 
+// Obtener top 10 productos más vendidos (para balance)
+router.get('/top-productos-vendidos', (req, res) => movimientosAlmacenController.getTopProductosVendidos(req, res));
+
 // 3. Obtener un movimiento específico por ID
 router.get('/:id', (req, res) => movimientosAlmacenController.getById(req, res));
 

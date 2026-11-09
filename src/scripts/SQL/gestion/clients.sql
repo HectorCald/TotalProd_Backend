@@ -3,6 +3,7 @@ CREATE TABLE clients (
     name VARCHAR(255) NOT NULL,
     phone VARCHAR(20),
     location POINT,
+    description_location TEXT NULL,
     description TEXT,
     total_orders INT NOT NULL,
     branch_id UUID NOT NULL,

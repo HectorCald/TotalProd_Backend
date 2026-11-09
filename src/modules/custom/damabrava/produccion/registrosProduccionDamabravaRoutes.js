@@ -12,6 +12,9 @@ router.post('/', registrosProduccionDamabravaController.create);
 // Obtener todos los registros de producción
 router.get('/', registrosProduccionDamabravaController.getAll);
 
+// Obtener todos los registros de producción sin límite según filtros
+router.get('/sin-limite', registrosProduccionDamabravaController.getAllSinLimite);
+
 // Obtener registros de producción del usuario actual
 router.get('/my-production', registrosProduccionDamabravaController.getByUser);
 

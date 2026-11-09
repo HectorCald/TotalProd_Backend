@@ -85,7 +85,7 @@ class clientsController {
 
   // Crear un cliente
   static async create(req, res) {
-    const { name, phone, direccion, description, total_orders, location, sucu_id, branch_id } = req.body;
+    const { name, phone, direccion, description, total_orders, location, description_location, sucu_id, branch_id } = req.body;
     const targetBranchId = branch_id || sucu_id;
 
     if (!name || !name.trim()) {
@@ -102,7 +102,8 @@ class clientsController {
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
         total_orders: total_orders || 0,
-        location: location || null
+        location: location || null,
+        description_location: description_location?.trim() || null
       }, targetBranchId);
     }, {
       validateSucuId: true,
@@ -125,7 +126,7 @@ class clientsController {
 
   // Actualizar un cliente
   static async update(req, res) {
-    const { name, phone, direccion, description, total_orders, location } = req.body;
+    const { name, phone, direccion, description, total_orders, location, description_location } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -142,12 +143,55 @@ class clientsController {
         direccion: direccion?.trim() || null,
         description: description?.trim() || null,
         total_orders: total_orders || 0,
-        location: location || null
+        location: location || null,
+        description_location: description_location?.trim() || null
       });
     }, {
       validateClientId: true,
       checkPermission: 'update',
       successMessage: 'Cliente actualizado exitosamente'
+    });
+  }
+
+  // Actualizar múltiples clientes en lote
+  static async bulkUpdate(req, res) {
+    const { clientesData } = req.body;
+    const branchId = req.query.branch_id || req.query.sucu_id || req.body.branch_id || req.body.sucu_id;
+
+    if (!clientesData || !Array.isArray(clientesData) || clientesData.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requieren los datos de los clientes'
+      });
+    }
+
+    return clientsController._handleRequest(res, 'bulkUpdate', req, async () => {
+      const resultado = await client.bulkUpdate(clientesData, branchId);
+      return resultado.data;
+    }, {
+      validateSucuId: true,
+      checkPermission: 'update',
+      successMessage: 'Clientes actualizados exitosamente'
+    });
+  }
+
+  // Actualizar únicamente location y description_location de un cliente
+  static async updateLocation(req, res) {
+    const { location, description_location } = req.body;
+
+    if (!location) {
+      return res.status(400).json({
+        success: false,
+        message: 'La ubicación es obligatoria'
+      });
+    }
+
+    return clientsController._handleRequest(res, 'updateLocation', req, async () => {
+      const { id } = req.params;
+      return await client.updateLocation(id, location, description_location);
+    }, {
+      validateClientId: true,
+      successMessage: 'Ubicación del cliente registrada exitosamente'
     });
   }
 
@@ -160,6 +204,64 @@ class clientsController {
       validateClientId: true,
       successMessage: 'Cliente obtenido exitosamente'
     });
+  }
+
+  // Buscar ubicaciones en Bolivia mediante OpenStreetMap Nominatim
+  static async geocodeSearch(req, res) {
+    const q = (req.query.q || '').trim();
+    if (!q) {
+      return res.json({ success: true, data: [] });
+    }
+    try {
+      const axios = require('axios');
+      const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+        params: {
+          format: 'jsonv2',
+          addressdetails: 1,
+          countrycodes: 'bo',
+          limit: 8,
+          'accept-language': 'es',
+          q
+        },
+        headers: {
+          'User-Agent': 'TotalProd-Bolivia-ERP/1.0',
+          'Accept-Language': 'es'
+        },
+        timeout: 6000
+      });
+      return res.json({ success: true, data: response.data || [] });
+    } catch (error) {
+      return res.status(502).json({ success: false, message: 'No se pudo consultar el servicio de mapas' });
+    }
+  }
+
+  // Geocodificación inversa (coordenadas -> calle, ciudad, país)
+  static async geocodeReverse(req, res) {
+    const { lat, lng } = req.query;
+    if (lat === undefined || lng === undefined) {
+      return res.status(400).json({ success: false, message: 'Coordenadas requeridas' });
+    }
+    try {
+      const axios = require('axios');
+      const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+        params: {
+          format: 'jsonv2',
+          lat,
+          lon: lng,
+          zoom: 18,
+          addressdetails: 1,
+          'accept-language': 'es'
+        },
+        headers: {
+          'User-Agent': 'TotalProd-Bolivia-ERP/1.0',
+          'Accept-Language': 'es'
+        },
+        timeout: 6000
+      });
+      return res.json({ success: true, data: response.data || null });
+    } catch (error) {
+      return res.status(502).json({ success: false, message: 'No se pudo obtener la dirección' });
+    }
   }
 }
 

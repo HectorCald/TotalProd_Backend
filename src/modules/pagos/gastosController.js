@@ -99,11 +99,11 @@ class gastosController {
   static async getAllSinLimite(req, res) {
     return gastosController._handleRequest(res, 'getAllSinLimite', req, async () => {
       const sucu_id = req.headers['x-sucu-id'] || req.query.sucu_id;
-      const { fecha_inicio, fecha_fin, inicio, fin } = req.query;
+      const { fecha_inicio, fecha_fin, inicio, fin, search = '', metodo_pago = null, proveedor_id = null, ordenamiento = 'fecha_desc' } = req.query;
       const filtroFecha = (fecha_inicio || fecha_fin || inicio || fin)
         ? { inicio: fecha_inicio || inicio || null, fin: fecha_fin || fin || null }
         : parseFiltroFecha(req.query);
-      return await gastos.getAllSinLimite(sucu_id, filtroFecha);
+      return await gastos.getAllSinLimite(sucu_id, filtroFecha, search, metodo_pago, proveedor_id, ordenamiento);
     }, {
       validateSucuId: true
     });
