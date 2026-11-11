@@ -30,6 +30,9 @@ router.delete('/:id', (req, res) => movimientosAlmacenController.delete(req, res
 // 6. Anular un movimiento
 router.put('/:id/anular', (req, res) => movimientosAlmacenController.anular(req, res));
 
+// 6b. Actualizar detalles de un movimiento (método de pago, cliente, concepto)
+router.put('/:id', (req, res) => movimientosAlmacenController.update(req, res));
+
 // 7. Obtener relaciones de un movimiento
 router.get('/:id/relations', (req, res) => movimientosAlmacenController.getRelations(req, res));
 

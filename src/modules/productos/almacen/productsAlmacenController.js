@@ -94,12 +94,12 @@ class productsAlmacenController {
     return productsAlmacenController._handleRequest(res, 'getAll', req, async () => {
       const empresaId = req.query.empresa_id;
       const sucuId = req.query.sucu_id;
-      const ocultarStockCero = req.query.ocultar_stock_cero === 'true' || req.query.ocultar_stock_cero === true;
+      const sortOrder = req.query.sort_order || 'name_asc';
+      const ocultarStockCero = req.query.ocultar_stock_cero === 'true' || req.query.ocultar_stock_cero === true || sortOrder === 'stock_gt_0';
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 30;
       const search = req.query.search || null;
       const categoryId = req.query.category_id || null;
-      const sortOrder = req.query.sort_order || 'name_asc';
 
       let empresasAsociadasIds = [];
       if (req.query.empresas_asociadas) {

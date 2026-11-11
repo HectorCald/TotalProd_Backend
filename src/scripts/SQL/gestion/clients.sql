@@ -7,6 +7,7 @@ CREATE TABLE clients (
     description TEXT,
     total_orders INT NOT NULL,
     branch_id UUID NOT NULL,
+    status BOOLEAN DEFAULT TRUE NOT NULL
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT clients_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES branches (id)
 );

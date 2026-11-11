@@ -1,7 +1,7 @@
 const movimientosAlmacen = require('./movimientosAlmacen');
 const gastosModel = require('../../pagos/gastos');
 const deudasModel = require('../../deudas/deudas');
-const { checkDeletePermission, checkAnularPermission } = require('../../../utils/permissionsHelper');
+const { checkDeletePermission, checkAnularPermission, checkUpdatePermission } = require('../../../utils/permissionsHelper');
 
 class movimientosAlmacenController {
 
@@ -37,10 +37,11 @@ class movimientosAlmacenController {
                     let hasPermission = false;
                     if (checkPermission === 'delete') hasPermission = await checkDeletePermission(personal_id);
                     else if (checkPermission === 'anular') hasPermission = await checkAnularPermission(personal_id);
+                    else if (checkPermission === 'update') hasPermission = await checkUpdatePermission(personal_id);
                     if (!hasPermission) {
                         return res.status(403).json({
                             success: false,
-                            message: `No tienes permisos para ${checkPermission === 'delete' ? 'eliminar' : 'anular'} movimientos`
+                            message: `No tienes permisos para ${checkPermission === 'delete' ? 'eliminar' : checkPermission === 'anular' ? 'anular' : 'actualizar'} movimientos`
                         });
                     }
                 }
@@ -298,6 +299,19 @@ class movimientosAlmacenController {
             if (!result.success) throw new Error(result.message);
             return { success: true, message: 'Movimiento eliminado correctamente' };
         }, { validateId: true, checkPermission: 'delete', passRawResult: true });
+    }
+
+    // Actualizar detalles de un movimiento (solo método de pago, cliente y concepto)
+    static async update(req, res) {
+        const { metodo_pago, cliente_id, concepto } = req.body;
+        if (metodo_pago !== undefined && (!metodo_pago || !String(metodo_pago).trim())) {
+            return res.status(400).json({ success: false, message: 'El método de pago es obligatorio' });
+        }
+
+        return movimientosAlmacenController._handleRequest(res, 'update', req, async () => {
+            const { id } = req.params;
+            return await movimientosAlmacen.update(id, { metodo_pago, cliente_id, concepto });
+        }, { validateId: true, checkPermission: 'update' });
     }
 
     // Anular movimiento

@@ -76,7 +76,8 @@ class clientsController {
   static async getAll(req, res) {
     return clientsController._handleRequest(res, 'getAll', req, async () => {
       const branchId = req.query.branch_id || req.query.sucu_id;
-      return await client.getAll(branchId);
+      const isActive = req.query.is_active !== undefined ? req.query.is_active : req.query.status;
+      return await client.getAll(branchId, isActive);
     }, {
       validateSucuId: true,
       successMessage: 'Clientes obtenidos exitosamente'
@@ -85,8 +86,9 @@ class clientsController {
 
   // Crear un cliente
   static async create(req, res) {
-    const { name, phone, direccion, description, total_orders, location, description_location, sucu_id, branch_id } = req.body;
+    const { name, phone, direccion, description, total_orders, location, description_location, is_active, status, sucu_id, branch_id } = req.body;
     const targetBranchId = branch_id || sucu_id;
+    const activeValue = is_active !== undefined ? is_active : status;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -103,7 +105,8 @@ class clientsController {
         description: description?.trim() || null,
         total_orders: total_orders || 0,
         location: location || null,
-        description_location: description_location?.trim() || null
+        description_location: description_location?.trim() || null,
+        is_active: activeValue !== undefined ? activeValue : true
       }, targetBranchId);
     }, {
       validateSucuId: true,
@@ -126,7 +129,8 @@ class clientsController {
 
   // Actualizar un cliente
   static async update(req, res) {
-    const { name, phone, direccion, description, total_orders, location, description_location } = req.body;
+    const { name, phone, direccion, description, total_orders, location, description_location, is_active, status } = req.body;
+    const activeValue = is_active !== undefined ? is_active : status;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -144,7 +148,8 @@ class clientsController {
         description: description?.trim() || null,
         total_orders: total_orders || 0,
         location: location || null,
-        description_location: description_location?.trim() || null
+        description_location: description_location?.trim() || null,
+        ...(activeValue !== undefined ? { is_active: activeValue } : {})
       });
     }, {
       validateClientId: true,

@@ -1000,6 +1000,82 @@ class movimientosAlmacen {
         }
     }
 
+    // Actualizar solo método de pago, cliente y concepto de un movimiento
+    static async update(movimientoId, updateData = {}) {
+        try {
+            const { data: movimiento, error: movimientoError } = await supabase
+                .from('movimientos_almacen')
+                .select('id, estado')
+                .eq('id', movimientoId)
+                .maybeSingle();
+
+            if (movimientoError || !movimiento) {
+                return { success: false, message: 'Movimiento no encontrado' };
+            }
+
+            if (movimiento.estado === 'anulado') {
+                return { success: false, message: 'No se puede editar un movimiento anulado' };
+            }
+
+            const { metodo_pago, cliente_id, concepto } = updateData;
+            const dbData = {};
+
+            if (metodo_pago !== undefined) {
+                dbData.metodo_pago = metodo_pago && String(metodo_pago).trim() !== ''
+                    ? String(metodo_pago).trim().toUpperCase()
+                    : null;
+            }
+
+            if (cliente_id !== undefined) {
+                dbData.cliente_id = cliente_id && String(cliente_id).trim() !== ''
+                    ? String(cliente_id).trim()
+                    : null;
+            }
+
+            if (concepto !== undefined) {
+                dbData.concepto = concepto !== null && String(concepto).trim() !== ''
+                    ? String(concepto).trim()
+                    : null;
+            }
+
+            if (Object.keys(dbData).length === 0) {
+                return { success: false, message: 'No se enviaron campos válidos para actualizar' };
+            }
+
+            const { data, error } = await supabase
+                .from('movimientos_almacen')
+                .update(dbData)
+                .eq('id', movimientoId)
+                .select(`
+                    id,
+                    metodo_pago,
+                    cliente_id,
+                    concepto,
+                    cliente:clients(id, name, total_orders)
+                `)
+                .single();
+
+            if (error) {
+                return { success: false, message: 'Error al actualizar el movimiento', error };
+            }
+
+            return {
+                success: true,
+                message: 'Movimiento actualizado correctamente',
+                data: {
+                    id: data.id,
+                    metodo_pago: data.metodo_pago,
+                    cliente_id: data.cliente_id,
+                    concepto: data.concepto,
+                    cliente: data.cliente || null
+                }
+            };
+        } catch (error) {
+            console.error('Error en MovimientosAlmacen.update:', error);
+            return { success: false, message: 'Error interno del servidor', error };
+        }
+    }
+
     // Obtener movimientos por producción Damabrava (OPTIMIZADO - igual que getByCliente)
     static async getByProduccionDamabrava(produccionId, sucuId) {
         try {

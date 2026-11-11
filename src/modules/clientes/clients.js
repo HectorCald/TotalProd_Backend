@@ -11,8 +11,16 @@ class clients {
     this.description_location = data.description_location;
     this.description = data.description;
     this.total_orders = data.total_orders;
+    this.is_active = data.is_active !== undefined ? data.is_active : true;
     this.created_at = data.created_at;
     this.branch_id = data.branch_id || data.sucu_id;
+  }
+
+  static _parseBoolean(value) {
+    if (typeof value === 'boolean') return value;
+    if (value === 'false' || value === '0' || value === 0 || value === 'inactivo') return false;
+    if (value === 'true' || value === '1' || value === 1 || value === 'activo') return true;
+    return Boolean(value);
   }
 
   static _formatPoint(location) {
@@ -34,16 +42,26 @@ class clients {
   }
 
   // Método para obtener todos los clientes de una sucursal
-  static async getAll(branchId) {
+  static async getAll(branchId, isActive = null) {
     try {
       if (!branchId) {
         throw new Error('ID de la sucursal es requerido');
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('clients')
         .select('*')
         .eq('branch_id', branchId);
+
+      if (isActive !== null && isActive !== undefined && isActive !== '') {
+        if (isActive === true || isActive === 'true' || isActive === '1' || isActive === 1 || isActive === 'activo') {
+          query = query.eq('is_active', true);
+        } else if (isActive === false || isActive === 'false' || isActive === '0' || isActive === 0 || isActive === 'inactivo') {
+          query = query.eq('is_active', false);
+        }
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error de Supabase en clients.getAll:', error);
@@ -61,6 +79,7 @@ class clients {
     try {
       
       // Preparar datos para la base de datos
+      const activeInput = clientData.is_active !== undefined ? clientData.is_active : clientData.status;
       const dbData = {
         name: clientData.name,
         phone: clientData.phone || null,
@@ -68,6 +87,7 @@ class clients {
         total_orders: clientData.total_orders || 0,
         location: clients._formatPoint(clientData.location),
         description_location: clientData.description_location || null,
+        is_active: activeInput !== undefined ? clients._parseBoolean(activeInput) : true,
         branch_id: branchId,
       };
 
@@ -122,13 +142,15 @@ class clients {
       }
 
       // Preparar datos para la base de datos
+      const activeInput = clientData.is_active !== undefined ? clientData.is_active : clientData.status;
       const dbData = {
         name: clientData.name,
         phone: clientData.phone || null,
         description: clientData.description || null,
         total_orders: clientData.total_orders || 0,
         location: clients._formatPoint(clientData.location),
-        description_location: clientData.description_location || null
+        description_location: clientData.description_location || null,
+        ...(activeInput !== undefined ? { is_active: clients._parseBoolean(activeInput) } : {})
       };
 
       const { data, error } = await supabase

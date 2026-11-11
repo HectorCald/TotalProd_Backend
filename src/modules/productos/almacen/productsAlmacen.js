@@ -391,12 +391,13 @@ class productsAlmacen {
         }
       }
 
-      const isMemoryRequired = ocultarStockCero || sortOrder === 'stock_desc' || sortOrder === 'stock_asc';
+      const filterStockPositive = ocultarStockCero === true || ocultarStockCero === 'true' || sortOrder === 'stock_gt_0';
+      const isMemoryRequired = filterStockPositive || sortOrder === 'stock_desc' || sortOrder === 'stock_asc';
 
       // Sorting
       if (sortOrder === 'name_desc') {
         query = query.order('name', { ascending: false });
-      } else if (!isMemoryRequired) {
+      } else if (sortOrder !== 'stock_desc' && sortOrder !== 'stock_asc') {
         query = query.order('name', { ascending: true }); // Default
       }
 
@@ -465,8 +466,8 @@ class productsAlmacen {
       
       let allData = data || [];
       
-      // Si ocultarStockCero es true y hay sucuId, filtrar productos con stock <= 0
-      if (sucuId && ocultarStockCero) {
+      // Si ocultarStockCero es true (o sortOrder es stock_gt_0) y hay sucuId, filtrar productos con stock <= 0
+      if (sucuId && filterStockPositive) {
         allData = allData.filter(producto => (Number(producto.stock) || 0) > 0);
       }
 
